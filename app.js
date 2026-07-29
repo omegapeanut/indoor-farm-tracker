@@ -1126,7 +1126,7 @@ function renderFindings(){
       text.addEventListener("click", (e) => e.stopPropagation());
       text.addEventListener("blur", async () => {
         if (!isAdmin) return;
-        const val = text.textContent.trim();
+        const val = text.innerText.trim();
         if (val === f.text) return;
         await updateDoc(doc(db, "findings", f.id), { text: val });
       });
@@ -1187,7 +1187,7 @@ $("addFindingBtn").addEventListener("click", async () => {
   expandedFindings[newDoc.id] = true;
   textInput.value = "";
 });
-$("newFindingInput").addEventListener("keydown", (e) => { if (e.key === "Enter") $("addFindingBtn").click(); });
+$("newFindingInput").addEventListener("keydown", (e) => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) $("addFindingBtn").click(); });
 (() => { const t = toKey(new Date()); $("newFindingDate").value = inRange(t) ? t : START_DATE; })();
 
 // ---- Cloudinary upload ----
