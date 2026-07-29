@@ -43,6 +43,15 @@ function nowTimeStr(){
   const d = new Date();
   return String(d.getHours()).padStart(2,"0") + ":" + String(d.getMinutes()).padStart(2,"0");
 }
+function eventTimeStatus(ev, isToday){
+  if (!isToday) return "";
+  const now = nowTimeStr();
+  const overnight = ev.end < ev.start;
+  if (overnight) return now >= ev.start ? "current" : "";
+  if (now >= ev.end) return "past";
+  if (now >= ev.start) return "current";
+  return "";
+}
 function escapeHtml(s){
   return String(s || "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 }
@@ -347,6 +356,15 @@ function renderDailySchedule(){
     renderDailySchedule();
   } : null;
 
+  const isToday = selectedDate === toKey(new Date());
+  const nowClock = $("dsNowClock");
+  if (isToday){
+    nowClock.textContent = "Now " + nowTimeStr();
+    nowClock.style.display = "inline";
+  } else {
+    nowClock.style.display = "none";
+  }
+
   const list = $("dsEventList");
   list.innerHTML = "";
   const sorted = entry.events.slice().sort((a,b) => a.start.localeCompare(b.start));
@@ -360,11 +378,18 @@ function renderDailySchedule(){
 
   sorted.forEach(ev => {
     const row = document.createElement("div");
-    row.className = "event-row";
+    const timeStatus = eventTimeStatus(ev, isToday);
+    row.className = "event-row" + (timeStatus ? " " + timeStatus : "");
 
     const time = document.createElement("div");
     time.className = "event-time";
     time.textContent = ev.start + " – " + ev.end;
+    if (timeStatus === "current"){
+      const pill = document.createElement("span");
+      pill.className = "now-pill";
+      pill.textContent = "NOW";
+      time.appendChild(pill);
+    }
 
     const body = document.createElement("div");
     body.className = "event-body";
@@ -403,6 +428,10 @@ function renderDailySchedule(){
     list.appendChild(row);
   });
 }
+
+setInterval(() => {
+  if (selectedDate === toKey(new Date())) renderDailySchedule();
+}, 60000);
 
 $("dsAddEventBtn").addEventListener("click", () => { if (isAdmin) openEventModal(selectedDate, null); });
 
