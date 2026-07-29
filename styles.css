@@ -10,6 +10,7 @@ body {
 header.top { margin-bottom: 4px; display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
 header.top h1 { font-size: 20px; margin: 0 0 4px; }
 header.top p { margin: 0; color: #666; font-size: 13px; }
+.top-right { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; flex-shrink: 0; }
 .admin-area { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
 .admin-badge { font-size: 11px; padding: 4px 9px; border-radius: 12px; font-weight: 600; }
 .admin-badge.on { background: #e6f4ea; color: #1e7e34; }
@@ -66,6 +67,7 @@ header.top p { margin: 0; color: #666; font-size: 13px; }
 .ds-controls button, .ds-controls input[type=date] { border: 1px solid #d8d8d8; background: #fff; border-radius: 6px; padding: 6px 10px; cursor: pointer; font-size: 13px; }
 .ds-header { display:flex; justify-content: space-between; align-items:center; margin-bottom: 14px; flex-wrap: wrap; gap: 10px; }
 .ds-date-title { font-size: 18px; font-weight: 600; }
+.ds-status-box { text-align: right; }
 .ds-status { font-size: 12px; padding: 4px 10px; border-radius: 12px; font-weight: 600; cursor: default; }
 .ds-status.visitor { background: #e6f4ea; color: #1e7e34; }
 .ds-status.maint { background: #fde7d9; color: #b5540b; }
@@ -228,3 +230,61 @@ header.top p { margin: 0; color: #666; font-size: 13px; }
 
 /* ---- Data tab (export/import) ---- */
 .data-actions { display: flex; gap: 10px; flex-wrap: wrap; }
+
+/* ============================================================================
+   RESPONSIVE — tablets (iPad) and general mid-size tightening
+   ============================================================================ */
+@media (max-width: 900px) {
+  .app { padding: 16px 14px 50px; }
+  .legend { margin-left: 0; }
+}
+
+/* ============================================================================
+   RESPONSIVE — phones (portrait phone widths; landscape phones stay above
+   this breakpoint and keep the tablet/desktop layout, which already fits)
+   ============================================================================ */
+@media (max-width: 640px) {
+  .app { padding: 12px 10px 40px; }
+
+  header.top { flex-direction: column; align-items: stretch; gap: 10px; }
+  header.top h1 { font-size: 17px; }
+  header.top p { font-size: 12px; line-height: 1.45; }
+  .top-right { flex-direction: row; align-items: center; justify-content: space-between; width: 100%; flex-wrap: wrap; gap: 8px; }
+
+  .tabs { flex-wrap: nowrap; overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
+  .tabs::-webkit-scrollbar { display: none; }
+  .tab-btn { flex: 0 0 auto; white-space: nowrap; padding: 10px 12px; font-size: 13px; }
+
+  .cal-controls { gap: 8px; }
+  .cal-controls button, .ds-controls button, .ds-controls input[type=date] { padding: 8px 10px; font-size: 13px; }
+  .cal-title { min-width: 0; flex: 1; }
+  .legend { width: 100%; gap: 10px; }
+  .cal-goto input[type=date] { flex: 1; min-width: 0; }
+
+  .grid { gap: 4px; }
+  .day-cell { min-height: 40px; padding: 4px; justify-content: center; align-items: center; }
+  .day-num { font-size: 12px; justify-content: center; }
+  .day-tag, .day-summary { display: none; }
+  .dow { font-size: 9.5px; }
+
+  .ds-header { flex-direction: column; align-items: flex-start; }
+  .ds-status-box { text-align: left; width: 100%; }
+
+  .event-row { flex-wrap: wrap; row-gap: 4px; padding: 10px 12px; }
+  .event-time { min-width: 0; }
+  .event-actions { margin-left: auto; }
+  .icon-btn { padding: 8px; }
+
+  .row2 { flex-direction: column; gap: 0; }
+  .modal { padding: 16px; }
+  .modal-actions { flex-wrap: wrap; }
+
+  .checkin-actions { gap: 8px; }
+  .checkin-btn { padding: 14px 8px; font-size: 13.5px; }
+
+  .att-row { padding: 10px; }
+  .att-name { flex-basis: 100%; }
+
+  .photo-item, .photo-thumb-wrap, .photo-thumb, .add-photo-btn { width: 76px; }
+  .photo-thumb-wrap, .photo-thumb, .add-photo-btn { height: 76px; }
+}
