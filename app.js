@@ -444,15 +444,22 @@ function openEventModal(dateKey, eventId){
   $("fNotes").value = ev.notes;
   $("deleteEventBtn").style.display = isNew ? "none" : "inline-block";
 
-  $("fRepeat").checked = false;
-  $("repeatFieldRow").style.display = isNew ? "flex" : "none";
-
   const seriesBtn = $("deleteSeriesBtn");
   const scopeRow = $("seriesScopeRow");
   const hasSeries = !isNew && ev.seriesId;
   seriesBtn.style.display = hasSeries ? "inline-block" : "none";
   scopeRow.style.display = hasSeries ? "block" : "none";
   if (hasSeries) document.querySelector('input[name=seriesScope][value=one]').checked = true;
+
+  // Repeat-daily checkbox: offered when creating a new event, and also when editing an
+  // existing one-off event (so it can be turned into a recurring series later if you forgot
+  // to tick it originally). Not shown if the event is already part of a series — use the
+  // "this and all future days" scope option above instead.
+  $("fRepeat").checked = false;
+  $("repeatFieldRow").style.display = hasSeries ? "none" : "flex";
+  $("repeatFieldRow").querySelector("small").textContent = isNew
+    ? "Happens every day going forward — skips Mondays (maintenance) and any day marked as a holiday / off day. Keeps going indefinitely until you delete the series."
+    : "Turns this into a recurring series starting today — skips Mondays (maintenance) and any day marked as a holiday / off day. Keeps going indefinitely until you delete the series.";
 
   overlay.classList.add("active");
 }
@@ -486,6 +493,26 @@ async function addRecurringEvents(startKey, template){
   const seriesDoc = { title: template.title, start: template.start, end: template.end, person: template.person, notes: template.notes, fromDate: startKey };
   await setDoc(doc(db, "series", seriesId), seriesDoc);
   seriesCache.push({ id: seriesId, ...seriesDoc });
+}
+
+// Turns an already-existing, one-off event into the first occurrence of a new recurring
+// series (used when editing an event you forgot to mark "repeat daily" when creating it).
+async function convertToRecurring(dateKey, eventId, fields){
+  const seriesId = uid();
+  const entry = editableDay(dateKey);
+  const ev = entry.events.find(e => e.id === eventId);
+  if (!ev) return;
+  ev.seriesId = seriesId; ev.start = fields.start; ev.end = fields.end;
+  ev.title = fields.title; ev.person = fields.person; ev.notes = fields.notes;
+  await saveDay(dateKey, entry);
+
+  const seriesDoc = { title: fields.title, start: fields.start, end: fields.end, person: fields.person, notes: fields.notes, fromDate: dateKey };
+  await setDoc(doc(db, "series", seriesId), seriesDoc);
+  seriesCache.push({ id: seriesId, ...seriesDoc });
+
+  const nextDay = toDate(dateKey);
+  nextDay.setDate(nextDay.getDate() + 1);
+  await materializeSeries(seriesId, toKey(nextDay), seriesDoc, horizonEnd(dateKey));
 }
 
 async function topUpAllSeries(){
@@ -542,6 +569,8 @@ $("saveBtn").addEventListener("click", async () => {
     const scopeAll = ev && ev.seriesId && document.querySelector('input[name=seriesScope]:checked').value === "all";
     if (scopeAll){
       await updateSeriesForward(ev.seriesId, editingDate, { start, end, title, person, notes });
+    } else if (ev && !ev.seriesId && repeat){
+      await convertToRecurring(editingDate, editingEventId, { start, end, title, person, notes });
     } else {
       if (ev){ ev.start = start; ev.end = end; ev.title = title; ev.person = person; ev.notes = notes; }
       await saveDay(editingDate, entry);
