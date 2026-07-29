@@ -10,6 +10,7 @@ body {
 header.top { margin-bottom: 4px; display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
 header.top h1 { font-size: 20px; margin: 0 0 4px; }
 header.top p { margin: 0; color: #666; font-size: 13px; }
+.top-right { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; flex-shrink: 0; }
 .admin-area { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
 .admin-badge { font-size: 11px; padding: 4px 9px; border-radius: 12px; font-weight: 600; }
 .admin-badge.on { background: #e6f4ea; color: #1e7e34; }
@@ -72,6 +73,8 @@ header.top p { margin: 0; color: #666; font-size: 13px; }
 .ds-status.holiday { background: #ede4fb; color: #6a2fb5; }
 .ds-status.clickable { cursor: pointer; }
 .ds-status-hint { font-size: 11px; color: #999; margin-top: 4px; }
+.ds-status-box { text-align: right; }
+.ds-now-clock { font-size: 11px; color: #999; margin-right: 8px; font-variant-numeric: tabular-nums; }
 .repeat-field { display: flex; align-items: flex-start; gap: 8px; margin-bottom: 12px; }
 .repeat-field input { margin-top: 2px; }
 .repeat-field .txt { font-size: 12px; color: #555; }
@@ -82,7 +85,7 @@ header.top p { margin: 0; color: #666; font-size: 13px; }
 
 .event-row {
   background: #fff; border: 1px solid #e5e5e5; border-radius: 8px; padding: 12px 14px;
-  display: flex; align-items: center; gap: 14px; margin-bottom: 8px;
+  display: flex; align-items: center; gap: 14px; margin-bottom: 8px; border-left: 3px solid transparent;
 }
 .event-time { font-size: 13px; font-weight: 600; color: #0b3f91; min-width: 118px; }
 .event-body { flex: 1; }
@@ -92,6 +95,15 @@ header.top p { margin: 0; color: #666; font-size: 13px; }
 .event-notes { font-size: 11.5px; color: #888; margin-top: 3px; }
 .event-actions { display: flex; gap: 4px; }
 .empty-state { color: #999; font-size: 13px; padding: 20px 0; text-align: center; }
+
+.event-row.current { background: #eef6ff; border-color: #cfe0fb; border-left-color: #0b57d0; }
+.now-pill {
+  display: inline-block; font-size: 9px; font-weight: 700; color: #fff; background: #0b57d0;
+  padding: 2px 7px; border-radius: 8px; margin-left: 8px; vertical-align: middle; letter-spacing: 0.04em;
+}
+.event-row.past { opacity: 0.55; }
+.event-row.past .event-time { color: #888; }
+.event-row.past:hover { opacity: 0.8; }
 
 /* ---- Modal (shared) ---- */
 .overlay {
@@ -230,7 +242,7 @@ header.top p { margin: 0; color: #666; font-size: 13px; }
 .att-loc a:hover { text-decoration: underline; }
 .att-del { justify-self: center; }
 
-@media (max-width: 620px) {
+@media (max-width: 640px) {
   .att-table-head { display: none; }
   .att-row { display: flex; flex-wrap: wrap; align-items: center; column-gap: 16px; row-gap: 10px; }
   .att-name { flex: 1 1 100%; white-space: normal; }
@@ -252,3 +264,63 @@ header.top p { margin: 0; color: #666; font-size: 13px; }
 
 /* ---- Data tab (export/import) ---- */
 .data-actions { display: flex; gap: 10px; flex-wrap: wrap; }
+
+/* ============================================================================
+   RESPONSIVE — tablets (iPad) and general mid-size tightening
+   ============================================================================ */
+@media (max-width: 900px) {
+  .app { padding: 16px 14px 50px; }
+  .legend { margin-left: 0; }
+}
+
+/* ============================================================================
+   RESPONSIVE — phones (portrait phone widths; landscape phones stay above
+   this breakpoint and keep the tablet/desktop layout, which already fits)
+   ============================================================================ */
+@media (max-width: 640px) {
+  .app { padding: 12px 10px 40px; }
+
+  header.top { flex-direction: column; align-items: stretch; gap: 10px; }
+  header.top h1 { font-size: 17px; }
+  header.top p { font-size: 12px; line-height: 1.45; }
+  .top-right { flex-direction: row; align-items: center; justify-content: space-between; width: 100%; flex-wrap: wrap; gap: 8px; }
+
+  .tabs { flex-wrap: nowrap; overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
+  .tabs::-webkit-scrollbar { display: none; }
+  .tab-btn { flex: 0 0 auto; white-space: nowrap; padding: 10px 12px; font-size: 13px; }
+
+  .cal-controls { gap: 8px; }
+  .cal-controls button, .ds-controls button, .ds-controls input[type=date] { padding: 8px 10px; font-size: 13px; }
+  .cal-title { order: -1; flex: 1 1 100%; min-width: 0; text-align: center; font-size: 16px; margin-bottom: 2px; }
+  .legend { width: 100%; gap: 10px; }
+  .cal-goto { flex: 1 1 auto; }
+  .cal-goto input[type=date] { flex: 1 1 140px; min-width: 130px; }
+
+  .ds-controls { gap: 8px; }
+  .ds-controls input[type=date] { order: -1; flex: 1 1 100%; margin-bottom: 2px; }
+  .ds-controls button { flex: 1 1 0; min-width: 0; text-align: center; }
+
+  .grid { gap: 4px; }
+  .day-cell { min-height: 40px; padding: 4px; justify-content: center; align-items: center; }
+  .day-num { font-size: 12px; justify-content: center; }
+  .day-tag, .day-summary { display: none; }
+  .dow { font-size: 9.5px; }
+
+  .ds-header { flex-direction: column; align-items: flex-start; }
+  .ds-status-box { text-align: left; width: 100%; }
+
+  .event-row { flex-wrap: wrap; row-gap: 4px; padding: 10px 12px; }
+  .event-time { min-width: 0; }
+  .event-actions { margin-left: auto; }
+  .icon-btn { padding: 8px; }
+
+  .row2 { flex-direction: column; gap: 0; }
+  .modal { padding: 16px; }
+  .modal-actions { flex-wrap: wrap; }
+
+  .checkin-actions { gap: 8px; }
+  .checkin-btn { padding: 14px 8px; font-size: 13.5px; }
+
+  .photo-item, .photo-thumb-wrap, .photo-thumb, .add-photo-btn { width: 76px; }
+  .photo-thumb-wrap, .photo-thumb, .add-photo-btn { height: 76px; }
+}
