@@ -41,11 +41,11 @@ header.top p { margin: 0; color: #666; font-size: 13px; }
 .cal-goto { display: flex; align-items: center; gap: 6px; }
 .cal-goto input[type=date] { border: 1px solid #d8d8d8; background: #fff; border-radius: 6px; padding: 6px 10px; font-size: 13px; }
 
-.grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; }
+.grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 6px; }
 .dow { font-size: 11px; font-weight: 600; color: #888; text-align: center; padding-bottom: 4px; text-transform: uppercase; }
 .day-cell {
-  background: #fff; border: 1px solid #e5e5e5; border-radius: 8px; min-height: 100px;
-  padding: 6px; display: flex; flex-direction: column; gap: 3px; cursor: pointer;
+  background: #fff; border: 1px solid #e5e5e5; border-radius: 8px; min-height: 100px; min-width: 0;
+  padding: 6px; display: flex; flex-direction: column; gap: 3px; cursor: pointer; overflow: hidden;
 }
 .day-cell:hover:not(.out-of-range) { border-color: #b9d3f7; }
 .day-cell.out-of-range { background: #fafafa; opacity: 0.4; cursor: default; }
@@ -58,7 +58,7 @@ header.top p { margin: 0; color: #666; font-size: 13px; }
 .day-tag.visitor { background: #e6f4ea; color: #1e7e34; }
 .day-tag.maint { background: #fde7d9; color: #b5540b; }
 .day-tag.holiday { background: #ede4fb; color: #6a2fb5; }
-.day-summary { font-size: 10.5px; color: #555; line-height: 1.4; }
+.day-summary { font-size: 10.5px; color: #555; line-height: 1.4; min-width: 0; }
 .day-summary .ev { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* ---- Daily schedule tab ---- */
