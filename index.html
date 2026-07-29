@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Indoor Farm — Takeover Tracker</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="app">
+
+  <header class="top">
+    <div>
+      <h1 id="siteTitle">Indoor Farm — Takeover Tracker</h1>
+      <p>Understudy period: 28 Jul 2026 → 1 Oct 2026 (official takeover), then ongoing daily operation. Two shifts daily — morning 07:00–19:00, night 19:00–07:00. Every Monday: maintenance day, farm closed to visitors.</p>
+    </div>
+    <div style="display:flex; flex-direction:column; align-items:flex-end; gap:6px;">
+      <div class="sync-status" id="syncStatus"><span class="sync-dot" id="syncDot"></span><span id="syncText">Connecting…</span></div>
+      <div class="admin-area" id="adminArea" style="display:none;">
+        <span class="admin-badge on" id="adminBadge">Admin</span>
+        <button class="admin-btn" id="adminToggleBtn">Log out</button>
+      </div>
+    </div>
+  </header>
+
+  <div class="tabs">
+    <button class="tab-btn active" data-tab="calendar">Calendar</button>
+    <button class="tab-btn" data-tab="schedule">Daily Schedule</button>
+    <button class="tab-btn" data-tab="attendance">Attendance</button>
+    <button class="tab-btn" data-tab="notes">Notes &amp; House Rules</button>
+    <button class="tab-btn" data-tab="data" id="dataTabBtn" style="display:none;">Data</button>
+  </div>
+
+  <!-- CALENDAR TAB -->
+  <div class="tab-panel active" id="tab-calendar">
+    <div class="cal-controls">
+      <button id="prevMonth">&larr; Prev</button>
+      <div class="cal-title" id="calTitle"></div>
+      <button id="nextMonth">Next &rarr;</button>
+      <button id="calTodayBtn">Today</button>
+      <div class="cal-goto">
+        <input type="date" id="calGoToDate" title="Jump to date">
+      </div>
+      <div class="legend">
+        <span><span class="dot" style="background:#e6f4ea"></span>Visitor day</span>
+        <span><span class="dot" style="background:#fde7d9"></span>Maintenance / no visitors</span>
+        <span><span class="dot" style="background:#ede4fb"></span>Holiday / off day</span>
+        <span>Click a day to view its full schedule</span>
+      </div>
+    </div>
+    <div class="grid" id="dowRow"></div>
+    <div class="grid" id="calGrid" style="margin-top:6px;"></div>
+  </div>
+
+  <!-- DAILY SCHEDULE TAB -->
+  <div class="tab-panel" id="tab-schedule">
+    <div class="ds-controls">
+      <button id="dsPrevDay">&larr; Prev day</button>
+      <input type="date" id="dsDatePicker">
+      <button id="dsNextDay">Next day &rarr;</button>
+      <button id="dsToday">Today</button>
+    </div>
+    <div class="ds-header">
+      <div class="ds-date-title" id="dsDateTitle"></div>
+      <div style="text-align:right;">
+        <span class="ds-status" id="dsStatus"></span>
+        <div class="ds-status-hint" id="dsStatusHint" style="display:none;">Click to cycle: Visitors → Maintenance → Holiday</div>
+      </div>
+    </div>
+    <div id="dsEventList"></div>
+    <div style="margin-top:12px; display:flex; gap:8px;">
+      <button class="btn" id="dsAddEventBtn" style="display:none;">+ Add Event</button>
+      <button class="btn" id="dsResetBtn" style="display:none;">Reset day to default</button>
+    </div>
+  </div>
+
+  <!-- ATTENDANCE TAB -->
+  <div class="tab-panel" id="tab-attendance">
+    <div class="checkin-actions">
+      <button class="checkin-btn in" id="kioskCheckInBtn">✅ Check In</button>
+      <button class="checkin-btn out" id="kioskCheckOutBtn">🚪 Check Out</button>
+    </div>
+    <div class="kiosk-message" id="kioskMessage" style="display:none;"></div>
+
+    <div class="staff-toggle-row" id="staffToggleRow" style="display:none;">
+      <button id="toggleStaffPanelBtn">⚙ Manage Staff PINs</button>
+    </div>
+    <div class="section" id="staffPanel" style="display:none;">
+      <h2>Staff PINs</h2>
+      <p class="hint">Give each staff member a 4-digit PIN — they'll enter it after pressing Check In / Check Out above. PINs are readable by the app (needed for the kiosk to work) but only admin can add, edit, or remove staff.</p>
+      <div id="staffList"></div>
+      <div class="add-row">
+        <input type="text" id="newStaffName" placeholder="Staff name">
+        <input type="text" id="newStaffPin" placeholder="4-digit PIN" maxlength="4" inputmode="numeric" style="max-width:110px;">
+        <button id="addStaffBtn">Add</button>
+      </div>
+      <div class="sub" id="staffError" style="color:#c0392b; display:none; margin-top:8px;"></div>
+    </div>
+
+    <div class="ds-controls">
+      <button id="attPrevDay">&larr; Prev day</button>
+      <input type="date" id="attDatePicker">
+      <button id="attNextDay">Next day &rarr;</button>
+      <button id="attToday">Today</button>
+    </div>
+    <div class="ds-header">
+      <div class="ds-date-title" id="attDateTitle"></div>
+      <div class="att-summary" id="attSummary"></div>
+    </div>
+    <p class="hint" style="margin:-6px 0 10px;">Attendance log. Entries created by Check In / Check Out above show a location; rows added below are manual and admin-editable.</p>
+    <div id="attList"></div>
+    <div class="add-row" id="addAttRow" style="display:none; margin-top:12px;">
+      <input type="text" id="newAttName" list="staffNamesList" placeholder="Staff name">
+      <button id="addAttBtn">+ Add to today's list</button>
+    </div>
+    <datalist id="staffNamesList"></datalist>
+  </div>
+
+  <!-- NOTES TAB -->
+  <div class="tab-panel" id="tab-notes">
+    <div class="section">
+      <h2>House Rules</h2>
+      <p class="hint">Rules and standard practices observed on the farm.</p>
+      <div id="rulesList"></div>
+      <div class="add-row" id="addRuleRow" style="display:none;">
+        <input type="text" id="newRuleInput" placeholder="Add a house rule...">
+        <button id="addRuleBtn">Add</button>
+      </div>
+    </div>
+
+    <div class="section">
+      <h2>Findings Log</h2>
+      <p class="hint">Dated notes and photos from the takeover period.</p>
+      <div class="search-row">
+        <input type="text" id="findingsSearch" placeholder="Search findings by keyword…">
+        <button id="findingsSearchClear">Clear</button>
+      </div>
+      <div class="add-row" id="addFindingRow" style="display:none;">
+        <input type="date" id="newFindingDate">
+        <input type="text" id="newFindingInput" placeholder="What did you find today?">
+        <button id="addFindingBtn">Add</button>
+      </div>
+      <div id="findingsList" style="margin-top:10px;"></div>
+    </div>
+  </div>
+
+  <!-- DATA TAB (admin only) -->
+  <div class="tab-panel" id="tab-data">
+    <div class="section">
+      <h2>Backup &amp; Restore</h2>
+      <p class="hint">Export everything (schedule, findings, house rules, attendance, staff) as a JSON file you can keep somewhere safe. Import restores from a previously exported file — it will overwrite whatever's currently in the database, so use it deliberately.</p>
+      <div class="data-actions">
+        <button class="btn primary" id="exportDataBtn">⬇ Export all data</button>
+        <button class="btn" id="importDataBtn">⬆ Import from file</button>
+        <input type="file" id="importFileInput" accept="application/json" style="display:none;">
+      </div>
+      <div class="sub" id="dataStatus" style="margin-top:10px;"></div>
+    </div>
+  </div>
+
+</div>
+
+<!-- EVENT EDIT MODAL -->
+<div class="overlay" id="overlay">
+  <div class="modal">
+    <h3 id="modalTitle">Edit Event</h3>
+    <div class="sub" id="modalSub"></div>
+    <div class="row2">
+      <div class="field">
+        <label>Start time</label>
+        <input type="time" id="fStart">
+      </div>
+      <div class="field">
+        <label>End time</label>
+        <input type="time" id="fEnd">
+      </div>
+    </div>
+    <div class="field">
+      <label>Event / shift title</label>
+      <input type="text" id="fTitle" placeholder="e.g. Morning Shift">
+    </div>
+    <div class="field">
+      <label>Person in charge</label>
+      <input type="text" id="fPerson" placeholder="Name">
+    </div>
+    <div class="field">
+      <label>Notes</label>
+      <textarea id="fNotes" placeholder="Optional notes"></textarea>
+    </div>
+    <div class="repeat-field" id="repeatFieldRow">
+      <input type="checkbox" id="fRepeat">
+      <div class="txt">
+        <label for="fRepeat" style="margin:0; font-size:12px; color:#333;">Repeat daily, ongoing</label>
+        <small>Happens every day going forward — skips Mondays (maintenance) and any day marked as a holiday / off day. Keeps going indefinitely until you delete the series.</small>
+      </div>
+    </div>
+    <div class="series-scope" id="seriesScopeRow" style="display:none;">
+      This event is part of a recurring series. Apply your changes to:
+      <label><input type="radio" name="seriesScope" value="one" checked> Just this day</label>
+      <label><input type="radio" name="seriesScope" value="all"> This and all future days in the series</label>
+    </div>
+    <div class="modal-actions">
+      <div class="series-actions" style="display:flex; gap:6px;">
+        <button class="btn danger" id="deleteEventBtn">Delete</button>
+        <button class="btn danger" id="deleteSeriesBtn" style="display:none;">Delete series</button>
+      </div>
+      <div style="display:flex; gap:8px;">
+        <button class="btn" id="cancelBtn">Cancel</button>
+        <button class="btn primary" id="saveBtn">Save</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ADMIN LOGIN MODAL -->
+<div class="overlay" id="loginOverlay">
+  <div class="modal" style="width:300px;">
+    <h3>Admin Login</h3>
+    <div class="sub">Sign in with the admin account to edit the calendar, schedule, rules, and findings.</div>
+    <div class="field">
+      <label>Email</label>
+      <input type="email" id="loginEmail" autocomplete="username">
+    </div>
+    <div class="field">
+      <label>Password</label>
+      <input type="password" id="loginPassword" autocomplete="current-password">
+    </div>
+    <div class="sub" id="loginError" style="color:#c0392b; display:none;"></div>
+    <div class="modal-actions">
+      <div></div>
+      <div style="display:flex; gap:8px;">
+        <button class="btn" id="loginCancel">Cancel</button>
+        <button class="btn primary" id="loginSubmit">Log in</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- PIN PAD MODAL -->
+<div class="overlay" id="pinOverlay">
+  <div class="modal" style="width:280px; text-align:center;">
+    <h3 id="pinModalTitle">Check In</h3>
+    <div class="sub" id="pinModalSub">Enter your 4-digit PIN</div>
+    <div class="pin-dots" id="pinDots">
+      <span class="pin-dot"></span><span class="pin-dot"></span><span class="pin-dot"></span><span class="pin-dot"></span>
+    </div>
+    <div class="pin-error" id="pinError"></div>
+    <div class="pin-pad" id="pinPad">
+      <button type="button" data-digit="1">1</button><button type="button" data-digit="2">2</button><button type="button" data-digit="3">3</button>
+      <button type="button" data-digit="4">4</button><button type="button" data-digit="5">5</button><button type="button" data-digit="6">6</button>
+      <button type="button" data-digit="7">7</button><button type="button" data-digit="8">8</button><button type="button" data-digit="9">9</button>
+      <button type="button" class="pin-blank" disabled></button><button type="button" data-digit="0">0</button><button type="button" id="pinBackspace">⌫</button>
+    </div>
+    <button class="btn" id="pinCancelBtn" style="margin-top:14px; width:100%;">Cancel</button>
+  </div>
+</div>
+
+<!-- LIGHTBOX -->
+<div class="lightbox" id="lightbox">
+  <button class="lightbox-close" id="lightboxClose">&times;</button>
+  <img id="lightboxImg" src="">
+</div>
+
+<!-- ANNOTATE MODAL -->
+<div class="overlay" id="annotateOverlay">
+  <div class="modal" style="width:auto;">
+    <h3>Annotate Photo</h3>
+    <div class="sub">Draw on the photo to mark it up, then save (uploads a new copy to Cloudinary).</div>
+    <div class="annotate-toolbar">
+      <span style="font-size:12px; color:#666;">Color:</span>
+      <div class="color-dot selected" data-color="#e02020" style="background:#e02020;"></div>
+      <div class="color-dot" data-color="#111111" style="background:#111111;"></div>
+      <div class="color-dot" data-color="#f5a623" style="background:#f5a623;"></div>
+      <div class="color-dot" data-color="#1e7e34" style="background:#1e7e34;"></div>
+      <button class="btn" id="annotateClear" style="margin-left:auto;">Clear drawing</button>
+    </div>
+    <div class="canvas-wrap" id="canvasWrap">
+      <canvas id="baseCanvas"></canvas>
+      <canvas id="drawCanvas"></canvas>
+    </div>
+    <div class="sub" id="annotateStatus" style="margin-top:8px;"></div>
+    <div class="modal-actions">
+      <div></div>
+      <div style="display:flex; gap:8px;">
+        <button class="btn" id="annotateCancel">Cancel</button>
+        <button class="btn primary" id="annotateSave">Save</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<input type="file" id="photoFileInput" accept="image/*" multiple style="display:none;">
+
+<!-- Firebase (modular v10 SDK, loaded straight from Google's CDN — no build step needed) -->
+<script src="firebase-config.js"></script>
+<script type="module" src="app.js"></script>
+</body>
+</html>
