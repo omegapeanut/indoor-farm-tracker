@@ -297,8 +297,7 @@ header.top p { margin: 0; color: #666; font-size: 13px; }
   .cal-goto input[type=date] { flex: 1 1 140px; min-width: 130px; }
 
   .ds-controls { gap: 8px; }
-  .ds-controls input[type=date] { order: -1; flex: 1 1 100%; margin-bottom: 2px; }
-  .ds-controls button { flex: 1 1 0; min-width: 0; text-align: center; }
+  .ds-controls input[type=date] { flex: 1 1 140px; min-width: 130px; }
 
   .grid { gap: 4px; }
   .day-cell { min-height: 40px; padding: 4px; justify-content: center; align-items: center; }
