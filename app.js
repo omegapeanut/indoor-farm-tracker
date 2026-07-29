@@ -749,13 +749,16 @@ function renderAttendance(){
 
   const list = $("attList");
   list.innerHTML = "";
+  const head = $("attTableHead");
   if (attRecords.length === 0){
+    if (head) head.style.display = "none";
     const empty = document.createElement("div");
     empty.className = "empty-state";
     empty.textContent = "No attendance recorded for this day yet.";
     list.appendChild(empty);
     return;
   }
+  if (head) head.style.display = "";
 
   attRecords.forEach(rec => {
     const row = document.createElement("div");
@@ -778,7 +781,7 @@ function renderAttendance(){
 
     if (isAdmin){
       const del = document.createElement("button");
-      del.className = "icon-btn";
+      del.className = "icon-btn att-del";
       del.textContent = "✕";
       del.title = "Remove from list";
       del.addEventListener("click", async () => {

@@ -10,7 +10,6 @@ body {
 header.top { margin-bottom: 4px; display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
 header.top h1 { font-size: 20px; margin: 0 0 4px; }
 header.top p { margin: 0; color: #666; font-size: 13px; }
-.top-right { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; flex-shrink: 0; }
 .admin-area { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
 .admin-badge { font-size: 11px; padding: 4px 9px; border-radius: 12px; font-weight: 600; }
 .admin-badge.on { background: #e6f4ea; color: #1e7e34; }
@@ -67,7 +66,6 @@ header.top p { margin: 0; color: #666; font-size: 13px; }
 .ds-controls button, .ds-controls input[type=date] { border: 1px solid #d8d8d8; background: #fff; border-radius: 6px; padding: 6px 10px; cursor: pointer; font-size: 13px; }
 .ds-header { display:flex; justify-content: space-between; align-items:center; margin-bottom: 14px; flex-wrap: wrap; gap: 10px; }
 .ds-date-title { font-size: 18px; font-weight: 600; }
-.ds-status-box { text-align: right; }
 .ds-status { font-size: 12px; padding: 4px 10px; border-radius: 12px; font-weight: 600; cursor: default; }
 .ds-status.visitor { background: #e6f4ea; color: #1e7e34; }
 .ds-status.maint { background: #fde7d9; color: #b5540b; }
@@ -198,26 +196,49 @@ header.top p { margin: 0; color: #666; font-size: 13px; }
 .staff-pin-input { font-size: 13px; color: #333; font-variant-numeric: tabular-nums; letter-spacing: 2px; width: 64px; text-align: center; border: 1px solid #d8d8d8; border-radius: 5px; padding: 4px 2px; }
 .staff-pin-input:focus { outline: 1px solid #cfe0fb; border-color: #cfe0fb; }
 .att-summary { font-size: 12px; color: #666; }
-.att-row { display: flex; align-items: flex-start; gap: 14px; background: #fff; border: 1px solid #e5e5e5; border-radius: 8px; padding: 10px 14px; margin-bottom: 8px; flex-wrap: wrap; }
-.att-row > .att-badge, .att-row > .icon-btn { align-self: center; }
-.att-name { flex: 1; min-width: 120px; font-size: 13.5px; font-weight: 600; }
-.att-time-group { display: flex; flex-direction: column; align-items: flex-start; gap: 3px; min-width: 110px; }
-.att-time-label { font-size: 9.5px; color: #999; text-transform: uppercase; letter-spacing: 0.02em; }
+
+.att-table-head {
+  display: grid; grid-template-columns: minmax(110px, 1.3fr) minmax(84px, 1fr) minmax(84px, 1fr) 104px 22px;
+  gap: 8px 14px; padding: 0 14px 6px; font-size: 10px; font-weight: 700; color: #9a9a9a;
+  text-transform: uppercase; letter-spacing: 0.04em;
+}
+.att-table-head span:nth-child(2), .att-table-head span:nth-child(3) { text-align: center; }
+.att-table-head span:nth-child(4) { text-align: center; }
+.att-row {
+  display: grid; grid-template-columns: minmax(110px, 1.3fr) minmax(84px, 1fr) minmax(84px, 1fr) 104px 22px;
+  align-items: center; gap: 8px 14px; background: #fff; border: 1px solid #e5e5e5; border-radius: 8px;
+  padding: 12px 14px; margin-bottom: 8px;
+}
+.att-name { font-size: 13.5px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.att-time-group { display: flex; flex-direction: column; align-items: center; justify-self: center; gap: 3px; text-align: center; }
+.att-time-label { display: none; }
 .att-time-value { font-size: 13px; font-weight: 600; color: #333; display: flex; align-items: center; gap: 4px; }
 .att-time-value.empty { color: #bbb; font-weight: 400; font-style: italic; }
-.att-badge { font-size: 10px; padding: 2px 9px; border-radius: 10px; font-weight: 600; white-space: nowrap; }
+.att-badge { font-size: 10px; padding: 3px 10px; border-radius: 10px; font-weight: 600; white-space: nowrap; justify-self: center; }
 .att-badge.onsite { background: #e6f4ea; color: #1e7e34; }
 .att-badge.complete { background: #eef1f5; color: #555; }
 .att-badge.pending { background: #fdf3e0; color: #a5730a; }
-.att-btn { font-size: 11.5px; padding: 4px 10px; border-radius: 5px; border: 1px solid #d8d8d8; background: #fff; cursor: pointer; }
+.att-btn { font-size: 11.5px; padding: 4px 10px; border-radius: 5px; border: 1px solid #d8d8d8; background: #fff; cursor: pointer; white-space: nowrap; }
 .att-btn.in { border-color: #8fc99f; color: #1e7e34; }
 .att-btn.out { border-color: #e3b98c; color: #a5730a; }
 .att-btn:hover { background: #f5f5f5; }
 .att-time-input { border: 1px solid #d8d8d8; border-radius: 5px; padding: 3px 5px; font-size: 12px; }
 .att-clear { border: none; background: none; color: #bbb; cursor: pointer; font-size: 11px; padding: 0 2px; }
 .att-clear:hover { color: #c0392b; }
-.att-loc { font-size: 10px; color: #999; margin-top: 1px; }
-.att-loc a { color: #999; }
+.att-loc { font-size: 9.5px; color: #999; margin-top: 1px; white-space: nowrap; }
+.att-loc a { color: #999; text-decoration: none; }
+.att-loc a:hover { text-decoration: underline; }
+.att-del { justify-self: center; }
+
+@media (max-width: 620px) {
+  .att-table-head { display: none; }
+  .att-row { display: flex; flex-wrap: wrap; align-items: center; column-gap: 16px; row-gap: 10px; }
+  .att-name { flex: 1 1 100%; white-space: normal; }
+  .att-time-group { align-items: flex-start; justify-self: auto; text-align: left; }
+  .att-time-label { display: block; font-size: 9.5px; color: #999; text-transform: uppercase; letter-spacing: 0.02em; }
+  .att-badge { justify-self: auto; margin-left: auto; }
+  .att-del { justify-self: auto; }
+}
 
 /* PIN pad modal */
 .pin-dots { display: flex; justify-content: center; gap: 12px; margin: 16px 0; }
@@ -231,66 +252,3 @@ header.top p { margin: 0; color: #666; font-size: 13px; }
 
 /* ---- Data tab (export/import) ---- */
 .data-actions { display: flex; gap: 10px; flex-wrap: wrap; }
-
-/* ============================================================================
-   RESPONSIVE — tablets (iPad) and general mid-size tightening
-   ============================================================================ */
-@media (max-width: 900px) {
-  .app { padding: 16px 14px 50px; }
-  .legend { margin-left: 0; }
-}
-
-/* ============================================================================
-   RESPONSIVE — phones (portrait phone widths; landscape phones stay above
-   this breakpoint and keep the tablet/desktop layout, which already fits)
-   ============================================================================ */
-@media (max-width: 640px) {
-  .app { padding: 12px 10px 40px; }
-
-  header.top { flex-direction: column; align-items: stretch; gap: 10px; }
-  header.top h1 { font-size: 17px; }
-  header.top p { font-size: 12px; line-height: 1.45; }
-  .top-right { flex-direction: row; align-items: center; justify-content: space-between; width: 100%; flex-wrap: wrap; gap: 8px; }
-
-  .tabs { flex-wrap: nowrap; overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
-  .tabs::-webkit-scrollbar { display: none; }
-  .tab-btn { flex: 0 0 auto; white-space: nowrap; padding: 10px 12px; font-size: 13px; }
-
-  .cal-controls { gap: 8px; }
-  .cal-controls button, .ds-controls button, .ds-controls input[type=date] { padding: 8px 10px; font-size: 13px; }
-  .cal-title { order: -1; flex: 1 1 100%; min-width: 0; text-align: center; font-size: 16px; margin-bottom: 2px; }
-  .legend { width: 100%; gap: 10px; }
-  .cal-goto { flex: 1 1 auto; }
-  .cal-goto input[type=date] { flex: 1 1 140px; min-width: 130px; }
-
-  .ds-controls { gap: 8px; }
-  .ds-controls input[type=date] { order: -1; flex: 1 1 100%; margin-bottom: 2px; }
-  .ds-controls button { flex: 1 1 0; min-width: 0; text-align: center; }
-
-  .grid { gap: 4px; }
-  .day-cell { min-height: 40px; padding: 4px; justify-content: center; align-items: center; }
-  .day-num { font-size: 12px; justify-content: center; }
-  .day-tag, .day-summary { display: none; }
-  .dow { font-size: 9.5px; }
-
-  .ds-header { flex-direction: column; align-items: flex-start; }
-  .ds-status-box { text-align: left; width: 100%; }
-
-  .event-row { flex-wrap: wrap; row-gap: 4px; padding: 10px 12px; }
-  .event-time { min-width: 0; }
-  .event-actions { margin-left: auto; }
-  .icon-btn { padding: 8px; }
-
-  .row2 { flex-direction: column; gap: 0; }
-  .modal { padding: 16px; }
-  .modal-actions { flex-wrap: wrap; }
-
-  .checkin-actions { gap: 8px; }
-  .checkin-btn { padding: 14px 8px; font-size: 13.5px; }
-
-  .att-row { padding: 10px; }
-  .att-name { flex-basis: 100%; }
-
-  .photo-item, .photo-thumb-wrap, .photo-thumb, .add-photo-btn { width: 76px; }
-  .photo-thumb-wrap, .photo-thumb, .add-photo-btn { height: 76px; }
-}
