@@ -1,0 +1,62 @@
+rules_version = '2';
+
+// ============================================================================
+// Security model
+// ============================================================================
+// - Anyone with the site link can READ everything (this matches the old
+//   "viewer" mode: browse the calendar, schedule, findings, attendance).
+// - Only a signed-in Firebase Auth user can WRITE to schedule, series,
+//   findings, house rules, or the staff/PIN roster (this is "admin"). Since
+//   you're the only one who will ever create a login, any signed-in user is
+//   treated as admin — there's no separate roles system.
+// - Attendance is special: anyone can CREATE a record (that's the public
+//   Check In / Check Out kiosk — no login needed to punch in), but only admin
+//   can UPDATE or DELETE one (corrections).
+// - Staff PINs are readable by anyone. This is intentional and matches the
+//   old app's trust level (PINs used to be visible in the page's own source
+//   code; now they're visible via a Firestore read instead) — it is NOT real
+//   secrecy, just a casual kiosk deterrent. If you need PINs to be truly
+//   hidden from a determined snoop, that requires a Cloud Function so the
+//   client never reads the staff collection directly — ask me if you want
+//   that built later.
+// ============================================================================
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isAdmin() {
+      return request.auth != null;
+    }
+
+    match /schedule/{date} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /series/{id} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /meta/{id} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /findings/{id} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /staff/{id} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /attendance/{id} {
+      allow read: if true;
+      allow create: if true;
+      allow update, delete: if isAdmin();
+    }
+  }
+}
