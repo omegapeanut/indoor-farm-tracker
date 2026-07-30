@@ -35,9 +35,9 @@
   <!-- CALENDAR TAB -->
   <div class="tab-panel active" id="tab-calendar">
     <div class="cal-controls">
-      <button id="prevMonth">&larr; Prev</button>
+      <button id="prevMonth"><span class="nav-arrow left"></span>Prev</button>
       <div class="cal-title" id="calTitle"></div>
-      <button id="nextMonth">Next &rarr;</button>
+      <button id="nextMonth">Next<span class="nav-arrow right"></span></button>
       <button id="calTodayBtn">Today</button>
       <div class="cal-goto">
         <input type="date" id="calGoToDate" title="Jump to date">
@@ -55,12 +55,6 @@
 
   <!-- DAILY SCHEDULE TAB -->
   <div class="tab-panel" id="tab-schedule">
-    <div class="ds-controls">
-      <button id="dsPrevDay">&larr; Prev</button>
-      <button id="dsNextDay">Next &rarr;</button>
-      <button id="dsToday">Today</button>
-      <input type="date" id="dsDatePicker">
-    </div>
     <div class="ds-header">
       <div class="ds-date-title" id="dsDateTitle"></div>
       <div class="ds-status-box">
@@ -68,6 +62,12 @@
         <span class="ds-status" id="dsStatus"></span>
         <div class="ds-status-hint" id="dsStatusHint" style="display:none;">Click to cycle: Visitors → Maintenance → Holiday</div>
       </div>
+    </div>
+    <div class="ds-controls">
+      <button id="dsPrevDay"><span class="nav-arrow left"></span>Prev</button>
+      <button id="dsNextDay">Next<span class="nav-arrow right"></span></button>
+      <button id="dsToday">Today</button>
+      <input type="date" id="dsDatePicker">
     </div>
     <div id="dsEventList"></div>
     <div style="margin-top:12px; display:flex; gap:8px;">
@@ -99,15 +99,15 @@
       <div class="sub" id="staffError" style="color:#c0392b; display:none; margin-top:8px;"></div>
     </div>
 
-    <div class="ds-controls">
-      <button id="attPrevDay">&larr; Prev</button>
-      <button id="attNextDay">Next &rarr;</button>
-      <button id="attToday">Today</button>
-      <input type="date" id="attDatePicker">
-    </div>
     <div class="ds-header">
       <div class="ds-date-title" id="attDateTitle"></div>
       <div class="att-summary" id="attSummary"></div>
+    </div>
+    <div class="ds-controls">
+      <button id="attPrevDay"><span class="nav-arrow left"></span>Prev</button>
+      <button id="attNextDay">Next<span class="nav-arrow right"></span></button>
+      <button id="attToday">Today</button>
+      <input type="date" id="attDatePicker">
     </div>
     <p class="hint" style="margin:-6px 0 10px;">Attendance log. Entries created by Check In / Check Out above show a location; rows added below are manual and admin-editable.</p>
     <div class="att-table-head" id="attTableHead">
