@@ -29,6 +29,7 @@ header.top p { margin: 0; color: #666; font-size: 13px; }
   font-size: 14px; color: #666; border-bottom: 2px solid transparent; margin-bottom: -1px;
 }
 .tab-btn.active { color: #0b57d0; border-bottom-color: #0b57d0; font-weight: 600; }
+.tab-icon { display: none; }
 .tab-panel { display: none; }
 .tab-panel.active { display: block; }
 
@@ -278,16 +279,29 @@ header.top p { margin: 0; color: #666; font-size: 13px; }
    this breakpoint and keep the tablet/desktop layout, which already fits)
    ============================================================================ */
 @media (max-width: 640px) {
-  .app { padding: 12px 10px 40px; }
+  .app { padding: 12px 10px calc(78px + env(safe-area-inset-bottom)); }
 
   header.top { flex-direction: column; align-items: stretch; gap: 10px; }
   header.top h1 { font-size: 17px; }
   header.top p { font-size: 12px; line-height: 1.45; }
   .top-right { flex-direction: row; align-items: center; justify-content: space-between; width: 100%; flex-wrap: wrap; gap: 8px; }
 
-  .tabs { flex-wrap: nowrap; overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
-  .tabs::-webkit-scrollbar { display: none; }
-  .tab-btn { flex: 0 0 auto; white-space: nowrap; padding: 10px 12px; font-size: 13px; }
+  /* Bottom icon nav bar — replaces the horizontal tab row so nothing scrolls
+     or wraps off-screen no matter how many tabs there are. */
+  .tabs {
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: 40; margin: 0;
+    background: #fff; border-bottom: none; border-top: 1px solid #e0e0e0;
+    flex-wrap: nowrap; justify-content: space-around;
+    padding: 6px 2px calc(6px + env(safe-area-inset-bottom));
+    box-shadow: 0 -2px 8px rgba(0,0,0,0.05);
+  }
+  .tab-btn {
+    flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; align-items: center;
+    gap: 2px; padding: 4px 2px; font-size: 9.5px; line-height: 1.15; border-bottom: none; margin-bottom: 0;
+  }
+  .tab-btn.active { border-bottom: none; }
+  .tab-icon { display: block; font-size: 18px; line-height: 1; }
+  .tab-label { display: block; }
 
   .cal-controls { gap: 8px; }
   .cal-controls button, .ds-controls button, .ds-controls input[type=date] { padding: 8px 10px; font-size: 13px; }

@@ -217,6 +217,7 @@ let viewYear = todayNow.getFullYear(), viewMonth = todayNow.getMonth();
 let highlightDate = null;
 
 $("calGoToDate").min = START_DATE;
+$("calGoToDate").value = toKey(todayNow);
 const dowRow = $("dowRow");
 DOW.forEach(d => { const el = document.createElement("div"); el.className = "dow"; el.textContent = d; dowRow.appendChild(el); });
 
@@ -298,6 +299,7 @@ function jumpCalendarToDate(key){
   const d = toDate(key);
   viewYear = d.getFullYear(); viewMonth = d.getMonth();
   highlightDate = key;
+  $("calGoToDate").value = key;
   renderCalendar();
   setTimeout(() => { if (highlightDate === key){ highlightDate = null; renderCalendar(); } }, 2000);
 }
@@ -1102,11 +1104,11 @@ onSnapshot(collection(db, "findings"), (snap) => {
 
 function ensureDefaultExpand(sorted){
   if (sorted.length === 0) return;
-  const latestDate = sorted[0].date;
+  const todayKey = toKey(new Date());
   sorted.forEach(f => {
     if (!seenFindingIds[f.id]){
       seenFindingIds[f.id] = true;
-      if (f.date === latestDate) expandedFindings[f.id] = true;
+      if (f.date === todayKey) expandedFindings[f.id] = true;
     }
   });
 }
