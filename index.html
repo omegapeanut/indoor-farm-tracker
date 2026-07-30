@@ -44,6 +44,10 @@
       <span class="tab-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5.2c0-.9.8-1.4 2-1.4h5.5v15H6c-1.2 0-2 .4-2 1.4z"/><path d="M20 5.2c0-.9-.8-1.4-2-1.4h-5.5v15H18c1.2 0 2 .4 2 1.4z"/></svg></span>
       <span class="tab-label">House Rules</span>
     </button>
+    <button class="tab-btn" data-tab="plants">
+      <span class="tab-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 4c-9 0-16 6-16 15 9 0 15-6 15-15z"/><path d="M5 19c3-4 7-8 12-12"/></svg></span>
+      <span class="tab-label">Plant Guide</span>
+    </button>
     <button class="tab-btn" data-tab="data" id="dataTabBtn" style="display:none;">
       <span class="tab-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 3.5v2.2M12 18.3v2.2M20.5 12h-2.2M5.7 12h-2.2M17.7 6.3l-1.55 1.55M7.85 16.15l-1.55 1.55M17.7 17.7l-1.55-1.55M7.85 7.85L6.3 6.3"/></svg></span>
       <span class="tab-label">Data</span>
@@ -173,11 +177,32 @@
     </div>
   </div>
 
+  <!-- PLANT GUIDE TAB -->
+  <div class="tab-panel" id="tab-plants">
+    <div class="section">
+      <h2>Plant Guide</h2>
+      <p class="hint">Reference infographics and care notes for each plant or crop. Tap a photo to view it full-size and readable.</p>
+      <div class="search-row">
+        <input type="text" id="plantSearch" placeholder="Search by plant or topic name…">
+        <button id="plantSearchClear">Clear</button>
+      </div>
+      <div class="finding-add" id="addPlantRow" style="display:none;">
+        <input type="text" id="newPlantTitle" placeholder="Plant / topic name (e.g. Tomato Care)">
+        <textarea id="newPlantNotes" rows="3" placeholder="Optional care notes…"></textarea>
+        <div class="finding-add-actions">
+          <span class="hint" style="margin:0;">Add photos after creating the entry</span>
+          <button id="addPlantBtn">Add</button>
+        </div>
+      </div>
+      <div id="plantList" style="margin-top:10px;"></div>
+    </div>
+  </div>
+
   <!-- DATA TAB (admin only) -->
   <div class="tab-panel" id="tab-data">
     <div class="section">
       <h2>Backup &amp; Restore</h2>
-      <p class="hint">Export everything (schedule, findings, house rules, attendance, staff) as a JSON file you can keep somewhere safe. Import restores from a previously exported file — it will overwrite whatever's currently in the database, so use it deliberately.</p>
+      <p class="hint">Export everything (schedule, findings, plant guide, house rules, attendance, staff) as a JSON file you can keep somewhere safe. Import restores from a previously exported file — it will overwrite whatever's currently in the database, so use it deliberately.</p>
       <div class="data-actions">
         <button class="btn primary" id="exportDataBtn">⬇ Export all data</button>
         <button class="btn" id="importDataBtn">⬆ Import from file</button>
