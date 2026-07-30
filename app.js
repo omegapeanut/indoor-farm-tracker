@@ -98,12 +98,14 @@ onAuthStateChanged(auth, (user) => {
   renderStaffList();
   renderRules();
   renderFindings();
+  renderPlantGuide();
 });
 
 function refreshAdminUI(){
   $("adminArea").style.display = isAdmin ? "flex" : "none";
   $("addRuleRow").style.display = isAdmin ? "flex" : "none";
   $("addFindingRow").style.display = isAdmin ? "flex" : "none";
+  $("addPlantRow").style.display = isAdmin ? "flex" : "none";
   $("dsAddEventBtn").style.display = isAdmin ? "inline-block" : "none";
   $("dsResetBtn").style.display = isAdmin ? "inline-block" : "none";
   $("addAttRow").style.display = isAdmin ? "flex" : "none";
@@ -1223,7 +1225,7 @@ function renderFindings(){
         if (isAdmin){
           const ann = document.createElement("button");
           ann.className = "annotate-btn"; ann.textContent = "✎ Annotate";
-          ann.addEventListener("click", (e) => { e.stopPropagation(); openAnnotateModal(f.id, photo.id); });
+          ann.addEventListener("click", (e) => { e.stopPropagation(); openAnnotateModal("findings", f.id, photo.id); });
           item.appendChild(ann);
         }
         strip.appendChild(item);
@@ -1231,7 +1233,7 @@ function renderFindings(){
       if (isAdmin){
         const addBtn = document.createElement("div");
         addBtn.className = "add-photo-btn"; addBtn.textContent = "+ Add photo";
-        addBtn.addEventListener("click", (e) => { e.stopPropagation(); openPhotoPicker(f.id); });
+        addBtn.addEventListener("click", (e) => { e.stopPropagation(); openPhotoPicker("findings", f.id); });
         strip.appendChild(addBtn);
       }
       body.appendChild(strip);
@@ -1255,6 +1257,164 @@ $("addFindingBtn").addEventListener("click", async () => {
 $("newFindingInput").addEventListener("keydown", (e) => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) $("addFindingBtn").click(); });
 (() => { const t = toKey(new Date()); $("newFindingDate").value = inRange(t) ? t : START_DATE; })();
 
+// ============================================================================
+// PLANT GUIDE (Firestore: plantGuide/{id}) — reference infographics + notes,
+// same photo/annotate pipeline as Findings Log, keyed by title instead of date
+// ============================================================================
+let plantGuideCache = [];
+let plantSearchTerm = "";
+const expandedPlants = {};
+
+onSnapshot(collection(db, "plantGuide"), (snap) => {
+  plantGuideCache = snap.docs.map(d => ({ id: d.id, photos: [], ...d.data() }));
+  renderPlantGuide();
+}, () => setSyncStatus("err", "Connection error"));
+
+$("plantSearch").addEventListener("input", (e) => { plantSearchTerm = e.target.value.trim().toLowerCase(); renderPlantGuide(); });
+$("plantSearchClear").addEventListener("click", () => { $("plantSearch").value = ""; plantSearchTerm = ""; renderPlantGuide(); });
+
+function renderPlantGuide(){
+  const list = $("plantList");
+  list.innerHTML = "";
+
+  let items = plantGuideCache.slice().sort((a,b) => (a.title || "").localeCompare(b.title || ""));
+  if (plantSearchTerm){
+    items = items.filter(p => (p.title || "").toLowerCase().includes(plantSearchTerm) || (p.notes || "").toLowerCase().includes(plantSearchTerm));
+  }
+
+  if (items.length === 0){
+    const empty = document.createElement("div");
+    empty.className = "empty-state";
+    empty.textContent = plantSearchTerm ? "No entries match your search." : "No plant guide entries yet.";
+    list.appendChild(empty);
+    return;
+  }
+
+  items.forEach(p => {
+    const isOpen = !!expandedPlants[p.id];
+    const card = document.createElement("div");
+    card.className = "finding-card" + (isOpen ? " expanded" : "");
+
+    const header = document.createElement("div");
+    header.className = "finding-header";
+    const left = document.createElement("div");
+    left.className = "finding-header-left";
+    const chevron = document.createElement("span");
+    chevron.className = "finding-chevron"; chevron.textContent = "▶";
+    const titleEl = document.createElement("span");
+    titleEl.className = "finding-date"; titleEl.textContent = p.title || "Untitled";
+    left.appendChild(chevron); left.appendChild(titleEl);
+    if (!isOpen){
+      const preview = document.createElement("span");
+      preview.className = "finding-preview";
+      preview.textContent = p.notes || (p.photos.length ? p.photos.length + " photo(s)" : "");
+      left.appendChild(preview);
+    }
+    header.appendChild(left);
+
+    if (isAdmin){
+      const del = document.createElement("button");
+      del.className = "icon-btn"; del.textContent = "✕"; del.title = "Delete entry";
+      del.addEventListener("click", async (e) => {
+        e.stopPropagation();
+        if (!confirm("Delete this plant guide entry and its photos?")) return;
+        await deleteDoc(doc(db, "plantGuide", p.id));
+      });
+      header.appendChild(del);
+    }
+    header.addEventListener("click", () => {
+      if (expandedPlants[p.id]) delete expandedPlants[p.id]; else expandedPlants[p.id] = true;
+      renderPlantGuide();
+    });
+    card.appendChild(header);
+
+    const body = document.createElement("div");
+    body.className = "finding-body";
+    if (isOpen){
+      const titleInput = document.createElement("div");
+      titleInput.className = "finding-text";
+      titleInput.style.fontWeight = "600";
+      titleInput.contentEditable = isAdmin ? "true" : "false";
+      titleInput.textContent = p.title || "";
+      titleInput.addEventListener("click", (e) => e.stopPropagation());
+      titleInput.addEventListener("blur", async () => {
+        if (!isAdmin) return;
+        const val = titleInput.innerText.trim();
+        if (!val || val === p.title) { titleInput.textContent = p.title || ""; return; }
+        await updateDoc(doc(db, "plantGuide", p.id), { title: val });
+      });
+      body.appendChild(titleInput);
+
+      const notes = document.createElement("div");
+      notes.className = "finding-text";
+      notes.contentEditable = isAdmin ? "true" : "false";
+      notes.textContent = p.notes || "";
+      notes.addEventListener("click", (e) => e.stopPropagation());
+      notes.addEventListener("blur", async () => {
+        if (!isAdmin) return;
+        const val = notes.innerText.trim();
+        if (val === p.notes) return;
+        await updateDoc(doc(db, "plantGuide", p.id), { notes: val });
+      });
+      body.appendChild(notes);
+
+      const strip = document.createElement("div");
+      strip.className = "photo-strip";
+      p.photos.forEach(photo => {
+        const item = document.createElement("div");
+        item.className = "photo-item";
+        const wrap = document.createElement("div");
+        wrap.className = "photo-thumb-wrap";
+        const img = document.createElement("img");
+        img.className = "photo-thumb"; img.src = photo.url; img.loading = "lazy";
+        img.addEventListener("click", (e) => { e.stopPropagation(); openLightbox(photo.url); });
+        wrap.appendChild(img);
+        if (isAdmin){
+          const rem = document.createElement("button");
+          rem.className = "photo-remove"; rem.textContent = "✕"; rem.title = "Delete photo";
+          rem.addEventListener("click", async (e) => {
+            e.stopPropagation();
+            if (!confirm("Delete this photo?")) return;
+            const newPhotos = p.photos.filter(ph => ph.id !== photo.id);
+            await updateDoc(doc(db, "plantGuide", p.id), { photos: newPhotos });
+          });
+          wrap.appendChild(rem);
+        }
+        item.appendChild(wrap);
+        if (isAdmin){
+          const ann = document.createElement("button");
+          ann.className = "annotate-btn"; ann.textContent = "✎ Annotate";
+          ann.addEventListener("click", (e) => { e.stopPropagation(); openAnnotateModal("plantGuide", p.id, photo.id); });
+          item.appendChild(ann);
+        }
+        strip.appendChild(item);
+      });
+      if (isAdmin){
+        const addBtn = document.createElement("div");
+        addBtn.className = "add-photo-btn"; addBtn.textContent = "+ Add photo";
+        addBtn.addEventListener("click", (e) => { e.stopPropagation(); openPhotoPicker("plantGuide", p.id); });
+        strip.appendChild(addBtn);
+      }
+      body.appendChild(strip);
+    }
+    card.appendChild(body);
+    list.appendChild(card);
+  });
+}
+
+$("addPlantBtn").addEventListener("click", async () => {
+  if (!isAdmin) return;
+  const titleInput = $("newPlantTitle");
+  const notesInput = $("newPlantNotes");
+  const title = titleInput.value.trim();
+  if (!title) return;
+  const notes = notesInput.value.trim();
+  const newDoc = await addDoc(collection(db, "plantGuide"), { title, notes, photos: [] });
+  expandedPlants[newDoc.id] = true;
+  titleInput.value = "";
+  notesInput.value = "";
+});
+
 // ---- Cloudinary upload ----
 async function uploadToCloudinary(blob){
   const cfg = window.CLOUDINARY_CONFIG;
@@ -1267,18 +1427,25 @@ async function uploadToCloudinary(blob){
   return { url: data.secure_url, publicId: data.public_id };
 }
 
+// Photo/annotate pipeline is shared by Findings Log ("findings") and Plant
+// Guide ("plantGuide") — both store records as { id, photos: [...] }.
+function galleryCache(col){ return col === "plantGuide" ? plantGuideCache : findingsCache; }
+function galleryExpanded(col){ return col === "plantGuide" ? expandedPlants : expandedFindings; }
+
+let photoTargetCollection = "findings";
 let photoTargetFindingId = null;
 const photoFileInput = $("photoFileInput");
-function openPhotoPicker(findingId){ photoTargetFindingId = findingId; photoFileInput.value = ""; photoFileInput.click(); }
+function openPhotoPicker(col, recordId){ photoTargetCollection = col; photoTargetFindingId = recordId; photoFileInput.value = ""; photoFileInput.click(); }
 
 photoFileInput.addEventListener("change", async () => {
   const files = Array.from(photoFileInput.files || []);
   if (!files.length || !photoTargetFindingId) return;
-  const findingId = photoTargetFindingId;
-  const finding = findingsCache.find(f => f.id === findingId);
-  if (!finding) return;
+  const col = photoTargetCollection;
+  const recordId = photoTargetFindingId;
+  const record = galleryCache(col).find(r => r.id === recordId);
+  if (!record) return;
 
-  expandedFindings[findingId] = true;
+  galleryExpanded(col)[recordId] = true;
   const uploaded = [];
   for (const file of files){
     try {
@@ -1289,12 +1456,13 @@ photoFileInput.addEventListener("change", async () => {
     }
   }
   if (uploaded.length === 0) return;
-  const newPhotos = [...(finding.photos || []), ...uploaded];
-  await updateDoc(doc(db, "findings", findingId), { photos: newPhotos });
+  const newPhotos = [...(record.photos || []), ...uploaded];
+  await updateDoc(doc(db, col, recordId), { photos: newPhotos });
 
-  if (uploaded.length === 1){
+  if (uploaded.length === 1 && col === "findings"){
     // jump straight into annotate mode for a single upload, same as before
-    setTimeout(() => openAnnotateModal(findingId, uploaded[0].id), 300);
+    // (skipped for Plant Guide — reference uploads don't need the auto-jump)
+    setTimeout(() => openAnnotateModal(col, recordId, uploaded[0].id), 300);
   }
 });
 
@@ -1308,7 +1476,7 @@ lightbox.addEventListener("click", (e) => { if (e.target === lightbox) lightbox.
 const annotateOverlay = $("annotateOverlay");
 const baseCanvas = $("baseCanvas"), drawCanvas = $("drawCanvas");
 const baseCtx = baseCanvas.getContext("2d"), drawCtx = drawCanvas.getContext("2d");
-let annotateFindingId = null, annotatePhotoId = null;
+let annotateCollection = "findings", annotateFindingId = null, annotatePhotoId = null;
 let currentColor = "#e02020";
 let drawing = false, lastX = 0, lastY = 0;
 
@@ -1320,11 +1488,11 @@ document.querySelectorAll(".color-dot").forEach(dot => {
   });
 });
 
-function openAnnotateModal(findingId, photoId){
+function openAnnotateModal(col, recordId, photoId){
   if (!isAdmin) return;
-  annotateFindingId = findingId; annotatePhotoId = photoId;
-  const finding = findingsCache.find(f => f.id === findingId);
-  const photo = finding.photos.find(p => p.id === photoId);
+  annotateCollection = col; annotateFindingId = recordId; annotatePhotoId = photoId;
+  const record = galleryCache(col).find(r => r.id === recordId);
+  const photo = record.photos.find(p => p.id === photoId);
   $("annotateStatus").textContent = "";
 
   const img = new Image();
@@ -1379,9 +1547,9 @@ $("annotateSave").addEventListener("click", async () => {
   merged.toBlob(async (blob) => {
     try {
       const { url, publicId } = await uploadToCloudinary(blob);
-      const finding = findingsCache.find(f => f.id === annotateFindingId);
-      const newPhotos = finding.photos.map(p => p.id === annotatePhotoId ? { ...p, url, publicId } : p);
-      await updateDoc(doc(db, "findings", annotateFindingId), { photos: newPhotos });
+      const record = galleryCache(annotateCollection).find(r => r.id === annotateFindingId);
+      const newPhotos = record.photos.map(p => p.id === annotatePhotoId ? { ...p, url, publicId } : p);
+      await updateDoc(doc(db, annotateCollection, annotateFindingId), { photos: newPhotos });
       annotateOverlay.classList.remove("active");
     } catch (err){
       $("annotateStatus").textContent = "Upload failed: " + err.message;
@@ -1395,11 +1563,12 @@ $("annotateSave").addEventListener("click", async () => {
 $("exportDataBtn").addEventListener("click", async () => {
   $("dataStatus").textContent = "Gathering data…";
   try {
-    const [scheduleSnap, seriesSnap, houseRulesSnap, findingsSnap, staffSnap, attendanceSnap] = await Promise.all([
+    const [scheduleSnap, seriesSnap, houseRulesSnap, findingsSnap, plantGuideSnap, staffSnap, attendanceSnap] = await Promise.all([
       getDocs(collection(db, "schedule")),
       getDocs(collection(db, "series")),
       getDoc(doc(db, "meta", "houseRules")),
       getDocs(collection(db, "findings")),
+      getDocs(collection(db, "plantGuide")),
       getDocs(collection(db, "staff")),
       getDocs(collection(db, "attendance"))
     ]);
@@ -1409,6 +1578,7 @@ $("exportDataBtn").addEventListener("click", async () => {
       series: Object.fromEntries(seriesSnap.docs.map(d => [d.id, d.data()])),
       houseRules: houseRulesSnap.exists() ? houseRulesSnap.data() : { rules: DEFAULT_RULES },
       findings: Object.fromEntries(findingsSnap.docs.map(d => [d.id, d.data()])),
+      plantGuide: Object.fromEntries(plantGuideSnap.docs.map(d => [d.id, d.data()])),
       staff: Object.fromEntries(staffSnap.docs.map(d => [d.id, d.data()])),
       attendance: Object.fromEntries(attendanceSnap.docs.map(d => [d.id, d.data()]))
     };
@@ -1427,7 +1597,7 @@ $("importDataBtn").addEventListener("click", () => $("importFileInput").click())
 $("importFileInput").addEventListener("change", async () => {
   const file = $("importFileInput").files[0];
   if (!file) return;
-  if (!confirm("Importing will OVERWRITE current schedule, series, house rules, findings, staff, and attendance data with the contents of this file. This can't be undone. Continue?")) {
+  if (!confirm("Importing will OVERWRITE current schedule, series, house rules, findings, plant guide, staff, and attendance data with the contents of this file. This can't be undone. Continue?")) {
     $("importFileInput").value = "";
     return;
   }
@@ -1439,6 +1609,7 @@ $("importFileInput").addEventListener("change", async () => {
     Object.entries(dump.schedule || {}).forEach(([id, data]) => ops.push(["schedule", id, data]));
     Object.entries(dump.series || {}).forEach(([id, data]) => ops.push(["series", id, data]));
     Object.entries(dump.findings || {}).forEach(([id, data]) => ops.push(["findings", id, data]));
+    Object.entries(dump.plantGuide || {}).forEach(([id, data]) => ops.push(["plantGuide", id, data]));
     Object.entries(dump.staff || {}).forEach(([id, data]) => ops.push(["staff", id, data]));
     Object.entries(dump.attendance || {}).forEach(([id, data]) => ops.push(["attendance", id, data]));
 

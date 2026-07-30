@@ -48,6 +48,11 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
+    match /plantGuide/{id} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
     match /staff/{id} {
       allow read: if true;
       allow write: if isAdmin();
