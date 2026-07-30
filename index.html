@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Indoor Farm — Takeover Tracker</title>
 <link rel="stylesheet" href="styles.css">
 </head>
@@ -24,11 +24,12 @@
   </header>
 
   <div class="tabs">
-    <button class="tab-btn active" data-tab="calendar">Calendar</button>
-    <button class="tab-btn" data-tab="schedule">Daily Schedule</button>
-    <button class="tab-btn" data-tab="attendance">Attendance</button>
-    <button class="tab-btn" data-tab="notes">Notes &amp; House Rules</button>
-    <button class="tab-btn" data-tab="data" id="dataTabBtn" style="display:none;">Data</button>
+    <button class="tab-btn active" data-tab="calendar"><span class="tab-icon">📅</span><span class="tab-label">Calendar</span></button>
+    <button class="tab-btn" data-tab="schedule"><span class="tab-icon">🕐</span><span class="tab-label">Daily Schedule</span></button>
+    <button class="tab-btn" data-tab="attendance"><span class="tab-icon">✅</span><span class="tab-label">Attendance</span></button>
+    <button class="tab-btn" data-tab="findings"><span class="tab-icon">🔍</span><span class="tab-label">Findings Log</span></button>
+    <button class="tab-btn" data-tab="rules"><span class="tab-icon">📖</span><span class="tab-label">House Rules</span></button>
+    <button class="tab-btn" data-tab="data" id="dataTabBtn" style="display:none;"><span class="tab-icon">⚙️</span><span class="tab-label">Data</span></button>
   </div>
 
   <!-- CALENDAR TAB -->
@@ -120,18 +121,8 @@
     <datalist id="staffNamesList"></datalist>
   </div>
 
-  <!-- NOTES TAB -->
-  <div class="tab-panel" id="tab-notes">
-    <div class="section">
-      <h2>House Rules</h2>
-      <p class="hint">Rules and standard practices observed on the farm.</p>
-      <div id="rulesList"></div>
-      <div class="add-row" id="addRuleRow" style="display:none;">
-        <input type="text" id="newRuleInput" placeholder="Add a house rule...">
-        <button id="addRuleBtn">Add</button>
-      </div>
-    </div>
-
+  <!-- FINDINGS LOG TAB -->
+  <div class="tab-panel" id="tab-findings">
     <div class="section">
       <h2>Findings Log</h2>
       <p class="hint">Dated notes and photos from the takeover period.</p>
@@ -148,6 +139,19 @@
         </div>
       </div>
       <div id="findingsList" style="margin-top:10px;"></div>
+    </div>
+  </div>
+
+  <!-- HOUSE RULES TAB -->
+  <div class="tab-panel" id="tab-rules">
+    <div class="section">
+      <h2>House Rules</h2>
+      <p class="hint">Rules and standard practices observed on the farm.</p>
+      <div id="rulesList"></div>
+      <div class="add-row" id="addRuleRow" style="display:none;">
+        <input type="text" id="newRuleInput" placeholder="Add a house rule...">
+        <button id="addRuleBtn">Add</button>
+      </div>
     </div>
   </div>
 
