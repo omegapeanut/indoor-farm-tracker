@@ -1104,11 +1104,11 @@ onSnapshot(collection(db, "findings"), (snap) => {
 
 function ensureDefaultExpand(sorted){
   if (sorted.length === 0) return;
-  const latestDate = sorted[0].date;
+  const todayKey = toKey(new Date());
   sorted.forEach(f => {
     if (!seenFindingIds[f.id]){
       seenFindingIds[f.id] = true;
-      if (f.date === latestDate) expandedFindings[f.id] = true;
+      if (f.date === todayKey) expandedFindings[f.id] = true;
     }
   });
 }
