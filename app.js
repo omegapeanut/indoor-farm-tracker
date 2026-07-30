@@ -1217,7 +1217,11 @@ function renderFindings(){
             e.stopPropagation();
             if (!confirm("Delete this photo?")) return;
             const newPhotos = f.photos.filter(p => p.id !== photo.id);
-            await updateDoc(doc(db, "findings", f.id), { photos: newPhotos });
+            try {
+              await updateDoc(doc(db, "findings", f.id), { photos: newPhotos });
+            } catch (err){
+              alert("Couldn't delete this photo: " + err.message);
+            }
           });
           wrap.appendChild(rem);
         }
@@ -1233,7 +1237,7 @@ function renderFindings(){
       if (isAdmin){
         const addBtn = document.createElement("div");
         addBtn.className = "add-photo-btn"; addBtn.textContent = "+ Add photo";
-        addBtn.addEventListener("click", (e) => { e.stopPropagation(); openPhotoPicker("findings", f.id); });
+        addBtn.addEventListener("click", (e) => { e.stopPropagation(); openPhotoPicker("findings", f.id, addBtn); });
         strip.appendChild(addBtn);
       }
       body.appendChild(strip);
@@ -1318,7 +1322,11 @@ function renderPlantGuide(){
       del.addEventListener("click", async (e) => {
         e.stopPropagation();
         if (!confirm("Delete this plant guide entry and its photos?")) return;
-        await deleteDoc(doc(db, "plantGuide", p.id));
+        try {
+          await deleteDoc(doc(db, "plantGuide", p.id));
+        } catch (err){
+          alert("Couldn't delete this entry: " + err.message);
+        }
       });
       header.appendChild(del);
     }
@@ -1341,7 +1349,12 @@ function renderPlantGuide(){
         if (!isAdmin) return;
         const val = titleInput.innerText.trim();
         if (!val || val === p.title) { titleInput.textContent = p.title || ""; return; }
-        await updateDoc(doc(db, "plantGuide", p.id), { title: val });
+        try {
+          await updateDoc(doc(db, "plantGuide", p.id), { title: val });
+        } catch (err){
+          alert("Couldn't save the title: " + err.message);
+          titleInput.textContent = p.title || "";
+        }
       });
       body.appendChild(titleInput);
 
@@ -1354,7 +1367,12 @@ function renderPlantGuide(){
         if (!isAdmin) return;
         const val = notes.innerText.trim();
         if (val === p.notes) return;
-        await updateDoc(doc(db, "plantGuide", p.id), { notes: val });
+        try {
+          await updateDoc(doc(db, "plantGuide", p.id), { notes: val });
+        } catch (err){
+          alert("Couldn't save the notes: " + err.message);
+          notes.textContent = p.notes || "";
+        }
       });
       body.appendChild(notes);
 
@@ -1376,7 +1394,11 @@ function renderPlantGuide(){
             e.stopPropagation();
             if (!confirm("Delete this photo?")) return;
             const newPhotos = p.photos.filter(ph => ph.id !== photo.id);
-            await updateDoc(doc(db, "plantGuide", p.id), { photos: newPhotos });
+            try {
+              await updateDoc(doc(db, "plantGuide", p.id), { photos: newPhotos });
+            } catch (err){
+              alert("Couldn't delete this photo: " + err.message);
+            }
           });
           wrap.appendChild(rem);
         }
@@ -1392,7 +1414,7 @@ function renderPlantGuide(){
       if (isAdmin){
         const addBtn = document.createElement("div");
         addBtn.className = "add-photo-btn"; addBtn.textContent = "+ Add photo";
-        addBtn.addEventListener("click", (e) => { e.stopPropagation(); openPhotoPicker("plantGuide", p.id); });
+        addBtn.addEventListener("click", (e) => { e.stopPropagation(); openPhotoPicker("plantGuide", p.id, addBtn); });
         strip.appendChild(addBtn);
       }
       body.appendChild(strip);
@@ -1409,10 +1431,18 @@ $("addPlantBtn").addEventListener("click", async () => {
   const title = titleInput.value.trim();
   if (!title) return;
   const notes = notesInput.value.trim();
-  const newDoc = await addDoc(collection(db, "plantGuide"), { title, notes, photos: [] });
-  expandedPlants[newDoc.id] = true;
-  titleInput.value = "";
-  notesInput.value = "";
+  const btn = $("addPlantBtn");
+  btn.disabled = true; btn.textContent = "Adding…";
+  try {
+    const newDoc = await addDoc(collection(db, "plantGuide"), { title, notes, photos: [] });
+    expandedPlants[newDoc.id] = true;
+    titleInput.value = "";
+    notesInput.value = "";
+  } catch (err){
+    alert("Couldn't save this entry: " + err.message + "\n\nIf this says \"permission denied\", the plantGuide rule in firestore.rules needs to be published in the Firebase console (Firestore Database → Rules).");
+  } finally {
+    btn.disabled = false; btn.textContent = "Add";
+  }
 });
 
 // ---- Cloudinary upload ----
@@ -1434,35 +1464,52 @@ function galleryExpanded(col){ return col === "plantGuide" ? expandedPlants : ex
 
 let photoTargetCollection = "findings";
 let photoTargetFindingId = null;
+let photoTargetBtn = null;
 const photoFileInput = $("photoFileInput");
-function openPhotoPicker(col, recordId){ photoTargetCollection = col; photoTargetFindingId = recordId; photoFileInput.value = ""; photoFileInput.click(); }
+function openPhotoPicker(col, recordId, btnEl){
+  photoTargetCollection = col; photoTargetFindingId = recordId; photoTargetBtn = btnEl || null;
+  photoFileInput.value = ""; photoFileInput.click();
+}
 
 photoFileInput.addEventListener("change", async () => {
   const files = Array.from(photoFileInput.files || []);
   if (!files.length || !photoTargetFindingId) return;
   const col = photoTargetCollection;
   const recordId = photoTargetFindingId;
+  const btn = photoTargetBtn;
   const record = galleryCache(col).find(r => r.id === recordId);
   if (!record) return;
 
   galleryExpanded(col)[recordId] = true;
-  const uploaded = [];
-  for (const file of files){
-    try {
-      const { url, publicId } = await uploadToCloudinary(file);
-      uploaded.push({ id: uid(), url, publicId });
-    } catch (err){
-      alert("Photo upload failed: " + err.message + "\n\nCheck your Cloudinary cloud name / upload preset in firebase-config.js (see SETUP.md).");
+  if (btn){ btn.textContent = files.length > 1 ? "Uploading 1/" + files.length + "…" : "Uploading…"; btn.style.pointerEvents = "none"; btn.style.opacity = "0.6"; }
+  try {
+    const uploaded = [];
+    for (let i = 0; i < files.length; i++){
+      try {
+        const { url, publicId } = await uploadToCloudinary(files[i]);
+        uploaded.push({ id: uid(), url, publicId });
+        if (btn && i + 1 < files.length) btn.textContent = "Uploading " + (i + 2) + "/" + files.length + "…";
+      } catch (err){
+        alert("Photo upload failed: " + err.message + "\n\nCheck your Cloudinary cloud name / upload preset in firebase-config.js (see SETUP.md).");
+      }
     }
-  }
-  if (uploaded.length === 0) return;
-  const newPhotos = [...(record.photos || []), ...uploaded];
-  await updateDoc(doc(db, col, recordId), { photos: newPhotos });
+    if (uploaded.length === 0) return;
+    if (btn) btn.textContent = "Saving…";
+    const newPhotos = [...(record.photos || []), ...uploaded];
+    try {
+      await updateDoc(doc(db, col, recordId), { photos: newPhotos });
+    } catch (err){
+      alert("Photo uploaded, but saving it to the entry failed: " + err.message + "\n\nIf this says \"permission denied\", the Firestore rules for this collection need to be published in the Firebase console.");
+      return;
+    }
 
-  if (uploaded.length === 1 && col === "findings"){
-    // jump straight into annotate mode for a single upload, same as before
-    // (skipped for Plant Guide — reference uploads don't need the auto-jump)
-    setTimeout(() => openAnnotateModal(col, recordId, uploaded[0].id), 300);
+    if (uploaded.length === 1 && col === "findings"){
+      // jump straight into annotate mode for a single upload, same as before
+      // (skipped for Plant Guide — reference uploads don't need the auto-jump)
+      setTimeout(() => openAnnotateModal(col, recordId, uploaded[0].id), 300);
+    }
+  } finally {
+    if (btn){ btn.textContent = "+ Add photo"; btn.style.pointerEvents = ""; btn.style.opacity = ""; }
   }
 });
 
