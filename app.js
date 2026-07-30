@@ -883,7 +883,7 @@ function makeAttTimeGroup(rec, field, label, kind){
     val.className = "att-time-value" + (rec[field] ? "" : " empty");
     val.textContent = rec[field] || "—";
     group.appendChild(val);
-    if (rec[field] && rec[locField]) group.appendChild(makeLocLine(rec[locField]));
+    group.appendChild(makeLocLine(rec[field] ? rec[locField] : null));
     return group;
   }
 
@@ -902,18 +902,20 @@ function makeAttTimeGroup(rec, field, label, kind){
     });
     valWrap.appendChild(input); valWrap.appendChild(clear);
     group.appendChild(valWrap);
-    if (rec[locField]) group.appendChild(makeLocLine(rec[locField]));
+    group.appendChild(makeLocLine(rec[locField]));
   } else if (canAct){
     const btn = document.createElement("button");
     btn.className = "att-btn " + kind;
     btn.textContent = label;
     btn.addEventListener("click", async () => { await updateDoc(doc(db, "attendance", rec.id), { [field]: nowTimeStr() }); });
     group.appendChild(btn);
+    group.appendChild(makeLocLine(null));
   } else {
     const placeholder = document.createElement("div");
     placeholder.className = "att-time-value empty";
     placeholder.textContent = "—";
     group.appendChild(placeholder);
+    group.appendChild(makeLocLine(null));
   }
   return group;
 }
