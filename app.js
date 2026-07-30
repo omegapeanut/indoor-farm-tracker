@@ -217,6 +217,7 @@ let viewYear = todayNow.getFullYear(), viewMonth = todayNow.getMonth();
 let highlightDate = null;
 
 $("calGoToDate").min = START_DATE;
+$("calGoToDate").value = toKey(todayNow);
 const dowRow = $("dowRow");
 DOW.forEach(d => { const el = document.createElement("div"); el.className = "dow"; el.textContent = d; dowRow.appendChild(el); });
 
@@ -298,6 +299,7 @@ function jumpCalendarToDate(key){
   const d = toDate(key);
   viewYear = d.getFullYear(); viewMonth = d.getMonth();
   highlightDate = key;
+  $("calGoToDate").value = key;
   renderCalendar();
   setTimeout(() => { if (highlightDate === key){ highlightDate = null; renderCalendar(); } }, 2000);
 }
