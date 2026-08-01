@@ -1,4 +1,5 @@
-:root { color-scheme: light; }
+:root { color-scheme: light; scrollbar-gutter: stable; }
+html { overflow-y: scroll; }
 * { box-sizing: border-box; }
 body {
   margin: 0;

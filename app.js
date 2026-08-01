@@ -1141,7 +1141,7 @@ function renderFindings(){
   const latestDate = findingsCache.length ? findingsCache.slice().sort((a,b) => b.date.localeCompare(a.date))[0].date : null;
 
   items.forEach(f => {
-    const isOpen = !!expandedFindings[f.id];
+    const isOpen = findingsSearchTerm ? true : !!expandedFindings[f.id];
     const card = document.createElement("div");
     card.className = "finding-card" + (isOpen ? " expanded" : "");
 
@@ -1295,7 +1295,7 @@ function renderPlantGuide(){
   }
 
   items.forEach(p => {
-    const isOpen = !!expandedPlants[p.id];
+    const isOpen = plantSearchTerm ? true : !!expandedPlants[p.id];
     const card = document.createElement("div");
     card.className = "finding-card" + (isOpen ? " expanded" : "");
 
