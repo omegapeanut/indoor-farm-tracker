@@ -53,6 +53,36 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
+    match /plantTypes/{id} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /harvests/{id} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /transplants/{id} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /germinations/{id} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /losses/{id} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /envReadings/{id} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
     match /staff/{id} {
       allow read: if true;
       allow write: if isAdmin();
