@@ -275,6 +275,53 @@ header.top p { margin: 0; color: #666; font-size: 13px; }
 /* ---- Data tab (export/import) ---- */
 .data-actions { display: flex; gap: 10px; flex-wrap: wrap; }
 
+/* ---- Grow Log tab ---- */
+.subtabs { display: flex; gap: 6px; flex-wrap: wrap; margin: 14px 0 16px; border-bottom: 1px solid #eee; padding-bottom: 10px; }
+.subtab-btn {
+  border: 1px solid #d8d8d8; background: #fff; border-radius: 999px; padding: 6px 14px;
+  font-size: 12.5px; color: #555; cursor: pointer;
+}
+.subtab-btn:hover { background: #f5f5f5; }
+.subtab-btn.active { background: #0b57d0; border-color: #0b57d0; color: #fff; font-weight: 600; }
+.subtab-panel { display: none; }
+.subtab-panel.active { display: block; }
+
+.env-table-head {
+  display: grid; grid-template-columns: 96px minmax(120px,1.4fr) 60px 70px 60px 80px 80px 22px;
+  gap: 8px 10px; padding: 0 14px 6px; font-size: 10px; font-weight: 700; color: #9a9a9a;
+  text-transform: uppercase; letter-spacing: 0.04em;
+}
+.env-table-head span:not(:first-child):not(:nth-child(2)) { text-align: center; }
+.env-row {
+  display: grid; grid-template-columns: 96px minmax(120px,1.4fr) 60px 70px 60px 80px 80px 22px;
+  align-items: center; gap: 8px 10px; background: #fff; border: 1px solid #e5e5e5; border-radius: 8px;
+  padding: 10px 14px; margin-bottom: 8px; font-size: 12.5px;
+}
+.env-row .env-cell { text-align: center; font-variant-numeric: tabular-nums; }
+.env-row .env-cell.empty { color: #bbb; }
+.env-row .env-date { font-weight: 600; color: #333; white-space: nowrap; }
+.env-row .env-loc { color: #555; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.dash-location-row { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 16px; }
+.dash-loc-btn { border: 1px solid #d8d8d8; background: #fff; border-radius: 999px; padding: 6px 14px; font-size: 12.5px; color: #555; cursor: pointer; }
+.dash-loc-btn:hover { background: #f5f5f5; }
+.dash-loc-btn.active { background: #0b57d0; border-color: #0b57d0; color: #fff; font-weight: 600; }
+
+.chart-wrap { position: relative; height: 220px; margin-bottom: 14px; }
+.dash-table { width: 100%; border-collapse: collapse; font-size: 12.5px; margin-top: 10px; }
+.dash-table th, .dash-table td { text-align: left; padding: 6px 8px; border-bottom: 1px solid #eee; }
+.dash-table th { color: #888; font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.03em; font-weight: 700; }
+.dash-table td { font-variant-numeric: tabular-nums; }
+
+@media (max-width: 640px) {
+  .env-table-head { display: none; }
+  .env-row { display: flex; flex-wrap: wrap; align-items: center; column-gap: 14px; row-gap: 6px; }
+  .env-row .env-date { flex: 1 1 100%; }
+  .env-row .env-loc { flex: 1 1 100%; text-align: left; }
+  .env-row .env-cell { text-align: left; }
+  .env-row .env-cell::before { content: attr(data-label) ": "; color: #999; font-size: 9.5px; text-transform: uppercase; }
+}
+
 /* ============================================================================
    RESPONSIVE — tablets (iPad) and general mid-size tightening
    ============================================================================ */

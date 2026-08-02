@@ -99,6 +99,10 @@ onAuthStateChanged(auth, (user) => {
   renderRules();
   renderFindings();
   renderPlantGuide();
+  renderPlantTypes();
+  Object.keys(LOG_CONFIGS).forEach(renderLogSection);
+  renderEnvReadings();
+  if (isDashboardActive()) renderDashboard();
 });
 
 function refreshAdminUI(){
@@ -110,9 +114,16 @@ function refreshAdminUI(){
   $("dsResetBtn").style.display = isAdmin ? "inline-block" : "none";
   $("addAttRow").style.display = isAdmin ? "flex" : "none";
   $("staffToggleRow").style.display = isAdmin ? "block" : "none";
+  $("plantTypesToggleRow").style.display = isAdmin ? "block" : "none";
+  $("addHarvestsRow").style.display = isAdmin ? "flex" : "none";
+  $("addTransplantsRow").style.display = isAdmin ? "flex" : "none";
+  $("addGerminationsRow").style.display = isAdmin ? "flex" : "none";
+  $("addLossesRow").style.display = isAdmin ? "flex" : "none";
+  $("addEnvReadingsRow").style.display = isAdmin ? "flex" : "none";
   $("dataTabBtn").style.display = isAdmin ? "inline-block" : "none";
   if (!isAdmin){
     $("staffPanel").style.display = "none";
+    $("plantTypesPanel").style.display = "none";
     if ($("tab-data").classList.contains("active")) activateTab("calendar");
   }
 }
@@ -1445,6 +1456,532 @@ $("addPlantBtn").addEventListener("click", async () => {
   }
 });
 
+// ============================================================================
+// GROW LOG — plant types, harvests, transplants, germinations, losses,
+// environment readings, and the trends dashboard
+// ============================================================================
+const LOCATIONS = { level1: "Level 1", level3: "Level 3", germOnSite: "Germination Room (On Site)", germOffSite: "Germination Room (Off Site)" };
+function capitalize(s){ return s.charAt(0).toUpperCase() + s.slice(1); }
+
+// ---- Plant Types (Firestore: plantTypes/{id}) ----
+let plantTypesCache = [];
+onSnapshot(collection(db, "plantTypes"), (snap) => {
+  plantTypesCache = snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a,b) => (a.name||"").localeCompare(b.name||""));
+  renderPlantTypes();
+  populatePlantTypeSelects();
+}, () => setSyncStatus("err", "Connection error"));
+
+function plantTypeName(id){
+  const pt = plantTypesCache.find(p => p.id === id);
+  return pt ? pt.name : "(unknown plant)";
+}
+
+function renderPlantTypes(){
+  const list = $("plantTypesList");
+  list.innerHTML = "";
+  if (plantTypesCache.length === 0){
+    const empty = document.createElement("div");
+    empty.className = "empty-state";
+    empty.textContent = "No plant types added yet.";
+    list.appendChild(empty);
+    return;
+  }
+  plantTypesCache.forEach(pt => {
+    const row = document.createElement("div");
+    row.className = "staff-row";
+
+    const name = document.createElement("div");
+    name.className = "staff-name";
+    name.contentEditable = "true";
+    name.textContent = pt.name;
+    name.addEventListener("blur", async () => {
+      const val = name.textContent.trim();
+      if (!val){ name.textContent = pt.name; return; }
+      if (val === pt.name) return;
+      try { await updateDoc(doc(db, "plantTypes", pt.id), { name: val }); }
+      catch (err){ alert("Couldn't rename this plant type: " + err.message); name.textContent = pt.name; }
+    });
+    name.addEventListener("keydown", (e) => { if (e.key === "Enter"){ e.preventDefault(); name.blur(); } });
+
+    const del = document.createElement("button");
+    del.className = "icon-btn"; del.textContent = "✕"; del.title = "Remove plant type";
+    del.addEventListener("click", async () => {
+      if (!confirm("Remove \"" + pt.name + "\" from plant types? Past log entries keep their recorded name.")) return;
+      try { await deleteDoc(doc(db, "plantTypes", pt.id)); }
+      catch (err){ alert("Couldn't delete this plant type: " + err.message); }
+    });
+
+    row.appendChild(name); row.appendChild(del);
+    list.appendChild(row);
+  });
+}
+
+$("togglePlantTypesBtn").addEventListener("click", () => {
+  const panel = $("plantTypesPanel");
+  panel.style.display = panel.style.display === "none" ? "block" : "none";
+});
+
+$("addPlantTypeBtn").addEventListener("click", async () => {
+  if (!isAdmin) return;
+  const input = $("newPlantTypeName");
+  const name = input.value.trim();
+  if (!name) return;
+  try {
+    await addDoc(collection(db, "plantTypes"), { name });
+    input.value = "";
+  } catch (err){
+    alert("Couldn't add this plant type: " + err.message);
+  }
+});
+
+function populatePlantTypeSelects(){
+  ["harvests", "transplants", "germinations", "losses"].forEach(col => {
+    const sel = $(col + "PlantType");
+    if (!sel) return;
+    const prev = sel.value;
+    sel.innerHTML = "";
+    if (plantTypesCache.length === 0){
+      const opt = document.createElement("option");
+      opt.value = ""; opt.textContent = "Add a plant type first (⚙ above)";
+      sel.appendChild(opt);
+      return;
+    }
+    plantTypesCache.forEach(pt => {
+      const opt = document.createElement("option");
+      opt.value = pt.id; opt.textContent = pt.name;
+      sel.appendChild(opt);
+    });
+    if (prev && plantTypesCache.some(pt => pt.id === prev)) sel.value = prev;
+  });
+}
+
+// ---- Harvest / Seedling Transfer / Germination / Losses ----
+// All four are "dated log: plant type + quantity + one-or-two location
+// fields + notes + photos" — driven by one config-driven renderer instead
+// of four near-identical copies of the Findings Log pattern.
+const LOG_CONFIGS = {
+  harvests: {
+    locationField: { key: "location", options: [["level1","Level 1"],["level3","Level 3"]] },
+  },
+  germinations: {
+    locationField: { key: "room", options: [["germOnSite","On Site"],["germOffSite","Off Site"]] },
+  },
+  transplants: {
+    locationField: { key: "sourceRoom", options: [["germOnSite","On Site"],["germOffSite","Off Site"]] },
+    secondLocationField: { key: "destLevel", options: [["level1","Level 1"],["level3","Level 3"]] },
+  },
+  losses: {
+    locationField: { key: "location", options: Object.entries(LOCATIONS) },
+  },
+};
+
+let harvestsCache = [], transplantsCache = [], germinationsCache = [], lossesCache = [];
+const expandedHarvests = {}, expandedTransplants = {}, expandedGerminations = {}, expandedLosses = {};
+const LOG_CACHES = { harvests: () => harvestsCache, transplants: () => transplantsCache, germinations: () => germinationsCache, losses: () => lossesCache };
+const LOG_EXPANDED = { harvests: expandedHarvests, transplants: expandedTransplants, germinations: expandedGerminations, losses: expandedLosses };
+const LOG_SETTERS = {
+  harvests: (v) => harvestsCache = v,
+  transplants: (v) => transplantsCache = v,
+  germinations: (v) => germinationsCache = v,
+  losses: (v) => lossesCache = v,
+};
+
+Object.keys(LOG_CONFIGS).forEach(col => {
+  onSnapshot(collection(db, col), (snap) => {
+    LOG_SETTERS[col](snap.docs.map(d => ({ id: d.id, photos: [], ...d.data() })));
+    renderLogSection(col);
+    if (col !== "harvests" && isDashboardActive()) renderDashboard();
+  }, () => setSyncStatus("err", "Connection error"));
+});
+
+function locOptLabel(key, opts){
+  const found = opts.find(([k]) => k === key);
+  return found ? found[1] : (key || "—");
+}
+
+function renderLogSection(col){
+  const cfg = LOG_CONFIGS[col];
+  const cache = LOG_CACHES[col]();
+  const expanded = LOG_EXPANDED[col];
+  const list = $(col + "List");
+  if (!list) return;
+  list.innerHTML = "";
+
+  const items = cache.slice().sort((a,b) => (b.date||"").localeCompare(a.date||""));
+  if (items.length === 0){
+    const empty = document.createElement("div");
+    empty.className = "empty-state";
+    empty.textContent = "Nothing logged yet.";
+    list.appendChild(empty);
+    return;
+  }
+
+  items.forEach(r => {
+    const isOpen = !!expanded[r.id];
+    const card = document.createElement("div");
+    card.className = "finding-card" + (isOpen ? " expanded" : "");
+
+    const header = document.createElement("div");
+    header.className = "finding-header";
+    const left = document.createElement("div");
+    left.className = "finding-header-left";
+    const chevron = document.createElement("span");
+    chevron.className = "finding-chevron"; chevron.textContent = "▶";
+    const dateEl = document.createElement("span");
+    dateEl.className = "finding-date"; dateEl.textContent = r.date || "—";
+    left.appendChild(chevron); left.appendChild(dateEl);
+
+    const locLabel = locOptLabel(r[cfg.locationField.key], cfg.locationField.options);
+    const secondLabel = cfg.secondLocationField ? (" → " + locOptLabel(r[cfg.secondLocationField.key], cfg.secondLocationField.options)) : "";
+    const summaryText = plantTypeName(r.plantTypeId) + " — " + (r.quantity != null ? r.quantity : "?") + " · " + locLabel + secondLabel;
+    if (!isOpen){
+      const preview = document.createElement("span");
+      preview.className = "finding-preview";
+      preview.textContent = summaryText;
+      left.appendChild(preview);
+    }
+    header.appendChild(left);
+
+    if (isAdmin){
+      const del = document.createElement("button");
+      del.className = "icon-btn"; del.textContent = "✕"; del.title = "Delete entry";
+      del.addEventListener("click", async (e) => {
+        e.stopPropagation();
+        if (!confirm("Delete this entry and its photos?")) return;
+        try { await deleteDoc(doc(db, col, r.id)); }
+        catch (err){ alert("Couldn't delete this entry: " + err.message); }
+      });
+      header.appendChild(del);
+    }
+    header.addEventListener("click", () => {
+      if (expanded[r.id]) delete expanded[r.id]; else expanded[r.id] = true;
+      renderLogSection(col);
+    });
+    card.appendChild(header);
+
+    const body = document.createElement("div");
+    body.className = "finding-body";
+    if (isOpen){
+      const summary = document.createElement("div");
+      summary.className = "finding-text";
+      summary.style.fontWeight = "600";
+      summary.textContent = summaryText;
+      body.appendChild(summary);
+
+      if (r.notes){
+        const notes = document.createElement("div");
+        notes.className = "finding-text";
+        notes.textContent = r.notes;
+        body.appendChild(notes);
+      }
+
+      const strip = document.createElement("div");
+      strip.className = "photo-strip";
+      (r.photos || []).forEach(photo => {
+        const item = document.createElement("div");
+        item.className = "photo-item";
+        const wrap = document.createElement("div");
+        wrap.className = "photo-thumb-wrap";
+        const img = document.createElement("img");
+        img.className = "photo-thumb"; img.src = photo.url; img.loading = "lazy";
+        img.addEventListener("click", (e) => { e.stopPropagation(); openLightbox(photo.url); });
+        wrap.appendChild(img);
+        if (isAdmin){
+          const rem = document.createElement("button");
+          rem.className = "photo-remove"; rem.textContent = "✕"; rem.title = "Delete photo";
+          rem.addEventListener("click", async (e) => {
+            e.stopPropagation();
+            if (!confirm("Delete this photo?")) return;
+            const newPhotos = (r.photos || []).filter(p => p.id !== photo.id);
+            try { await updateDoc(doc(db, col, r.id), { photos: newPhotos }); }
+            catch (err){ alert("Couldn't delete this photo: " + err.message); }
+          });
+          wrap.appendChild(rem);
+        }
+        item.appendChild(wrap);
+        if (isAdmin){
+          const ann = document.createElement("button");
+          ann.className = "annotate-btn"; ann.textContent = "✎ Annotate";
+          ann.addEventListener("click", (e) => { e.stopPropagation(); openAnnotateModal(col, r.id, photo.id); });
+          item.appendChild(ann);
+        }
+        strip.appendChild(item);
+      });
+      if (isAdmin){
+        const addBtn = document.createElement("div");
+        addBtn.className = "add-photo-btn"; addBtn.textContent = "+ Add photo";
+        addBtn.addEventListener("click", (e) => { e.stopPropagation(); openPhotoPicker(col, r.id, addBtn); });
+        strip.appendChild(addBtn);
+      }
+      body.appendChild(strip);
+    }
+    card.appendChild(body);
+    list.appendChild(card);
+  });
+}
+
+function wireLogAddForm(col){
+  const cfg = LOG_CONFIGS[col];
+  const btn = $("add" + capitalize(col) + "Btn");
+  if (!btn) return;
+  btn.addEventListener("click", async () => {
+    if (!isAdmin) return;
+    const dateInput = $(col + "Date");
+    const plantTypeSelect = $(col + "PlantType");
+    const qtyInput = $(col + "Quantity");
+    const notesInput = $(col + "Notes");
+    const locSelect = $(col + "Location");
+    const loc2Select = cfg.secondLocationField ? $(col + "Location2") : null;
+
+    const plantTypeId = plantTypeSelect.value;
+    if (!plantTypeId){ alert("Add a plant type first, using the ⚙ Manage Plant Types button above."); return; }
+    const quantity = Number(qtyInput.value);
+    if (!quantity || quantity <= 0){ alert("Enter a quantity greater than 0."); return; }
+    const date = dateInput.value || toKey(new Date());
+
+    const payload = { date, plantTypeId, quantity, notes: notesInput.value.trim(), photos: [] };
+    payload[cfg.locationField.key] = locSelect.value;
+    if (cfg.secondLocationField) payload[cfg.secondLocationField.key] = loc2Select.value;
+
+    btn.disabled = true; btn.textContent = "Adding…";
+    try {
+      const newDoc = await addDoc(collection(db, col), payload);
+      LOG_EXPANDED[col][newDoc.id] = true;
+      qtyInput.value = ""; notesInput.value = "";
+    } catch (err){
+      alert("Couldn't save this entry: " + err.message + "\n\nIf this says \"permission denied\", the " + col + " rule in firestore.rules needs to be published in the Firebase console.");
+    } finally {
+      btn.disabled = false; btn.textContent = "Add";
+    }
+  });
+}
+Object.keys(LOG_CONFIGS).forEach(wireLogAddForm);
+["harvests", "transplants", "germinations", "losses"].forEach(col => {
+  const el = $(col + "Date");
+  const t = toKey(new Date());
+  el.value = inRange(t) ? t : START_DATE;
+});
+
+// ---- Environment Readings (Firestore: envReadings/{id}) ----
+let envReadingsCache = [];
+let envReadingsFilterLoc = "";
+onSnapshot(collection(db, "envReadings"), (snap) => {
+  envReadingsCache = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  renderEnvReadings();
+  if (isDashboardActive()) renderDashboard();
+}, () => setSyncStatus("err", "Connection error"));
+
+$("envReadingsFilter").addEventListener("change", (e) => { envReadingsFilterLoc = e.target.value; renderEnvReadings(); });
+
+function renderEnvReadings(){
+  const list = $("envReadingsList");
+  list.innerHTML = "";
+  let items = envReadingsCache.slice().sort((a,b) => (b.date||"").localeCompare(a.date||""));
+  if (envReadingsFilterLoc) items = items.filter(r => r.location === envReadingsFilterLoc);
+
+  if (items.length === 0){
+    const empty = document.createElement("div");
+    empty.className = "empty-state";
+    empty.textContent = envReadingsFilterLoc ? "No readings for this location yet." : "No readings logged yet.";
+    list.appendChild(empty);
+    return;
+  }
+
+  const mkCell = (label, val, unit) => {
+    const span = document.createElement("span");
+    const has = val !== null && val !== undefined && val !== "";
+    span.className = "env-cell" + (has ? "" : " empty");
+    span.dataset.label = label;
+    span.textContent = has ? (val + (unit || "")) : "—";
+    return span;
+  };
+
+  items.forEach(r => {
+    const row = document.createElement("div");
+    row.className = "env-row";
+    const dateEl = document.createElement("span"); dateEl.className = "env-date"; dateEl.textContent = r.date || "—";
+    const locEl = document.createElement("span"); locEl.className = "env-loc"; locEl.textContent = LOCATIONS[r.location] || r.location || "—";
+    row.appendChild(dateEl);
+    row.appendChild(locEl);
+    row.appendChild(mkCell("pH", r.ph));
+    row.appendChild(mkCell("TDS", r.tds));
+    row.appendChild(mkCell("EC", r.ec));
+    row.appendChild(mkCell("Water °C", r.waterTemp));
+    row.appendChild(mkCell("Room °C", r.roomTemp));
+    if (isAdmin){
+      const del = document.createElement("button");
+      del.className = "icon-btn"; del.textContent = "✕"; del.title = "Delete reading";
+      del.addEventListener("click", async () => {
+        if (!confirm("Delete this reading?")) return;
+        try { await deleteDoc(doc(db, "envReadings", r.id)); }
+        catch (err){ alert("Couldn't delete this reading: " + err.message); }
+      });
+      row.appendChild(del);
+    } else {
+      row.appendChild(document.createElement("span"));
+    }
+    list.appendChild(row);
+  });
+}
+
+$("addEnvReadingsBtn").addEventListener("click", async () => {
+  if (!isAdmin) return;
+  const btn = $("addEnvReadingsBtn");
+  const numOrNull = (id) => { const v = $(id).value; return v === "" ? null : Number(v); };
+  const payload = {
+    date: $("envReadingsDate").value || toKey(new Date()),
+    location: $("envReadingsLocation").value,
+    ph: numOrNull("envReadingsPh"),
+    tds: numOrNull("envReadingsTds"),
+    ec: numOrNull("envReadingsEc"),
+    waterTemp: numOrNull("envReadingsWaterTemp"),
+    roomTemp: numOrNull("envReadingsRoomTemp"),
+    notes: $("envReadingsNotes").value.trim(),
+  };
+  btn.disabled = true; btn.textContent = "Adding…";
+  try {
+    await addDoc(collection(db, "envReadings"), payload);
+    ["envReadingsPh","envReadingsTds","envReadingsEc","envReadingsWaterTemp","envReadingsRoomTemp","envReadingsNotes"].forEach(id => { $(id).value = ""; });
+  } catch (err){
+    alert("Couldn't save this reading: " + err.message + "\n\nIf this says \"permission denied\", the envReadings rule in firestore.rules needs to be published in the Firebase console.");
+  } finally {
+    btn.disabled = false; btn.textContent = "Add reading";
+  }
+});
+(() => { const t = toKey(new Date()); $("envReadingsDate").value = inRange(t) ? t : START_DATE; })();
+
+// ---- Dashboard ----
+function weekKey(dateStr){
+  const d = toDate(dateStr);
+  const diffToMonday = (d.getDay() + 6) % 7;
+  const monday = new Date(d);
+  monday.setDate(d.getDate() - diffToMonday);
+  return toKey(monday);
+}
+
+function computeDeathRateSeries(scopeLoc){
+  const weeks = {};
+  const bump = (key, field, amount) => { if (!weeks[key]) weeks[key] = { losses: 0, denom: 0 }; weeks[key][field] += amount; };
+
+  lossesCache.forEach(r => {
+    if (scopeLoc && r.location !== scopeLoc) return;
+    bump(weekKey(r.date), "losses", Number(r.quantity) || 0);
+  });
+
+  const isGrowLevel = scopeLoc === "level1" || scopeLoc === "level3";
+  const isGermRoom = scopeLoc === "germOnSite" || scopeLoc === "germOffSite";
+
+  if (!scopeLoc || isGermRoom){
+    germinationsCache.forEach(r => {
+      if (isGermRoom && r.room !== scopeLoc) return;
+      bump(weekKey(r.date), "denom", Number(r.quantity) || 0);
+    });
+  }
+  if (!scopeLoc || isGrowLevel){
+    transplantsCache.forEach(r => {
+      if (isGrowLevel && r.destLevel !== scopeLoc) return;
+      bump(weekKey(r.date), "denom", Number(r.quantity) || 0);
+    });
+  }
+
+  return Object.keys(weeks).sort().map(wk => ({
+    week: wk, lossQty: weeks[wk].losses, denom: weeks[wk].denom,
+    rate: weeks[wk].denom > 0 ? (weeks[wk].losses / weeks[wk].denom * 100) : null,
+  }));
+}
+
+function computeEnvSeries(scopeLoc, metricKey){
+  let items = envReadingsCache.slice();
+  if (scopeLoc) items = items.filter(r => r.location === scopeLoc);
+  items = items.filter(r => r[metricKey] !== null && r[metricKey] !== undefined && r.date);
+  const byDate = {};
+  items.forEach(r => { (byDate[r.date] = byDate[r.date] || []).push(Number(r[metricKey])); });
+  return Object.keys(byDate).sort().map(d => ({
+    date: d, value: byDate[d].reduce((a,b) => a+b, 0) / byDate[d].length,
+  }));
+}
+
+const chartInstances = {};
+function renderLineChart(canvasId, labels, data, label, color){
+  const canvas = $(canvasId);
+  if (!canvas || typeof Chart === "undefined") return;
+  if (chartInstances[canvasId]) chartInstances[canvasId].destroy();
+  chartInstances[canvasId] = new Chart(canvas.getContext("2d"), {
+    type: "line",
+    data: { labels, datasets: [{ label, data, borderColor: color, backgroundColor: color + "33", tension: 0.25, spanGaps: true }] },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false }, title: { display: true, text: label, font: { size: 12 } } },
+      scales: { x: { ticks: { maxRotation: 0, autoSkip: true } } },
+    },
+  });
+}
+
+let dashboardScopeLoc = "";
+function isDashboardActive(){
+  const el = $("growlog-dashboard");
+  return !!el && el.classList.contains("active");
+}
+
+$("dashLocationRow").addEventListener("click", (e) => {
+  const btn = e.target.closest(".dash-loc-btn");
+  if (!btn) return;
+  dashboardScopeLoc = btn.dataset.loc;
+  document.querySelectorAll(".dash-loc-btn").forEach(b => b.classList.toggle("active", b === btn));
+  renderDashboard();
+});
+
+function renderDashboard(){
+  const series = computeDeathRateSeries(dashboardScopeLoc);
+  renderLineChart("deathRateChart", series.map(s => s.week), series.map(s => s.rate), "Death rate %", "#c0392b");
+
+  const table = $("deathRateTable");
+  if (series.length === 0){
+    table.innerHTML = '<p class="empty-state">Not enough data yet — log some germination/transplant/loss entries.</p>';
+  } else {
+    let html = "<table><thead><tr><th>Week of</th><th>Losses</th><th>Germinated + Transplanted</th><th>Rate</th></tr></thead><tbody>";
+    series.slice().reverse().forEach(s => {
+      html += "<tr><td>" + s.week + "</td><td>" + s.lossQty + "</td><td>" + s.denom + "</td><td>" + (s.rate != null ? s.rate.toFixed(1) + "%" : "—") + "</td></tr>";
+    });
+    html += "</tbody></table>";
+    table.innerHTML = html;
+  }
+
+  const envWrap = $("envChartsWrap");
+  const hint = $("envTrendsHint");
+  if (!dashboardScopeLoc){
+    envWrap.style.display = "none";
+    hint.textContent = "Pick a specific location above (not \"All\") to see its environment charts.";
+  } else {
+    envWrap.style.display = "";
+    hint.textContent = "Daily average readings for " + LOCATIONS[dashboardScopeLoc] + ".";
+    [
+      ["ph", "phChart", "pH", "#0b57d0"],
+      ["tds", "tdsChart", "TDS (ppm)", "#1e7e34"],
+      ["ec", "ecChart", "EC (mS/cm)", "#b5540b"],
+      ["waterTemp", "waterTempChart", "Water Temp (°C)", "#6a2fb5"],
+      ["roomTemp", "roomTempChart", "Room Temp (°C)", "#c0392b"],
+    ].forEach(([key, canvasId, label, color]) => {
+      const s = computeEnvSeries(dashboardScopeLoc, key);
+      renderLineChart(canvasId, s.map(p => p.date), s.map(p => p.value), label, color);
+    });
+  }
+}
+
+// ---- Grow Log sub-tab switching ----
+document.querySelectorAll(".subtab-btn").forEach(btn => {
+  btn.addEventListener("click", () => {
+    const key = btn.dataset.subtab;
+    document.querySelectorAll(".subtab-btn").forEach(b => b.classList.toggle("active", b === btn));
+    document.querySelectorAll(".subtab-panel").forEach(p => p.classList.toggle("active", p.id === "growlog-" + key));
+    if (key === "dashboard") renderDashboard();
+  });
+});
+const growlogTabBtn = document.querySelector('.tab-btn[data-tab="growlog"]');
+if (growlogTabBtn) growlogTabBtn.addEventListener("click", () => {
+  if (isDashboardActive()) requestAnimationFrame(renderDashboard);
+});
+
 // ---- Cloudinary upload ----
 async function uploadToCloudinary(blob){
   const cfg = window.CLOUDINARY_CONFIG;
@@ -1457,10 +1994,20 @@ async function uploadToCloudinary(blob){
   return { url: data.secure_url, publicId: data.public_id };
 }
 
-// Photo/annotate pipeline is shared by Findings Log ("findings") and Plant
-// Guide ("plantGuide") — both store records as { id, photos: [...] }.
-function galleryCache(col){ return col === "plantGuide" ? plantGuideCache : findingsCache; }
-function galleryExpanded(col){ return col === "plantGuide" ? expandedPlants : expandedFindings; }
+// Photo/annotate pipeline is shared by every collection that stores records
+// as { id, photos: [...] } — Findings Log, Plant Guide, and the four Grow
+// Log sections. Registry keeps adding a new gallery to a one-line lookup
+// instead of growing an ever-longer ternary chain.
+const GALLERY_REGISTRY = {
+  findings: { cache: () => findingsCache, expanded: () => expandedFindings },
+  plantGuide: { cache: () => plantGuideCache, expanded: () => expandedPlants },
+  harvests: { cache: () => harvestsCache, expanded: () => expandedHarvests },
+  transplants: { cache: () => transplantsCache, expanded: () => expandedTransplants },
+  germinations: { cache: () => germinationsCache, expanded: () => expandedGerminations },
+  losses: { cache: () => lossesCache, expanded: () => expandedLosses },
+};
+function galleryCache(col){ return GALLERY_REGISTRY[col].cache(); }
+function galleryExpanded(col){ return GALLERY_REGISTRY[col].expanded(); }
 
 let photoTargetCollection = "findings";
 let photoTargetFindingId = null;
@@ -1610,12 +2157,18 @@ $("annotateSave").addEventListener("click", async () => {
 $("exportDataBtn").addEventListener("click", async () => {
   $("dataStatus").textContent = "Gathering data…";
   try {
-    const [scheduleSnap, seriesSnap, houseRulesSnap, findingsSnap, plantGuideSnap, staffSnap, attendanceSnap] = await Promise.all([
+    const [scheduleSnap, seriesSnap, houseRulesSnap, findingsSnap, plantGuideSnap, plantTypesSnap, harvestsSnap, transplantsSnap, germinationsSnap, lossesSnap, envReadingsSnap, staffSnap, attendanceSnap] = await Promise.all([
       getDocs(collection(db, "schedule")),
       getDocs(collection(db, "series")),
       getDoc(doc(db, "meta", "houseRules")),
       getDocs(collection(db, "findings")),
       getDocs(collection(db, "plantGuide")),
+      getDocs(collection(db, "plantTypes")),
+      getDocs(collection(db, "harvests")),
+      getDocs(collection(db, "transplants")),
+      getDocs(collection(db, "germinations")),
+      getDocs(collection(db, "losses")),
+      getDocs(collection(db, "envReadings")),
       getDocs(collection(db, "staff")),
       getDocs(collection(db, "attendance"))
     ]);
@@ -1626,6 +2179,12 @@ $("exportDataBtn").addEventListener("click", async () => {
       houseRules: houseRulesSnap.exists() ? houseRulesSnap.data() : { rules: DEFAULT_RULES },
       findings: Object.fromEntries(findingsSnap.docs.map(d => [d.id, d.data()])),
       plantGuide: Object.fromEntries(plantGuideSnap.docs.map(d => [d.id, d.data()])),
+      plantTypes: Object.fromEntries(plantTypesSnap.docs.map(d => [d.id, d.data()])),
+      harvests: Object.fromEntries(harvestsSnap.docs.map(d => [d.id, d.data()])),
+      transplants: Object.fromEntries(transplantsSnap.docs.map(d => [d.id, d.data()])),
+      germinations: Object.fromEntries(germinationsSnap.docs.map(d => [d.id, d.data()])),
+      losses: Object.fromEntries(lossesSnap.docs.map(d => [d.id, d.data()])),
+      envReadings: Object.fromEntries(envReadingsSnap.docs.map(d => [d.id, d.data()])),
       staff: Object.fromEntries(staffSnap.docs.map(d => [d.id, d.data()])),
       attendance: Object.fromEntries(attendanceSnap.docs.map(d => [d.id, d.data()]))
     };
@@ -1644,7 +2203,7 @@ $("importDataBtn").addEventListener("click", () => $("importFileInput").click())
 $("importFileInput").addEventListener("change", async () => {
   const file = $("importFileInput").files[0];
   if (!file) return;
-  if (!confirm("Importing will OVERWRITE current schedule, series, house rules, findings, plant guide, staff, and attendance data with the contents of this file. This can't be undone. Continue?")) {
+  if (!confirm("Importing will OVERWRITE current schedule, series, house rules, findings, plant guide, grow log data, staff, and attendance data with the contents of this file. This can't be undone. Continue?")) {
     $("importFileInput").value = "";
     return;
   }
@@ -1657,6 +2216,12 @@ $("importFileInput").addEventListener("change", async () => {
     Object.entries(dump.series || {}).forEach(([id, data]) => ops.push(["series", id, data]));
     Object.entries(dump.findings || {}).forEach(([id, data]) => ops.push(["findings", id, data]));
     Object.entries(dump.plantGuide || {}).forEach(([id, data]) => ops.push(["plantGuide", id, data]));
+    Object.entries(dump.plantTypes || {}).forEach(([id, data]) => ops.push(["plantTypes", id, data]));
+    Object.entries(dump.harvests || {}).forEach(([id, data]) => ops.push(["harvests", id, data]));
+    Object.entries(dump.transplants || {}).forEach(([id, data]) => ops.push(["transplants", id, data]));
+    Object.entries(dump.germinations || {}).forEach(([id, data]) => ops.push(["germinations", id, data]));
+    Object.entries(dump.losses || {}).forEach(([id, data]) => ops.push(["losses", id, data]));
+    Object.entries(dump.envReadings || {}).forEach(([id, data]) => ops.push(["envReadings", id, data]));
     Object.entries(dump.staff || {}).forEach(([id, data]) => ops.push(["staff", id, data]));
     Object.entries(dump.attendance || {}).forEach(([id, data]) => ops.push(["attendance", id, data]));
 

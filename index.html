@@ -48,6 +48,10 @@
       <span class="tab-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 4c-9 0-16 6-16 15 9 0 15-6 15-15z"/><path d="M5 19c3-4 7-8 12-12"/></svg></span>
       <span class="tab-label">Plant Guide</span>
     </button>
+    <button class="tab-btn" data-tab="growlog">
+      <span class="tab-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19V10M10 19V5M16 19v-7M21 19H3"/></svg></span>
+      <span class="tab-label">Grow Log</span>
+    </button>
     <button class="tab-btn" data-tab="data" id="dataTabBtn" style="display:none;">
       <span class="tab-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 3.5v2.2M12 18.3v2.2M20.5 12h-2.2M5.7 12h-2.2M17.7 6.3l-1.55 1.55M7.85 16.15l-1.55 1.55M17.7 17.7l-1.55-1.55M7.85 7.85L6.3 6.3"/></svg></span>
       <span class="tab-label">Data</span>
@@ -198,11 +202,211 @@
     </div>
   </div>
 
+  <!-- GROW LOG TAB -->
+  <div class="tab-panel" id="tab-growlog">
+    <div class="section">
+      <h2>Grow Log</h2>
+      <p class="hint">Daily harvest, seedling transfers, germination, losses, and environment readings across Level 1, Level 3, and both germination rooms.</p>
+
+      <div class="staff-toggle-row" id="plantTypesToggleRow" style="display:none;">
+        <button id="togglePlantTypesBtn">⚙ Manage Plant Types</button>
+      </div>
+      <div class="section" id="plantTypesPanel" style="display:none;">
+        <h2>Plant Types</h2>
+        <p class="hint">The list of plants/crops used across Harvest, Transfer, Germination, and Losses entries below.</p>
+        <div id="plantTypesList"></div>
+        <div class="add-row">
+          <input type="text" id="newPlantTypeName" placeholder="Plant type name (e.g. Lettuce)">
+          <button id="addPlantTypeBtn">Add</button>
+        </div>
+      </div>
+
+      <div class="subtabs">
+        <button class="subtab-btn active" data-subtab="harvests">Harvest</button>
+        <button class="subtab-btn" data-subtab="transplants">Transfer</button>
+        <button class="subtab-btn" data-subtab="germinations">Germination</button>
+        <button class="subtab-btn" data-subtab="losses">Losses</button>
+        <button class="subtab-btn" data-subtab="envReadings">Readings</button>
+        <button class="subtab-btn" data-subtab="dashboard">Dashboard</button>
+      </div>
+
+      <!-- HARVEST -->
+      <div class="subtab-panel active" id="growlog-harvests">
+        <div class="finding-add" id="addHarvestsRow" style="display:none;">
+          <div class="row2">
+            <div class="field"><label>Date</label><input type="date" id="harvestsDate"></div>
+            <div class="field"><label>Plant type</label><select id="harvestsPlantType"></select></div>
+          </div>
+          <div class="row2">
+            <div class="field"><label>Location</label>
+              <select id="harvestsLocation"><option value="level1">Level 1</option><option value="level3">Level 3</option></select>
+            </div>
+            <div class="field"><label>Quantity harvested</label><input type="number" id="harvestsQuantity" min="0" step="1"></div>
+          </div>
+          <textarea id="harvestsNotes" rows="2" placeholder="Optional notes…"></textarea>
+          <div class="finding-add-actions">
+            <span class="hint" style="margin:0;">Add photos after creating the entry</span>
+            <button id="addHarvestsBtn">Add</button>
+          </div>
+        </div>
+        <div id="harvestsList" style="margin-top:10px;"></div>
+      </div>
+
+      <!-- SEEDLING TRANSFER -->
+      <div class="subtab-panel" id="growlog-transplants">
+        <div class="finding-add" id="addTransplantsRow" style="display:none;">
+          <div class="row2">
+            <div class="field"><label>Date</label><input type="date" id="transplantsDate"></div>
+            <div class="field"><label>Plant type</label><select id="transplantsPlantType"></select></div>
+          </div>
+          <div class="row2">
+            <div class="field"><label>From (germination room)</label>
+              <select id="transplantsLocation"><option value="germOnSite">On Site</option><option value="germOffSite">Off Site</option></select>
+            </div>
+            <div class="field"><label>To (growing level)</label>
+              <select id="transplantsLocation2"><option value="level1">Level 1</option><option value="level3">Level 3</option></select>
+            </div>
+          </div>
+          <div class="field"><label>Quantity</label><input type="number" id="transplantsQuantity" min="0" step="1"></div>
+          <textarea id="transplantsNotes" rows="2" placeholder="Optional notes…"></textarea>
+          <div class="finding-add-actions">
+            <span class="hint" style="margin:0;">Add photos after creating the entry</span>
+            <button id="addTransplantsBtn">Add</button>
+          </div>
+        </div>
+        <div id="transplantsList" style="margin-top:10px;"></div>
+      </div>
+
+      <!-- GERMINATION -->
+      <div class="subtab-panel" id="growlog-germinations">
+        <div class="finding-add" id="addGerminationsRow" style="display:none;">
+          <div class="row2">
+            <div class="field"><label>Date</label><input type="date" id="germinationsDate"></div>
+            <div class="field"><label>Plant type</label><select id="germinationsPlantType"></select></div>
+          </div>
+          <div class="row2">
+            <div class="field"><label>Germination room</label>
+              <select id="germinationsLocation"><option value="germOnSite">On Site</option><option value="germOffSite">Off Site</option></select>
+            </div>
+            <div class="field"><label>Quantity seeded</label><input type="number" id="germinationsQuantity" min="0" step="1"></div>
+          </div>
+          <textarea id="germinationsNotes" rows="2" placeholder="Optional notes…"></textarea>
+          <div class="finding-add-actions">
+            <span class="hint" style="margin:0;">Add photos after creating the entry</span>
+            <button id="addGerminationsBtn">Add</button>
+          </div>
+        </div>
+        <div id="germinationsList" style="margin-top:10px;"></div>
+      </div>
+
+      <!-- LOSSES -->
+      <div class="subtab-panel" id="growlog-losses">
+        <div class="finding-add" id="addLossesRow" style="display:none;">
+          <div class="row2">
+            <div class="field"><label>Date</label><input type="date" id="lossesDate"></div>
+            <div class="field"><label>Plant type</label><select id="lossesPlantType"></select></div>
+          </div>
+          <div class="row2">
+            <div class="field"><label>Location</label>
+              <select id="lossesLocation">
+                <option value="level1">Level 1</option>
+                <option value="level3">Level 3</option>
+                <option value="germOnSite">Germination Room (On Site)</option>
+                <option value="germOffSite">Germination Room (Off Site)</option>
+              </select>
+            </div>
+            <div class="field"><label>Quantity lost</label><input type="number" id="lossesQuantity" min="0" step="1"></div>
+          </div>
+          <textarea id="lossesNotes" rows="2" placeholder="Reason / what happened, if known…"></textarea>
+          <div class="finding-add-actions">
+            <span class="hint" style="margin:0;">Add photos after creating the entry</span>
+            <button id="addLossesBtn">Add</button>
+          </div>
+        </div>
+        <div id="lossesList" style="margin-top:10px;"></div>
+      </div>
+
+      <!-- ENVIRONMENT READINGS -->
+      <div class="subtab-panel" id="growlog-envReadings">
+        <div class="finding-add" id="addEnvReadingsRow" style="display:none;">
+          <div class="row2">
+            <div class="field"><label>Date</label><input type="date" id="envReadingsDate"></div>
+            <div class="field"><label>Location</label>
+              <select id="envReadingsLocation">
+                <option value="level1">Level 1</option>
+                <option value="level3">Level 3</option>
+                <option value="germOnSite">Germination Room (On Site)</option>
+                <option value="germOffSite">Germination Room (Off Site)</option>
+              </select>
+            </div>
+          </div>
+          <div class="row2">
+            <div class="field"><label>pH</label><input type="number" id="envReadingsPh" step="0.01"></div>
+            <div class="field"><label>TDS (ppm)</label><input type="number" id="envReadingsTds" step="1"></div>
+          </div>
+          <div class="row2">
+            <div class="field"><label>EC (mS/cm)</label><input type="number" id="envReadingsEc" step="0.01"></div>
+            <div class="field"><label>Water temp (°C)</label><input type="number" id="envReadingsWaterTemp" step="0.1"></div>
+          </div>
+          <div class="field"><label>Room temp (°C)</label><input type="number" id="envReadingsRoomTemp" step="0.1"></div>
+          <textarea id="envReadingsNotes" rows="2" placeholder="Optional notes…"></textarea>
+          <div class="finding-add-actions">
+            <span class="hint" style="margin:0;">One reading per location per entry</span>
+            <button id="addEnvReadingsBtn">Add reading</button>
+          </div>
+        </div>
+        <div class="search-row">
+          <select id="envReadingsFilter">
+            <option value="">All locations</option>
+            <option value="level1">Level 1</option>
+            <option value="level3">Level 3</option>
+            <option value="germOnSite">Germination Room (On Site)</option>
+            <option value="germOffSite">Germination Room (Off Site)</option>
+          </select>
+        </div>
+        <div class="env-table-head" id="envReadingsTableHead">
+          <span>Date</span><span>Location</span><span>pH</span><span>TDS</span><span>EC</span><span>Water °C</span><span>Room °C</span><span></span>
+        </div>
+        <div id="envReadingsList"></div>
+      </div>
+
+      <!-- DASHBOARD -->
+      <div class="subtab-panel" id="growlog-dashboard">
+        <div class="dash-location-row" id="dashLocationRow">
+          <button class="dash-loc-btn active" data-loc="">All</button>
+          <button class="dash-loc-btn" data-loc="level1">Level 1</button>
+          <button class="dash-loc-btn" data-loc="level3">Level 3</button>
+          <button class="dash-loc-btn" data-loc="germOnSite">Germ. On Site</button>
+          <button class="dash-loc-btn" data-loc="germOffSite">Germ. Off Site</button>
+        </div>
+
+        <div class="section">
+          <h2>Death Rate Trend</h2>
+          <p class="hint">Weekly losses ÷ (germinated + transplanted) for the selected scope, as a percentage.</p>
+          <div class="chart-wrap"><canvas id="deathRateChart"></canvas></div>
+          <div id="deathRateTable" class="dash-table"></div>
+        </div>
+
+        <div class="section" id="envTrendsSection">
+          <h2>Environment Trends</h2>
+          <p class="hint" id="envTrendsHint">Daily average readings. Pick a specific location above (not "All") to see its environment charts.</p>
+          <div id="envChartsWrap">
+            <div class="chart-wrap"><canvas id="phChart"></canvas></div>
+            <div class="chart-wrap"><canvas id="tdsChart"></canvas></div>
+            <div class="chart-wrap"><canvas id="ecChart"></canvas></div>
+            <div class="chart-wrap"><canvas id="waterTempChart"></canvas></div>
+            <div class="chart-wrap"><canvas id="roomTempChart"></canvas></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- DATA TAB (admin only) -->
   <div class="tab-panel" id="tab-data">
     <div class="section">
       <h2>Backup &amp; Restore</h2>
-      <p class="hint">Export everything (schedule, findings, plant guide, house rules, attendance, staff) as a JSON file you can keep somewhere safe. Import restores from a previously exported file — it will overwrite whatever's currently in the database, so use it deliberately.</p>
+      <p class="hint">Export everything (schedule, findings, plant guide, grow log, house rules, attendance, staff) as a JSON file you can keep somewhere safe. Import restores from a previously exported file — it will overwrite whatever's currently in the database, so use it deliberately.</p>
       <div class="data-actions">
         <button class="btn primary" id="exportDataBtn">⬇ Export all data</button>
         <button class="btn" id="importDataBtn">⬆ Import from file</button>
@@ -347,6 +551,8 @@
 
 <!-- Firebase (modular v10 SDK, loaded straight from Google's CDN — no build step needed) -->
 <script src="firebase-config.js"></script>
+<!-- Chart.js for the Grow Log dashboard trend charts — same CDN-script, no-build-step approach -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
 <script type="module" src="app.js"></script>
 </body>
 </html>
