@@ -99,10 +99,13 @@ onAuthStateChanged(auth, (user) => {
   renderRules();
   renderFindings();
   renderPlantGuide();
+  renderSpecialEvents();
   renderPlantTypes();
   Object.keys(LOG_CONFIGS).forEach(renderLogSection);
   renderEnvReadings();
   if (isDashboardActive()) renderDashboard();
+  renderAssets();
+  renderConsumables();
 });
 
 function refreshAdminUI(){
@@ -110,6 +113,7 @@ function refreshAdminUI(){
   $("addRuleRow").style.display = isAdmin ? "flex" : "none";
   $("addFindingRow").style.display = isAdmin ? "flex" : "none";
   $("addPlantRow").style.display = isAdmin ? "flex" : "none";
+  $("addSpecialEventRow").style.display = isAdmin ? "flex" : "none";
   $("dsAddEventBtn").style.display = isAdmin ? "inline-block" : "none";
   $("dsResetBtn").style.display = isAdmin ? "inline-block" : "none";
   $("addAttRow").style.display = isAdmin ? "flex" : "none";
@@ -120,6 +124,8 @@ function refreshAdminUI(){
   $("addGerminationsRow").style.display = isAdmin ? "flex" : "none";
   $("addLossesRow").style.display = isAdmin ? "flex" : "none";
   $("addEnvReadingsRow").style.display = isAdmin ? "flex" : "none";
+  $("addAssetRow").style.display = isAdmin ? "flex" : "none";
+  $("addConsumableRow").style.display = isAdmin ? "flex" : "none";
   $("dataTabBtn").style.display = isAdmin ? "inline-block" : "none";
   if (!isAdmin){
     $("staffPanel").style.display = "none";
@@ -170,12 +176,32 @@ window.addEventListener("keydown", (e) => {
 // ============================================================================
 // TABS
 // ============================================================================
+const TAB_GROUPS = {
+  calendar: "calgroup", schedule: "calgroup", specialEvents: "calgroup",
+  rules: "opslog", findings: "opslog", attendance: "opslog"
+};
 function activateTab(name){
-  document.querySelectorAll(".tab-btn").forEach(b => b.classList.toggle("active", b.dataset.tab === name));
-  document.querySelectorAll(".tab-panel").forEach(p => p.classList.toggle("active", p.id === "tab-" + name));
+  const group = TAB_GROUPS[name] || name;
+  document.querySelectorAll(".tab-btn").forEach(b => b.classList.toggle("active", b.dataset.tab === group));
+  document.querySelectorAll(".tab-panel").forEach(p => p.classList.toggle("active", p.id === "tab-" + group));
+  if (TAB_GROUPS[name]){
+    const groupPanel = $("tab-" + group);
+    groupPanel.querySelectorAll(".subtab-btn").forEach(b => b.classList.toggle("active", b.dataset.subtab === name));
+    groupPanel.querySelectorAll(".subtab-panel").forEach(p => p.classList.toggle("active", p.dataset.subtab === name));
+  }
 }
 document.querySelectorAll(".tab-btn").forEach(btn => {
   btn.addEventListener("click", () => activateTab(btn.dataset.tab));
+});
+
+document.querySelectorAll(".subtab-btn").forEach(btn => {
+  btn.addEventListener("click", () => {
+    const container = btn.closest(".tab-panel");
+    const key = btn.dataset.subtab;
+    container.querySelectorAll(".subtab-btn").forEach(b => b.classList.toggle("active", b === btn));
+    container.querySelectorAll(".subtab-panel").forEach(p => p.classList.toggle("active", p.dataset.subtab === key));
+    if (container.id === "tab-growlog" && key === "dashboard") renderDashboard();
+  });
 });
 
 // ============================================================================
@@ -502,8 +528,8 @@ function openEventModal(dateKey, eventId){
   $("fRepeat").checked = false;
   $("repeatFieldRow").style.display = hasSeries ? "none" : "flex";
   $("repeatFieldRow").querySelector("small").textContent = isNew
-    ? "Happens every day going forward — skips Mondays (maintenance) and any day marked as a holiday / off day. Keeps going indefinitely until you delete the series."
-    : "Turns this into a recurring series starting today — skips Mondays (maintenance) and any day marked as a holiday / off day. Keeps going indefinitely until you delete the series.";
+    ? "Happens every day going forward, including maintenance Mondays — skips only days marked as a holiday / off day. Keeps going indefinitely until you delete the series."
+    : "Turns this into a recurring series starting today, including maintenance Mondays — skips only days marked as a holiday / off day. Keeps going indefinitely until you delete the series.";
 
   overlay.classList.add("active");
 }
@@ -521,7 +547,7 @@ async function materializeSeries(seriesId, fromKey, template, toKeyStr){
     const key = toKey(d);
     const dayEntry = editableDay(key);
     if (dayEntry.events.some(e => e.seriesId === seriesId)) continue;
-    if (dayEntry.dayType !== "visitor") continue;
+    if (dayEntry.dayType === "holiday") continue;
     dayEntry.events.push({ id: uid(), seriesId, start: template.start, end: template.end, title: template.title, person: template.person, notes: template.notes });
     batch.set(doc(db, "schedule", key), dayEntry);
     scheduleCache[key] = dayEntry; // optimistic
@@ -563,15 +589,11 @@ async function topUpAllSeries(){
   if (!seriesCache.length) return;
   const horizon = horizonEnd();
   for (const series of seriesCache){
-    let lastKey = series.fromDate;
-    Object.keys(scheduleCache).forEach(key => {
-      const dayEntry = scheduleCache[key];
-      if (dayEntry && dayEntry.events && dayEntry.events.some(e => e.seriesId === series.id) && key > lastKey) lastKey = key;
-    });
-    const nextStart = toDate(lastKey);
-    nextStart.setDate(nextStart.getDate() + 1);
-    const nextStartKey = toKey(nextStart);
-    if (nextStartKey <= horizon) await materializeSeries(series.id, nextStartKey, series, horizon);
+    // Re-materializing the whole range (not just past the last-seen day) is safe —
+    // materializeSeries skips any day that already has this series' event — and it
+    // also backfills days that were wrongly skipped by an earlier version of the
+    // maintenance-day rule (see the dayType check above).
+    if (series.fromDate <= horizon) await materializeSeries(series.id, series.fromDate, series, horizon);
   }
 }
 
@@ -1457,6 +1479,217 @@ $("addPlantBtn").addEventListener("click", async () => {
 });
 
 // ============================================================================
+// SPECIAL EVENTS (Firestore: specialEvents/{id}) — one-off events outside the
+// daily routine, kept as a year-over-year reference for planning. Same
+// collapsible-card/photo-strip pattern as Findings Log and Plant Guide.
+// ============================================================================
+let specialEventsCache = [];
+let specialEventsSearchTerm = "";
+const expandedSpecialEvents = {};
+
+onSnapshot(collection(db, "specialEvents"), (snap) => {
+  specialEventsCache = snap.docs.map(d => ({ id: d.id, photos: [], ...d.data() }));
+  renderSpecialEvents();
+}, () => setSyncStatus("err", "Connection error"));
+
+$("specialEventsSearch").addEventListener("input", (e) => { specialEventsSearchTerm = e.target.value.trim().toLowerCase(); renderSpecialEvents(); });
+$("specialEventsSearchClear").addEventListener("click", () => { $("specialEventsSearch").value = ""; specialEventsSearchTerm = ""; renderSpecialEvents(); });
+
+function renderSpecialEvents(){
+  const list = $("specialEventsList");
+  list.innerHTML = "";
+
+  let items = specialEventsCache.slice().sort((a,b) => (b.startDate || "").localeCompare(a.startDate || ""));
+  if (specialEventsSearchTerm){
+    items = items.filter(ev =>
+      (ev.title || "").toLowerCase().includes(specialEventsSearchTerm) ||
+      (ev.notes || "").toLowerCase().includes(specialEventsSearchTerm) ||
+      (ev.startDate || "").includes(specialEventsSearchTerm) ||
+      (ev.endDate || "").includes(specialEventsSearchTerm)
+    );
+  }
+
+  if (items.length === 0){
+    const empty = document.createElement("div");
+    empty.className = "empty-state";
+    empty.textContent = specialEventsSearchTerm ? "No special events match your search." : "No special events logged yet.";
+    list.appendChild(empty);
+    return;
+  }
+
+  items.forEach(ev => {
+    const isOpen = specialEventsSearchTerm ? true : !!expandedSpecialEvents[ev.id];
+    const card = document.createElement("div");
+    card.className = "finding-card" + (isOpen ? " expanded" : "");
+
+    const header = document.createElement("div");
+    header.className = "finding-header";
+    const left = document.createElement("div");
+    left.className = "finding-header-left";
+    const chevron = document.createElement("span");
+    chevron.className = "finding-chevron"; chevron.textContent = "▶";
+    const dateEl = document.createElement("span");
+    dateEl.className = "finding-date";
+    dateEl.textContent = ev.endDate && ev.endDate !== ev.startDate ? ((ev.startDate || "") + " → " + ev.endDate) : (ev.startDate || "");
+    left.appendChild(chevron); left.appendChild(dateEl);
+    const titleTag = document.createElement("span");
+    titleTag.className = "finding-latest-tag";
+    titleTag.style.background = "#eef4fe"; titleTag.style.color = "#0b57d0";
+    titleTag.textContent = ev.title || "Untitled event";
+    left.appendChild(titleTag);
+    if (!isOpen && ev.notes){
+      const preview = document.createElement("span");
+      preview.className = "finding-preview";
+      preview.textContent = ev.notes;
+      left.appendChild(preview);
+    }
+    header.appendChild(left);
+
+    if (isAdmin){
+      const del = document.createElement("button");
+      del.className = "icon-btn"; del.textContent = "✕"; del.title = "Delete event";
+      del.addEventListener("click", async (e) => {
+        e.stopPropagation();
+        if (!confirm("Delete this special event and its photos?")) return;
+        try { await deleteDoc(doc(db, "specialEvents", ev.id)); }
+        catch (err){ alert("Couldn't delete this event: " + err.message); }
+      });
+      header.appendChild(del);
+    }
+    header.addEventListener("click", () => {
+      if (expandedSpecialEvents[ev.id]) delete expandedSpecialEvents[ev.id]; else expandedSpecialEvents[ev.id] = true;
+      renderSpecialEvents();
+    });
+    card.appendChild(header);
+
+    const body = document.createElement("div");
+    body.className = "finding-body";
+    if (isOpen){
+      const titleInput = document.createElement("div");
+      titleInput.className = "finding-text";
+      titleInput.style.fontWeight = "600";
+      titleInput.contentEditable = isAdmin ? "true" : "false";
+      titleInput.textContent = ev.title || "";
+      titleInput.addEventListener("click", (e) => e.stopPropagation());
+      titleInput.addEventListener("blur", async () => {
+        if (!isAdmin) return;
+        const val = titleInput.innerText.trim();
+        if (!val || val === ev.title) { titleInput.textContent = ev.title || ""; return; }
+        try { await updateDoc(doc(db, "specialEvents", ev.id), { title: val }); }
+        catch (err){ alert("Couldn't save the title: " + err.message); titleInput.textContent = ev.title || ""; }
+      });
+      body.appendChild(titleInput);
+
+      if (isAdmin){
+        const dateRow = document.createElement("div");
+        dateRow.className = "row2";
+        dateRow.style.marginTop = "8px";
+        const startField = document.createElement("div"); startField.className = "field";
+        startField.innerHTML = "<label>Start date</label>";
+        const startInput = document.createElement("input");
+        startInput.type = "date"; startInput.value = ev.startDate || "";
+        startInput.addEventListener("change", async () => {
+          try { await updateDoc(doc(db, "specialEvents", ev.id), { startDate: startInput.value }); }
+          catch (err){ alert("Couldn't save the start date: " + err.message); }
+        });
+        startField.appendChild(startInput);
+        const endField = document.createElement("div"); endField.className = "field";
+        endField.innerHTML = "<label>End date</label>";
+        const endInput = document.createElement("input");
+        endInput.type = "date"; endInput.value = ev.endDate || "";
+        endInput.addEventListener("change", async () => {
+          try { await updateDoc(doc(db, "specialEvents", ev.id), { endDate: endInput.value }); }
+          catch (err){ alert("Couldn't save the end date: " + err.message); }
+        });
+        endField.appendChild(endInput);
+        dateRow.appendChild(startField); dateRow.appendChild(endField);
+        body.appendChild(dateRow);
+      }
+
+      const notes = document.createElement("div");
+      notes.className = "finding-text";
+      notes.contentEditable = isAdmin ? "true" : "false";
+      notes.textContent = ev.notes || "";
+      notes.addEventListener("click", (e) => e.stopPropagation());
+      notes.addEventListener("blur", async () => {
+        if (!isAdmin) return;
+        const val = notes.innerText.trim();
+        if (val === ev.notes) return;
+        try { await updateDoc(doc(db, "specialEvents", ev.id), { notes: val }); }
+        catch (err){ alert("Couldn't save the notes: " + err.message); notes.textContent = ev.notes || ""; }
+      });
+      body.appendChild(notes);
+
+      const strip = document.createElement("div");
+      strip.className = "photo-strip";
+      ev.photos.forEach(photo => {
+        const item = document.createElement("div");
+        item.className = "photo-item";
+        const wrap = document.createElement("div");
+        wrap.className = "photo-thumb-wrap";
+        const img = document.createElement("img");
+        img.className = "photo-thumb"; img.src = photo.url; img.loading = "lazy";
+        img.addEventListener("click", (e) => { e.stopPropagation(); openLightbox(photo.url); });
+        wrap.appendChild(img);
+        if (isAdmin){
+          const rem = document.createElement("button");
+          rem.className = "photo-remove"; rem.textContent = "✕"; rem.title = "Delete photo";
+          rem.addEventListener("click", async (e) => {
+            e.stopPropagation();
+            if (!confirm("Delete this photo?")) return;
+            const newPhotos = ev.photos.filter(p => p.id !== photo.id);
+            try { await updateDoc(doc(db, "specialEvents", ev.id), { photos: newPhotos }); }
+            catch (err){ alert("Couldn't delete this photo: " + err.message); }
+          });
+          wrap.appendChild(rem);
+        }
+        item.appendChild(wrap);
+        if (isAdmin){
+          const ann = document.createElement("button");
+          ann.className = "annotate-btn"; ann.textContent = "✎ Annotate";
+          ann.addEventListener("click", (e) => { e.stopPropagation(); openAnnotateModal("specialEvents", ev.id, photo.id); });
+          item.appendChild(ann);
+        }
+        strip.appendChild(item);
+      });
+      if (isAdmin){
+        const addBtn = document.createElement("div");
+        addBtn.className = "add-photo-btn"; addBtn.textContent = "+ Add photo";
+        addBtn.addEventListener("click", (e) => { e.stopPropagation(); openPhotoPicker("specialEvents", ev.id, addBtn); });
+        strip.appendChild(addBtn);
+      }
+      body.appendChild(strip);
+    }
+    card.appendChild(body);
+    list.appendChild(card);
+  });
+}
+
+$("addSpecialEventBtn").addEventListener("click", async () => {
+  if (!isAdmin) return;
+  const titleInput = $("newSpecialEventTitle");
+  const startInput = $("newSpecialEventStart");
+  const endInput = $("newSpecialEventEnd");
+  const notesInput = $("newSpecialEventNotes");
+  const title = titleInput.value.trim();
+  if (!title) return;
+  const startDate = startInput.value || toKey(new Date());
+  const endDate = endInput.value || "";
+  const notes = notesInput.value.trim();
+  const btn = $("addSpecialEventBtn");
+  btn.disabled = true; btn.textContent = "Adding…";
+  try {
+    const newDoc = await addDoc(collection(db, "specialEvents"), { title, startDate, endDate, notes, photos: [] });
+    expandedSpecialEvents[newDoc.id] = true;
+    titleInput.value = ""; startInput.value = ""; endInput.value = ""; notesInput.value = "";
+  } catch (err){
+    alert("Couldn't save this event: " + err.message + "\n\nIf this says \"permission denied\", the specialEvents rule in firestore.rules needs to be published in the Firebase console (Firestore Database → Rules).");
+  } finally {
+    btn.disabled = false; btn.textContent = "Add";
+  }
+});
+
+// ============================================================================
 // GROW LOG — plant types, harvests, transplants, germinations, losses,
 // environment readings, and the trends dashboard
 // ============================================================================
@@ -1919,7 +2152,7 @@ function renderLineChart(canvasId, labels, data, label, color){
 
 let dashboardScopeLoc = "";
 function isDashboardActive(){
-  const el = $("growlog-dashboard");
+  const el = document.querySelector('#tab-growlog .subtab-panel[data-subtab="dashboard"]');
   return !!el && el.classList.contains("active");
 }
 
@@ -1968,15 +2201,7 @@ function renderDashboard(){
   }
 }
 
-// ---- Grow Log sub-tab switching ----
-document.querySelectorAll(".subtab-btn").forEach(btn => {
-  btn.addEventListener("click", () => {
-    const key = btn.dataset.subtab;
-    document.querySelectorAll(".subtab-btn").forEach(b => b.classList.toggle("active", b === btn));
-    document.querySelectorAll(".subtab-panel").forEach(p => p.classList.toggle("active", p.id === "growlog-" + key));
-    if (key === "dashboard") renderDashboard();
-  });
-});
+// ---- Grow Log tab re-render on nav click (chart sizing when dashboard sub-tab already active) ----
 const growlogTabBtn = document.querySelector('.tab-btn[data-tab="growlog"]');
 if (growlogTabBtn) growlogTabBtn.addEventListener("click", () => {
   if (isDashboardActive()) requestAnimationFrame(renderDashboard);
@@ -1994,13 +2219,328 @@ async function uploadToCloudinary(blob){
   return { url: data.secure_url, publicId: data.public_id };
 }
 
+// ============================================================================
+// INVENTORY — Assets (Firestore: inventoryAssets/{id}) — company equipment,
+// same collapsible-card/photo-strip pattern as Findings Log / Plant Guide.
+// No reorder concept; assets aren't consumed, just tracked with a quantity
+// and condition notes.
+// ============================================================================
+let assetsCache = [];
+const expandedAssets = {};
+
+onSnapshot(collection(db, "inventoryAssets"), (snap) => {
+  assetsCache = snap.docs.map(d => ({ id: d.id, photos: [], ...d.data() }));
+  renderAssets();
+}, () => setSyncStatus("err", "Connection error"));
+
+function renderAssets(){
+  const list = $("assetsList");
+  list.innerHTML = "";
+
+  const items = assetsCache.slice().sort((a,b) => (a.name || "").localeCompare(b.name || ""));
+  if (items.length === 0){
+    const empty = document.createElement("div");
+    empty.className = "empty-state";
+    empty.textContent = "No assets logged yet.";
+    list.appendChild(empty);
+    return;
+  }
+
+  items.forEach(a => {
+    const isOpen = !!expandedAssets[a.id];
+    const card = document.createElement("div");
+    card.className = "finding-card" + (isOpen ? " expanded" : "");
+
+    const header = document.createElement("div");
+    header.className = "finding-header";
+    const left = document.createElement("div");
+    left.className = "finding-header-left";
+    const chevron = document.createElement("span");
+    chevron.className = "finding-chevron"; chevron.textContent = "▶";
+    const nameEl = document.createElement("span");
+    nameEl.className = "finding-date"; nameEl.textContent = a.name || "Untitled asset";
+    left.appendChild(chevron); left.appendChild(nameEl);
+    const qtyTag = document.createElement("span");
+    qtyTag.className = "finding-latest-tag";
+    qtyTag.textContent = "Qty " + (a.quantity ?? 0);
+    left.appendChild(qtyTag);
+    if (!isOpen && a.notes){
+      const preview = document.createElement("span");
+      preview.className = "finding-preview";
+      preview.textContent = a.notes;
+      left.appendChild(preview);
+    }
+    header.appendChild(left);
+
+    if (isAdmin){
+      const del = document.createElement("button");
+      del.className = "icon-btn"; del.textContent = "✕"; del.title = "Delete asset";
+      del.addEventListener("click", async (e) => {
+        e.stopPropagation();
+        if (!confirm("Delete this asset and its photos?")) return;
+        try { await deleteDoc(doc(db, "inventoryAssets", a.id)); }
+        catch (err){ alert("Couldn't delete this asset: " + err.message); }
+      });
+      header.appendChild(del);
+    }
+    header.addEventListener("click", () => {
+      if (expandedAssets[a.id]) delete expandedAssets[a.id]; else expandedAssets[a.id] = true;
+      renderAssets();
+    });
+    card.appendChild(header);
+
+    const body = document.createElement("div");
+    body.className = "finding-body";
+    if (isOpen){
+      const nameInput = document.createElement("div");
+      nameInput.className = "finding-text";
+      nameInput.style.fontWeight = "600";
+      nameInput.contentEditable = isAdmin ? "true" : "false";
+      nameInput.textContent = a.name || "";
+      nameInput.addEventListener("click", (e) => e.stopPropagation());
+      nameInput.addEventListener("blur", async () => {
+        if (!isAdmin) return;
+        const val = nameInput.innerText.trim();
+        if (!val || val === a.name) { nameInput.textContent = a.name || ""; return; }
+        try { await updateDoc(doc(db, "inventoryAssets", a.id), { name: val }); }
+        catch (err){ alert("Couldn't save the name: " + err.message); nameInput.textContent = a.name || ""; }
+      });
+      body.appendChild(nameInput);
+
+      if (isAdmin){
+        const row = document.createElement("div");
+        row.className = "row2";
+        row.style.marginTop = "8px";
+        const qtyField = document.createElement("div"); qtyField.className = "field";
+        qtyField.innerHTML = "<label>Quantity</label>";
+        const qtyInput = document.createElement("input");
+        qtyInput.type = "number"; qtyInput.min = "0"; qtyInput.step = "1"; qtyInput.value = a.quantity ?? 0;
+        qtyInput.addEventListener("change", async () => {
+          const val = parseInt(qtyInput.value, 10) || 0;
+          try { await updateDoc(doc(db, "inventoryAssets", a.id), { quantity: val }); }
+          catch (err){ alert("Couldn't save the quantity: " + err.message); }
+        });
+        qtyField.appendChild(qtyInput);
+        row.appendChild(qtyField);
+        body.appendChild(row);
+      }
+
+      const notes = document.createElement("div");
+      notes.className = "finding-text";
+      notes.contentEditable = isAdmin ? "true" : "false";
+      notes.textContent = a.notes || "";
+      notes.addEventListener("click", (e) => e.stopPropagation());
+      notes.addEventListener("blur", async () => {
+        if (!isAdmin) return;
+        const val = notes.innerText.trim();
+        if (val === a.notes) return;
+        try { await updateDoc(doc(db, "inventoryAssets", a.id), { notes: val }); }
+        catch (err){ alert("Couldn't save the notes: " + err.message); notes.textContent = a.notes || ""; }
+      });
+      body.appendChild(notes);
+
+      const strip = document.createElement("div");
+      strip.className = "photo-strip";
+      a.photos.forEach(photo => {
+        const item = document.createElement("div");
+        item.className = "photo-item";
+        const wrap = document.createElement("div");
+        wrap.className = "photo-thumb-wrap";
+        const img = document.createElement("img");
+        img.className = "photo-thumb"; img.src = photo.url; img.loading = "lazy";
+        img.addEventListener("click", (e) => { e.stopPropagation(); openLightbox(photo.url); });
+        wrap.appendChild(img);
+        if (isAdmin){
+          const rem = document.createElement("button");
+          rem.className = "photo-remove"; rem.textContent = "✕"; rem.title = "Delete photo";
+          rem.addEventListener("click", async (e) => {
+            e.stopPropagation();
+            if (!confirm("Delete this photo?")) return;
+            const newPhotos = a.photos.filter(p => p.id !== photo.id);
+            try { await updateDoc(doc(db, "inventoryAssets", a.id), { photos: newPhotos }); }
+            catch (err){ alert("Couldn't delete this photo: " + err.message); }
+          });
+          wrap.appendChild(rem);
+        }
+        item.appendChild(wrap);
+        if (isAdmin){
+          const ann = document.createElement("button");
+          ann.className = "annotate-btn"; ann.textContent = "✎ Annotate";
+          ann.addEventListener("click", (e) => { e.stopPropagation(); openAnnotateModal("inventoryAssets", a.id, photo.id); });
+          item.appendChild(ann);
+        }
+        strip.appendChild(item);
+      });
+      if (isAdmin){
+        const addBtn = document.createElement("div");
+        addBtn.className = "add-photo-btn"; addBtn.textContent = "+ Add photo";
+        addBtn.addEventListener("click", (e) => { e.stopPropagation(); openPhotoPicker("inventoryAssets", a.id, addBtn); });
+        strip.appendChild(addBtn);
+      }
+      body.appendChild(strip);
+    }
+    card.appendChild(body);
+    list.appendChild(card);
+  });
+}
+
+$("addAssetBtn").addEventListener("click", async () => {
+  if (!isAdmin) return;
+  const nameInput = $("newAssetName");
+  const qtyInput = $("newAssetQuantity");
+  const notesInput = $("newAssetNotes");
+  const name = nameInput.value.trim();
+  if (!name) return;
+  const quantity = parseInt(qtyInput.value, 10) || 0;
+  const notes = notesInput.value.trim();
+  const btn = $("addAssetBtn");
+  btn.disabled = true; btn.textContent = "Adding…";
+  try {
+    const newDoc = await addDoc(collection(db, "inventoryAssets"), { name, quantity, notes, photos: [] });
+    expandedAssets[newDoc.id] = true;
+    nameInput.value = ""; qtyInput.value = "1"; notesInput.value = "";
+  } catch (err){
+    alert("Couldn't save this asset: " + err.message + "\n\nIf this says \"permission denied\", the inventoryAssets rule in firestore.rules needs to be published in the Firebase console (Firestore Database → Rules).");
+  } finally {
+    btn.disabled = false; btn.textContent = "Add";
+  }
+});
+
+// ============================================================================
+// INVENTORY — Consumables (Firestore: inventoryConsumables/{id}) — dispensable
+// items tracked against a reorder threshold. Updating the quantity inline
+// *is* the weekly stock take; each update stamps lastCountedDate.
+// ============================================================================
+let consumablesCache = [];
+
+onSnapshot(collection(db, "inventoryConsumables"), (snap) => {
+  consumablesCache = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  renderConsumables();
+}, () => setSyncStatus("err", "Connection error"));
+
+function needsReorder(c){ return (c.quantity ?? 0) <= (c.reorderThreshold ?? 0); }
+
+function renderConsumables(){
+  const list = $("consumablesList");
+  list.innerHTML = "";
+
+  const items = consumablesCache.slice().sort((a,b) => (a.name || "").localeCompare(b.name || ""));
+
+  const summary = $("consumablesReorderSummary");
+  const lowItems = items.filter(needsReorder);
+  if (lowItems.length){
+    summary.style.display = "block";
+    summary.textContent = "⚠ Needs reordering: " + lowItems.map(c => c.name).join(", ");
+  } else {
+    summary.style.display = "none";
+  }
+
+  if (items.length === 0){
+    const empty = document.createElement("div");
+    empty.className = "empty-state";
+    empty.textContent = "No consumables logged yet.";
+    list.appendChild(empty);
+    return;
+  }
+
+  items.forEach(c => {
+    const row = document.createElement("div");
+    row.className = "consumable-row";
+
+    const nameCell = document.createElement("div");
+    nameCell.className = "consumable-name";
+    if (c.notes) nameCell.title = c.notes;
+    const nameText = document.createElement("span");
+    nameText.contentEditable = isAdmin ? "true" : "false";
+    nameText.textContent = c.name || "";
+    nameText.addEventListener("blur", async () => {
+      if (!isAdmin) return;
+      const val = nameText.innerText.trim();
+      if (!val || val === c.name) { nameText.textContent = c.name || ""; return; }
+      try { await updateDoc(doc(db, "inventoryConsumables", c.id), { name: val }); }
+      catch (err){ alert("Couldn't save the name: " + err.message); nameText.textContent = c.name || ""; }
+    });
+    nameCell.appendChild(nameText);
+    if (needsReorder(c)){
+      const badge = document.createElement("span");
+      badge.className = "inv-badge reorder"; badge.textContent = "Reorder";
+      nameCell.appendChild(badge);
+    }
+    row.appendChild(nameCell);
+
+    const qtyCell = document.createElement("div");
+    qtyCell.className = "consumable-qty";
+    const qtyInput = document.createElement("input");
+    qtyInput.type = "number"; qtyInput.min = "0"; qtyInput.step = "1"; qtyInput.value = c.quantity ?? 0;
+    qtyInput.disabled = !isAdmin;
+    qtyInput.addEventListener("change", async () => {
+      const val = parseInt(qtyInput.value, 10) || 0;
+      try { await updateDoc(doc(db, "inventoryConsumables", c.id), { quantity: val, lastCountedDate: toKey(new Date()) }); }
+      catch (err){ alert("Couldn't save the quantity: " + err.message); }
+    });
+    qtyCell.appendChild(qtyInput);
+    const unitEl = document.createElement("span");
+    unitEl.className = "consumable-unit"; unitEl.textContent = c.unit || "";
+    qtyCell.appendChild(unitEl);
+    row.appendChild(qtyCell);
+
+    const lastCell = document.createElement("div");
+    lastCell.className = "consumable-last";
+    lastCell.textContent = c.lastCountedDate ? "Counted " + c.lastCountedDate : "Not yet counted";
+    row.appendChild(lastCell);
+
+    const delCell = document.createElement("div");
+    if (isAdmin){
+      const del = document.createElement("button");
+      del.className = "icon-btn"; del.textContent = "✕"; del.title = "Delete item";
+      del.addEventListener("click", async () => {
+        if (!confirm("Delete this consumable item?")) return;
+        try { await deleteDoc(doc(db, "inventoryConsumables", c.id)); }
+        catch (err){ alert("Couldn't delete this item: " + err.message); }
+      });
+      delCell.appendChild(del);
+    }
+    row.appendChild(delCell);
+
+    list.appendChild(row);
+  });
+}
+
+$("addConsumableBtn").addEventListener("click", async () => {
+  if (!isAdmin) return;
+  const nameInput = $("newConsumableName");
+  const unitInput = $("newConsumableUnit");
+  const qtyInput = $("newConsumableQuantity");
+  const thresholdInput = $("newConsumableThreshold");
+  const notesInput = $("newConsumableNotes");
+  const name = nameInput.value.trim();
+  if (!name) return;
+  const unit = unitInput.value.trim();
+  const quantity = parseInt(qtyInput.value, 10) || 0;
+  const reorderThreshold = parseInt(thresholdInput.value, 10) || 0;
+  const notes = notesInput.value.trim();
+  const btn = $("addConsumableBtn");
+  btn.disabled = true; btn.textContent = "Adding…";
+  try {
+    await addDoc(collection(db, "inventoryConsumables"), { name, unit, quantity, reorderThreshold, notes, lastCountedDate: toKey(new Date()) });
+    nameInput.value = ""; unitInput.value = ""; qtyInput.value = ""; thresholdInput.value = ""; notesInput.value = "";
+  } catch (err){
+    alert("Couldn't save this item: " + err.message + "\n\nIf this says \"permission denied\", the inventoryConsumables rule in firestore.rules needs to be published in the Firebase console (Firestore Database → Rules).");
+  } finally {
+    btn.disabled = false; btn.textContent = "Add";
+  }
+});
+
 // Photo/annotate pipeline is shared by every collection that stores records
-// as { id, photos: [...] } — Findings Log, Plant Guide, and the four Grow
-// Log sections. Registry keeps adding a new gallery to a one-line lookup
-// instead of growing an ever-longer ternary chain.
+// as { id, photos: [...] } — Findings Log, Plant Guide, Special Events,
+// Inventory Assets, and the four Grow Log sections. Registry keeps adding a
+// new gallery to a one-line lookup instead of growing an ever-longer ternary
+// chain.
 const GALLERY_REGISTRY = {
   findings: { cache: () => findingsCache, expanded: () => expandedFindings },
   plantGuide: { cache: () => plantGuideCache, expanded: () => expandedPlants },
+  specialEvents: { cache: () => specialEventsCache, expanded: () => expandedSpecialEvents },
+  inventoryAssets: { cache: () => assetsCache, expanded: () => expandedAssets },
   harvests: { cache: () => harvestsCache, expanded: () => expandedHarvests },
   transplants: { cache: () => transplantsCache, expanded: () => expandedTransplants },
   germinations: { cache: () => germinationsCache, expanded: () => expandedGerminations },
@@ -2157,12 +2697,13 @@ $("annotateSave").addEventListener("click", async () => {
 $("exportDataBtn").addEventListener("click", async () => {
   $("dataStatus").textContent = "Gathering data…";
   try {
-    const [scheduleSnap, seriesSnap, houseRulesSnap, findingsSnap, plantGuideSnap, plantTypesSnap, harvestsSnap, transplantsSnap, germinationsSnap, lossesSnap, envReadingsSnap, staffSnap, attendanceSnap] = await Promise.all([
+    const [scheduleSnap, seriesSnap, houseRulesSnap, findingsSnap, plantGuideSnap, specialEventsSnap, plantTypesSnap, harvestsSnap, transplantsSnap, germinationsSnap, lossesSnap, envReadingsSnap, staffSnap, attendanceSnap, inventoryAssetsSnap, inventoryConsumablesSnap] = await Promise.all([
       getDocs(collection(db, "schedule")),
       getDocs(collection(db, "series")),
       getDoc(doc(db, "meta", "houseRules")),
       getDocs(collection(db, "findings")),
       getDocs(collection(db, "plantGuide")),
+      getDocs(collection(db, "specialEvents")),
       getDocs(collection(db, "plantTypes")),
       getDocs(collection(db, "harvests")),
       getDocs(collection(db, "transplants")),
@@ -2170,7 +2711,9 @@ $("exportDataBtn").addEventListener("click", async () => {
       getDocs(collection(db, "losses")),
       getDocs(collection(db, "envReadings")),
       getDocs(collection(db, "staff")),
-      getDocs(collection(db, "attendance"))
+      getDocs(collection(db, "attendance")),
+      getDocs(collection(db, "inventoryAssets")),
+      getDocs(collection(db, "inventoryConsumables"))
     ]);
     const dump = {
       exportedAt: new Date().toISOString(),
@@ -2179,6 +2722,7 @@ $("exportDataBtn").addEventListener("click", async () => {
       houseRules: houseRulesSnap.exists() ? houseRulesSnap.data() : { rules: DEFAULT_RULES },
       findings: Object.fromEntries(findingsSnap.docs.map(d => [d.id, d.data()])),
       plantGuide: Object.fromEntries(plantGuideSnap.docs.map(d => [d.id, d.data()])),
+      specialEvents: Object.fromEntries(specialEventsSnap.docs.map(d => [d.id, d.data()])),
       plantTypes: Object.fromEntries(plantTypesSnap.docs.map(d => [d.id, d.data()])),
       harvests: Object.fromEntries(harvestsSnap.docs.map(d => [d.id, d.data()])),
       transplants: Object.fromEntries(transplantsSnap.docs.map(d => [d.id, d.data()])),
@@ -2186,7 +2730,9 @@ $("exportDataBtn").addEventListener("click", async () => {
       losses: Object.fromEntries(lossesSnap.docs.map(d => [d.id, d.data()])),
       envReadings: Object.fromEntries(envReadingsSnap.docs.map(d => [d.id, d.data()])),
       staff: Object.fromEntries(staffSnap.docs.map(d => [d.id, d.data()])),
-      attendance: Object.fromEntries(attendanceSnap.docs.map(d => [d.id, d.data()]))
+      attendance: Object.fromEntries(attendanceSnap.docs.map(d => [d.id, d.data()])),
+      inventoryAssets: Object.fromEntries(inventoryAssetsSnap.docs.map(d => [d.id, d.data()])),
+      inventoryConsumables: Object.fromEntries(inventoryConsumablesSnap.docs.map(d => [d.id, d.data()]))
     };
     const blob = new Blob([JSON.stringify(dump, null, 2)], { type: "application/json" });
     const a = document.createElement("a");
@@ -2203,7 +2749,7 @@ $("importDataBtn").addEventListener("click", () => $("importFileInput").click())
 $("importFileInput").addEventListener("change", async () => {
   const file = $("importFileInput").files[0];
   if (!file) return;
-  if (!confirm("Importing will OVERWRITE current schedule, series, house rules, findings, plant guide, grow log data, staff, and attendance data with the contents of this file. This can't be undone. Continue?")) {
+  if (!confirm("Importing will OVERWRITE current schedule, series, house rules, findings, plant guide, special events, grow log data, staff, attendance, and inventory data with the contents of this file. This can't be undone. Continue?")) {
     $("importFileInput").value = "";
     return;
   }
@@ -2216,6 +2762,7 @@ $("importFileInput").addEventListener("change", async () => {
     Object.entries(dump.series || {}).forEach(([id, data]) => ops.push(["series", id, data]));
     Object.entries(dump.findings || {}).forEach(([id, data]) => ops.push(["findings", id, data]));
     Object.entries(dump.plantGuide || {}).forEach(([id, data]) => ops.push(["plantGuide", id, data]));
+    Object.entries(dump.specialEvents || {}).forEach(([id, data]) => ops.push(["specialEvents", id, data]));
     Object.entries(dump.plantTypes || {}).forEach(([id, data]) => ops.push(["plantTypes", id, data]));
     Object.entries(dump.harvests || {}).forEach(([id, data]) => ops.push(["harvests", id, data]));
     Object.entries(dump.transplants || {}).forEach(([id, data]) => ops.push(["transplants", id, data]));
@@ -2224,6 +2771,8 @@ $("importFileInput").addEventListener("change", async () => {
     Object.entries(dump.envReadings || {}).forEach(([id, data]) => ops.push(["envReadings", id, data]));
     Object.entries(dump.staff || {}).forEach(([id, data]) => ops.push(["staff", id, data]));
     Object.entries(dump.attendance || {}).forEach(([id, data]) => ops.push(["attendance", id, data]));
+    Object.entries(dump.inventoryAssets || {}).forEach(([id, data]) => ops.push(["inventoryAssets", id, data]));
+    Object.entries(dump.inventoryConsumables || {}).forEach(([id, data]) => ops.push(["inventoryConsumables", id, data]));
 
     // Firestore batches cap at 500 operations — chunk to be safe.
     for (let i = 0; i < ops.length; i += 400){
