@@ -408,7 +408,17 @@ function renderDailySchedule(){
 
   const list = $("dsEventList");
   list.innerHTML = "";
-  const sorted = entry.events.slice().sort((a,b) => a.start.localeCompare(b.start));
+
+  const shiftItems = entry.events.map(ev => ({
+    start: ev.start, end: ev.end, title: ev.title, person: ev.person, notes: ev.notes, id: ev.id, isSpecial: false
+  }));
+  const specialItems = specialEventsCache
+    .filter(ev => selectedDate >= (ev.startDate || "") && selectedDate <= (ev.endDate || ev.startDate || ""))
+    .map(ev => ({
+      start: ev.startTime || "00:00", end: ev.endTime || ev.startTime || "23:59",
+      title: ev.title, notes: ev.notes, allDay: !ev.startTime, id: ev.id, isSpecial: true
+    }));
+  const sorted = shiftItems.concat(specialItems).sort((a,b) => a.start.localeCompare(b.start));
 
   if (sorted.length === 0){
     const empty = document.createElement("div");
@@ -419,6 +429,41 @@ function renderDailySchedule(){
 
   sorted.forEach(ev => {
     const row = document.createElement("div");
+
+    if (ev.isSpecial){
+      row.className = "event-row special";
+      const time = document.createElement("div");
+      time.className = "event-time";
+      time.textContent = ev.allDay ? "All day" : (ev.start + " – " + ev.end);
+      row.appendChild(time);
+
+      const body = document.createElement("div");
+      body.className = "event-body";
+      const title = document.createElement("div");
+      title.className = "event-title";
+      title.textContent = ev.title;
+      const tag = document.createElement("span");
+      tag.className = "event-special-tag"; tag.textContent = "SPECIAL EVENT";
+      title.appendChild(tag);
+      body.appendChild(title);
+      if (ev.notes){
+        const notes = document.createElement("div");
+        notes.className = "event-notes";
+        notes.textContent = ev.notes;
+        body.appendChild(notes);
+      }
+      row.appendChild(body);
+
+      row.addEventListener("click", () => {
+        activateTab("specialEvents");
+        expandedSpecialEvents[ev.id] = true;
+        renderSpecialEvents();
+      });
+
+      list.appendChild(row);
+      return;
+    }
+
     const timeStatus = eventTimeStatus(ev, isToday);
     row.className = "event-row" + (timeStatus ? " " + timeStatus : "");
 
@@ -1490,6 +1535,7 @@ const expandedSpecialEvents = {};
 onSnapshot(collection(db, "specialEvents"), (snap) => {
   specialEventsCache = snap.docs.map(d => ({ id: d.id, photos: [], ...d.data() }));
   renderSpecialEvents();
+  renderDailySchedule();
 }, () => setSyncStatus("err", "Connection error"));
 
 $("specialEventsSearch").addEventListener("input", (e) => { specialEventsSearchTerm = e.target.value.trim().toLowerCase(); renderSpecialEvents(); });
@@ -1530,7 +1576,9 @@ function renderSpecialEvents(){
     chevron.className = "finding-chevron"; chevron.textContent = "▶";
     const dateEl = document.createElement("span");
     dateEl.className = "finding-date";
-    dateEl.textContent = ev.endDate && ev.endDate !== ev.startDate ? ((ev.startDate || "") + " → " + ev.endDate) : (ev.startDate || "");
+    let dateText = ev.endDate && ev.endDate !== ev.startDate ? ((ev.startDate || "") + " → " + ev.endDate) : (ev.startDate || "");
+    if (ev.startTime) dateText += " · " + ev.startTime + (ev.endTime ? "–" + ev.endTime : "");
+    dateEl.textContent = dateText;
     left.appendChild(chevron); left.appendChild(dateEl);
     const titleTag = document.createElement("span");
     titleTag.className = "finding-latest-tag";
@@ -1604,6 +1652,34 @@ function renderSpecialEvents(){
         endField.appendChild(endInput);
         dateRow.appendChild(startField); dateRow.appendChild(endField);
         body.appendChild(dateRow);
+
+        const timeRow = document.createElement("div");
+        timeRow.className = "row2";
+        timeRow.style.marginTop = "8px";
+        const startTimeField = document.createElement("div"); startTimeField.className = "field";
+        startTimeField.innerHTML = "<label>Start time (optional)</label>";
+        const startTimeInput = document.createElement("input");
+        startTimeInput.type = "time"; startTimeInput.value = ev.startTime || "";
+        startTimeInput.addEventListener("change", async () => {
+          try { await updateDoc(doc(db, "specialEvents", ev.id), { startTime: startTimeInput.value }); }
+          catch (err){ alert("Couldn't save the start time: " + err.message); }
+        });
+        startTimeField.appendChild(startTimeInput);
+        const endTimeField = document.createElement("div"); endTimeField.className = "field";
+        endTimeField.innerHTML = "<label>End time (optional)</label>";
+        const endTimeInput = document.createElement("input");
+        endTimeInput.type = "time"; endTimeInput.value = ev.endTime || "";
+        endTimeInput.addEventListener("change", async () => {
+          try { await updateDoc(doc(db, "specialEvents", ev.id), { endTime: endTimeInput.value }); }
+          catch (err){ alert("Couldn't save the end time: " + err.message); }
+        });
+        endTimeField.appendChild(endTimeInput);
+        timeRow.appendChild(startTimeField); timeRow.appendChild(endTimeField);
+        body.appendChild(timeRow);
+        const timeHint = document.createElement("p");
+        timeHint.className = "hint"; timeHint.style.margin = "0 0 8px";
+        timeHint.textContent = "Leave blank for an all-day entry. Set a start time to also show this event on the Daily Schedule's timetable for its date(s).";
+        body.appendChild(timeHint);
       }
 
       const notes = document.createElement("div");
@@ -1670,18 +1746,22 @@ $("addSpecialEventBtn").addEventListener("click", async () => {
   const titleInput = $("newSpecialEventTitle");
   const startInput = $("newSpecialEventStart");
   const endInput = $("newSpecialEventEnd");
+  const startTimeInput = $("newSpecialEventStartTime");
+  const endTimeInput = $("newSpecialEventEndTime");
   const notesInput = $("newSpecialEventNotes");
   const title = titleInput.value.trim();
   if (!title) return;
   const startDate = startInput.value || toKey(new Date());
   const endDate = endInput.value || "";
+  const startTime = startTimeInput.value || "";
+  const endTime = endTimeInput.value || "";
   const notes = notesInput.value.trim();
   const btn = $("addSpecialEventBtn");
   btn.disabled = true; btn.textContent = "Adding…";
   try {
-    const newDoc = await addDoc(collection(db, "specialEvents"), { title, startDate, endDate, notes, photos: [] });
+    const newDoc = await addDoc(collection(db, "specialEvents"), { title, startDate, endDate, startTime, endTime, notes, photos: [] });
     expandedSpecialEvents[newDoc.id] = true;
-    titleInput.value = ""; startInput.value = ""; endInput.value = ""; notesInput.value = "";
+    titleInput.value = ""; startInput.value = ""; endInput.value = ""; startTimeInput.value = ""; endTimeInput.value = ""; notesInput.value = "";
   } catch (err){
     alert("Couldn't save this event: " + err.message + "\n\nIf this says \"permission denied\", the specialEvents rule in firestore.rules needs to be published in the Firebase console (Firestore Database → Rules).");
   } finally {
