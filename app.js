@@ -542,6 +542,26 @@ $("dsResetBtn").addEventListener("click", async () => {
 // ============================================================================
 const overlay = $("overlay");
 let editingDate = null, editingEventId = null;
+let modalIsNewEvent = true;
+
+const REPEAT_FREQUENCY_TEXT = {
+  daily: "every day",
+  weekly: "every week on this same weekday",
+  biweekly: "every 2 weeks on this same weekday",
+  monthly: "every month on this same day of the month",
+  yearly: "every year on this same date"
+};
+function updateRepeatHint(){
+  const freqText = REPEAT_FREQUENCY_TEXT[$("fFrequency").value] || REPEAT_FREQUENCY_TEXT.daily;
+  $("repeatHint").textContent = modalIsNewEvent
+    ? "Happens " + freqText + " going forward, including maintenance Mondays — skips only days marked as a holiday / off day. Keeps going indefinitely until you delete the series."
+    : "Turns this into a recurring series starting today that happens " + freqText + ", including maintenance Mondays — skips only days marked as a holiday / off day. Keeps going indefinitely until you delete the series.";
+}
+$("fRepeat").addEventListener("change", () => {
+  $("repeatFrequencyRow").style.display = $("fRepeat").checked ? "block" : "none";
+  updateRepeatHint();
+});
+$("fFrequency").addEventListener("change", updateRepeatHint);
 
 function openEventModal(dateKey, eventId){
   if (!isAdmin) return;
@@ -566,15 +586,16 @@ function openEventModal(dateKey, eventId){
   scopeRow.style.display = hasSeries ? "block" : "none";
   if (hasSeries) document.querySelector('input[name=seriesScope][value=one]').checked = true;
 
-  // Repeat-daily checkbox: offered when creating a new event, and also when editing an
+  // Repeat checkbox: offered when creating a new event, and also when editing an
   // existing one-off event (so it can be turned into a recurring series later if you forgot
   // to tick it originally). Not shown if the event is already part of a series — use the
   // "this and all future days" scope option above instead.
+  modalIsNewEvent = isNew;
   $("fRepeat").checked = false;
+  $("fFrequency").value = "daily";
+  $("repeatFrequencyRow").style.display = "none";
   $("repeatFieldRow").style.display = hasSeries ? "none" : "flex";
-  $("repeatFieldRow").querySelector("small").textContent = isNew
-    ? "Happens every day going forward, including maintenance Mondays — skips only days marked as a holiday / off day. Keeps going indefinitely until you delete the series."
-    : "Turns this into a recurring series starting today, including maintenance Mondays — skips only days marked as a holiday / off day. Keeps going indefinitely until you delete the series.";
+  updateRepeatHint();
 
   overlay.classList.add("active");
 }
@@ -583,6 +604,23 @@ $("cancelBtn").addEventListener("click", closeEventModal);
 overlay.addEventListener("click", (e) => { if (e.target === overlay) closeEventModal(); });
 
 // ---- recurring series ----
+// Whether `dateKey` is a valid occurrence of a series anchored on `anchorKey` at the given
+// frequency. Daily repeats every day; weekly/biweekly repeat on the same weekday every 1/2
+// weeks; monthly/yearly repeat on the same day-of-month / same date every 1/12 months —
+// months that don't have the anchor day (e.g. a 31st anchor in February) are simply skipped.
+function matchesFrequency(dateKey, anchorKey, frequency){
+  if (!frequency || frequency === "daily") return true;
+  const d = toDate(dateKey), anchor = toDate(anchorKey);
+  if (d < anchor) return false;
+  if (frequency === "weekly" || frequency === "biweekly"){
+    const diffDays = Math.round((d - anchor) / 86400000);
+    return diffDays % (frequency === "weekly" ? 7 : 14) === 0;
+  }
+  if (frequency === "monthly") return d.getDate() === anchor.getDate();
+  if (frequency === "yearly") return d.getDate() === anchor.getDate() && d.getMonth() === anchor.getMonth();
+  return true;
+}
+
 async function materializeSeries(seriesId, fromKey, template, toKeyStr){
   const batch = writeBatch(db);
   let d = toDate(fromKey);
@@ -590,6 +628,7 @@ async function materializeSeries(seriesId, fromKey, template, toKeyStr){
   let count = 0;
   for (; d <= endD; d.setDate(d.getDate() + 1)){
     const key = toKey(d);
+    if (!matchesFrequency(key, template.fromDate, template.frequency)) continue;
     const dayEntry = editableDay(key);
     if (dayEntry.events.some(e => e.seriesId === seriesId)) continue;
     if (dayEntry.dayType === "holiday") continue;
@@ -602,16 +641,16 @@ async function materializeSeries(seriesId, fromKey, template, toKeyStr){
   return count;
 }
 
-async function addRecurringEvents(startKey, template){
+async function addRecurringEvents(startKey, fields){
   const seriesId = uid();
-  await materializeSeries(seriesId, startKey, template, horizonEnd(startKey));
-  const seriesDoc = { title: template.title, start: template.start, end: template.end, person: template.person, notes: template.notes, fromDate: startKey };
+  const seriesDoc = { title: fields.title, start: fields.start, end: fields.end, person: fields.person, notes: fields.notes, fromDate: startKey, frequency: fields.frequency || "daily" };
+  await materializeSeries(seriesId, startKey, seriesDoc, horizonEnd(startKey));
   await setDoc(doc(db, "series", seriesId), seriesDoc);
   seriesCache.push({ id: seriesId, ...seriesDoc });
 }
 
 // Turns an already-existing, one-off event into the first occurrence of a new recurring
-// series (used when editing an event you forgot to mark "repeat daily" when creating it).
+// series (used when editing an event you forgot to mark "repeat" when creating it).
 async function convertToRecurring(dateKey, eventId, fields){
   const seriesId = uid();
   const entry = editableDay(dateKey);
@@ -621,7 +660,7 @@ async function convertToRecurring(dateKey, eventId, fields){
   ev.title = fields.title; ev.person = fields.person; ev.notes = fields.notes;
   await saveDay(dateKey, entry);
 
-  const seriesDoc = { title: fields.title, start: fields.start, end: fields.end, person: fields.person, notes: fields.notes, fromDate: dateKey };
+  const seriesDoc = { title: fields.title, start: fields.start, end: fields.end, person: fields.person, notes: fields.notes, fromDate: dateKey, frequency: fields.frequency || "daily" };
   await setDoc(doc(db, "series", seriesId), seriesDoc);
   seriesCache.push({ id: seriesId, ...seriesDoc });
 
@@ -673,6 +712,7 @@ $("saveBtn").addEventListener("click", async () => {
   const person = $("fPerson").value.trim();
   const notes = $("fNotes").value.trim();
   const repeat = $("fRepeat").checked;
+  const frequency = $("fFrequency").value;
 
   if (editingEventId){
     const entry = editableDay(editingDate);
@@ -681,13 +721,13 @@ $("saveBtn").addEventListener("click", async () => {
     if (scopeAll){
       await updateSeriesForward(ev.seriesId, editingDate, { start, end, title, person, notes });
     } else if (ev && !ev.seriesId && repeat){
-      await convertToRecurring(editingDate, editingEventId, { start, end, title, person, notes });
+      await convertToRecurring(editingDate, editingEventId, { start, end, title, person, notes, frequency });
     } else {
       if (ev){ ev.start = start; ev.end = end; ev.title = title; ev.person = person; ev.notes = notes; }
       await saveDay(editingDate, entry);
     }
   } else if (repeat){
-    await addRecurringEvents(editingDate, { start, end, title, person, notes });
+    await addRecurringEvents(editingDate, { start, end, title, person, notes, frequency });
   } else {
     const entry = editableDay(editingDate);
     entry.events.push({ id: uid(), start, end, title, person, notes });
