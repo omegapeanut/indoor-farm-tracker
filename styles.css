@@ -115,6 +115,14 @@ header.top p { margin: 0; color: #666; font-size: 13px; }
 .event-row.past .event-time { color: #888; }
 .event-row.past:hover { opacity: 0.8; }
 
+.event-row.special { background: #fff9ec; border-color: #f3dfa8; border-left-color: #b5810b; cursor: pointer; }
+.event-row.special .event-time { color: #8a5c00; }
+.event-row.special:hover { background: #fff4dc; }
+.event-special-tag {
+  display: inline-block; font-size: 9px; font-weight: 700; color: #8a5c00; background: #fde9bf;
+  padding: 2px 7px; border-radius: 8px; margin-left: 8px; vertical-align: middle; letter-spacing: 0.04em;
+}
+
 /* ---- Modal (shared) ---- */
 .overlay {
   display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.35);
