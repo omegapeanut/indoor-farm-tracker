@@ -287,17 +287,99 @@
       </div>
 
       <div class="subtabs">
-        <button class="subtab-btn active" data-subtab="harvests">Harvest</button>
+        <button class="subtab-btn active" data-subtab="dashboard">Dashboard</button>
+        <button class="subtab-btn" data-subtab="harvests">Harvest</button>
         <button class="subtab-btn" data-subtab="transplants">Transfer</button>
         <button class="subtab-btn" data-subtab="germinations">Germination</button>
         <button class="subtab-btn" data-subtab="losses">Losses</button>
         <button class="subtab-btn" data-subtab="standing">Growing</button>
         <button class="subtab-btn" data-subtab="envReadings">Readings</button>
-        <button class="subtab-btn" data-subtab="dashboard">Dashboard</button>
+      </div>
+
+      <!-- DASHBOARD -->
+      <div class="subtab-panel active" data-subtab="dashboard">
+        <p class="hint">Live overview of production — harvested quantities, what's currently growing, and trends over time.</p>
+        <div class="dash-location-row" id="dashLocationRow">
+          <button class="dash-loc-btn active" data-loc="">All</button>
+          <button class="dash-loc-btn" data-loc="level1">Level 1</button>
+          <button class="dash-loc-btn" data-loc="level3">Level 3</button>
+          <button class="dash-loc-btn" data-loc="germOnSite">Germ. On Site</button>
+          <button class="dash-loc-btn" data-loc="germOffSite">Germ. Off Site</button>
+        </div>
+
+        <div class="kpi-row" id="dashKpiRow">
+          <div class="kpi-tile">
+            <div class="kpi-label">Total Harvested</div>
+            <div class="kpi-value" id="kpiTotalHarvested">—</div>
+          </div>
+          <div class="kpi-tile">
+            <div class="kpi-label">Currently Growing</div>
+            <div class="kpi-value" id="kpiCurrentlyGrowing">—</div>
+          </div>
+          <div class="kpi-tile">
+            <div class="kpi-label">Losses This Week</div>
+            <div class="kpi-value" id="kpiLossesThisWeek">—</div>
+          </div>
+          <div class="kpi-tile">
+            <div class="kpi-label">Death Rate (latest week)</div>
+            <div class="kpi-value" id="kpiDeathRate">—</div>
+          </div>
+        </div>
+
+        <div class="dash-donut-row">
+          <div class="section">
+            <h2>Harvest by Plant Type</h2>
+            <p class="hint">Ratio of total harvested quantity by crop, for the selected scope.</p>
+            <div class="chart-wrap donut-wrap">
+              <canvas id="harvestByTypeChart"></canvas>
+              <p class="empty-state" id="harvestByTypeEmpty" style="display:none;">No harvests logged yet.</p>
+            </div>
+          </div>
+          <div class="section">
+            <h2>Harvest by Destination</h2>
+            <p class="hint">Where harvested crops went, for the selected scope.</p>
+            <div class="chart-wrap donut-wrap">
+              <canvas id="harvestByDestinationChart"></canvas>
+              <p class="empty-state" id="harvestByDestinationEmpty" style="display:none;">No harvests logged yet.</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="section">
+          <h2>Death Rate Trend</h2>
+          <p class="hint">Weekly losses ÷ (germinated + transplanted) for the selected scope, as a percentage.</p>
+          <div class="chart-wrap"><canvas id="deathRateChart"></canvas></div>
+          <div id="deathRateTable" class="dash-table"></div>
+        </div>
+
+        <div class="section" id="envTrendsSection">
+          <h2>Environment Trends</h2>
+          <p class="hint" id="envTrendsHint">Daily average readings. Pick a specific location above (not "All") to see its environment charts.</p>
+          <div id="envChartsWrap">
+            <div class="chart-wrap"><canvas id="phChart"></canvas></div>
+            <div class="chart-wrap"><canvas id="tdsChart"></canvas></div>
+            <div class="chart-wrap"><canvas id="ecChart"></canvas></div>
+            <div class="chart-wrap"><canvas id="waterTempChart"></canvas></div>
+            <div class="chart-wrap"><canvas id="roomTempChart"></canvas></div>
+          </div>
+        </div>
       </div>
 
       <!-- HARVEST -->
-      <div class="subtab-panel active" data-subtab="harvests">
+      <div class="subtab-panel" data-subtab="harvests">
+        <div class="staff-toggle-row" id="destinationsToggleRow" style="display:none;">
+          <button id="toggleDestinationsBtn">⚙ Manage Harvest Destinations</button>
+        </div>
+        <div class="section" id="destinationsPanel" style="display:none;">
+          <h2>Harvest Destinations</h2>
+          <p class="hint">Where harvested crops go — restaurant, cafeteria, tours, donations, etc.</p>
+          <div id="destinationsList"></div>
+          <div class="add-row">
+            <input type="text" id="newDestinationName" placeholder="Destination name (e.g. Farmers Market)">
+            <button id="addDestinationBtn">Add</button>
+          </div>
+        </div>
+
         <div class="finding-add" id="addHarvestsRow" style="display:none;">
           <div class="row2">
             <div class="field"><label>Date</label><input type="date" id="harvestsDate"></div>
@@ -309,6 +391,7 @@
             </div>
             <div class="field"><label>Quantity harvested</label><input type="number" id="harvestsQuantity" min="0" step="1"></div>
           </div>
+          <div class="field"><label>Harvested for</label><select id="harvestsDestination"></select></div>
           <textarea id="harvestsNotes" rows="2" placeholder="Optional notes…"></textarea>
           <div class="finding-add-actions">
             <span class="hint" style="margin:0;">Add photos after creating the entry</span>
@@ -450,36 +533,6 @@
           <span>Date</span><span>Location</span><span>pH</span><span>TDS</span><span>EC</span><span>Water °C</span><span>Room °C</span><span></span>
         </div>
         <div id="envReadingsList"></div>
-      </div>
-
-      <!-- DASHBOARD -->
-      <div class="subtab-panel" data-subtab="dashboard">
-        <div class="dash-location-row" id="dashLocationRow">
-          <button class="dash-loc-btn active" data-loc="">All</button>
-          <button class="dash-loc-btn" data-loc="level1">Level 1</button>
-          <button class="dash-loc-btn" data-loc="level3">Level 3</button>
-          <button class="dash-loc-btn" data-loc="germOnSite">Germ. On Site</button>
-          <button class="dash-loc-btn" data-loc="germOffSite">Germ. Off Site</button>
-        </div>
-
-        <div class="section">
-          <h2>Death Rate Trend</h2>
-          <p class="hint">Weekly losses ÷ (germinated + transplanted) for the selected scope, as a percentage.</p>
-          <div class="chart-wrap"><canvas id="deathRateChart"></canvas></div>
-          <div id="deathRateTable" class="dash-table"></div>
-        </div>
-
-        <div class="section" id="envTrendsSection">
-          <h2>Environment Trends</h2>
-          <p class="hint" id="envTrendsHint">Daily average readings. Pick a specific location above (not "All") to see its environment charts.</p>
-          <div id="envChartsWrap">
-            <div class="chart-wrap"><canvas id="phChart"></canvas></div>
-            <div class="chart-wrap"><canvas id="tdsChart"></canvas></div>
-            <div class="chart-wrap"><canvas id="ecChart"></canvas></div>
-            <div class="chart-wrap"><canvas id="waterTempChart"></canvas></div>
-            <div class="chart-wrap"><canvas id="roomTempChart"></canvas></div>
-          </div>
-        </div>
       </div>
     </div>
   </div>
