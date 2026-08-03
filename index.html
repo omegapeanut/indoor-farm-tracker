@@ -261,6 +261,7 @@
         <button class="subtab-btn" data-subtab="transplants">Transfer</button>
         <button class="subtab-btn" data-subtab="germinations">Germination</button>
         <button class="subtab-btn" data-subtab="losses">Losses</button>
+        <button class="subtab-btn" data-subtab="standing">Growing</button>
         <button class="subtab-btn" data-subtab="envReadings">Readings</button>
         <button class="subtab-btn" data-subtab="dashboard">Dashboard</button>
       </div>
@@ -359,6 +360,22 @@
           </div>
         </div>
         <div id="lossesList" style="margin-top:10px;"></div>
+      </div>
+
+      <!-- CURRENTLY GROWING (computed standing count, not a log) -->
+      <div class="subtab-panel" data-subtab="standing">
+        <p class="hint">Live count of what's currently growing in each location — computed automatically from Germination, Transfer, Harvest, and Losses entries above. Nothing to add here.</p>
+        <div class="dash-location-row" id="standingLocationRow">
+          <button class="dash-loc-btn active" data-loc="">All</button>
+          <button class="dash-loc-btn" data-loc="level1">Level 1</button>
+          <button class="dash-loc-btn" data-loc="level3">Level 3</button>
+          <button class="dash-loc-btn" data-loc="germOnSite">Germ. On Site</button>
+          <button class="dash-loc-btn" data-loc="germOffSite">Germ. Off Site</button>
+        </div>
+        <div class="standing-table-head">
+          <span>Location</span><span>Plant type</span><span>Quantity</span>
+        </div>
+        <div id="standingList"></div>
       </div>
 
       <!-- ENVIRONMENT READINGS -->
