@@ -111,6 +111,7 @@ onAuthStateChanged(auth, (user) => {
   renderPlantGuide();
   renderSpecialEvents();
   renderPlantTypes();
+  renderHarvestDestinations();
   Object.keys(LOG_CONFIGS).forEach(renderLogSection);
   renderEnvReadings();
   if (isDashboardActive()) renderDashboard();
@@ -130,6 +131,7 @@ function refreshAdminUI(){
   $("addAttRow").style.display = isAdmin ? "flex" : "none";
   $("staffToggleRow").style.display = isAdmin ? "block" : "none";
   $("plantTypesToggleRow").style.display = isAdmin ? "block" : "none";
+  $("destinationsToggleRow").style.display = isAdmin ? "block" : "none";
   $("addHarvestsRow").style.display = isAdmin ? "flex" : "none";
   $("addTransplantsRow").style.display = isAdmin ? "flex" : "none";
   $("addGerminationsRow").style.display = isAdmin ? "flex" : "none";
@@ -141,6 +143,7 @@ function refreshAdminUI(){
   if (!isAdmin){
     $("staffPanel").style.display = "none";
     $("plantTypesPanel").style.display = "none";
+    $("destinationsPanel").style.display = "none";
     if ($("tab-data").classList.contains("active")) activateTab("calendar");
   }
 }
@@ -575,17 +578,18 @@ const REPEAT_FREQUENCY_TEXT = {
   noVisitorOnly: "on every maintenance day (skipping visitor and holiday days)"
 };
 function updateRepeatHint(){
-  const freqText = REPEAT_FREQUENCY_TEXT[$("fFrequency").value] || REPEAT_FREQUENCY_TEXT.daily;
+  const freq = $("fFrequency").value;
+  if (freq === "none"){
+    $("repeatHint").textContent = "This event happens once, on this date only.";
+    return;
+  }
+  const freqText = REPEAT_FREQUENCY_TEXT[freq] || REPEAT_FREQUENCY_TEXT.daily;
   if (modalHasSeries){
     $("repeatHint").textContent = "Save with \"This and all future days in the series\" selected above to switch this series to happen " + freqText + " going forward — future days that no longer match are removed, and newly-matching days are added automatically.";
   } else {
     $("repeatHint").textContent = (modalIsNewEvent ? "Happens " : "Turns this into a recurring series starting today that happens ") + freqText + ". Keeps going indefinitely until you delete the series.";
   }
 }
-$("fRepeat").addEventListener("change", () => {
-  $("repeatFrequencyRow").style.display = $("fRepeat").checked ? "block" : "none";
-  updateRepeatHint();
-});
 $("fFrequency").addEventListener("change", updateRepeatHint);
 
 function openEventModal(dateKey, eventId){
@@ -611,27 +615,13 @@ function openEventModal(dateKey, eventId){
   scopeRow.style.display = hasSeries ? "block" : "none";
   if (hasSeries) document.querySelector('input[name=seriesScope][value=one]').checked = true;
 
-  // Repeat checkbox: offered when creating a new event, and also when editing an
-  // existing one-off event (so it can be turned into a recurring series later if you forgot
-  // to tick it originally). When the event is already part of a series, the checkbox is
-  // replaced by a direct repeat-pattern editor — pick a new pattern and save with "this and
-  // all future days" to change how the series repeats (e.g. fix "daily" to "visitor days only").
+  // The repeat-pattern dropdown is always shown, for both new/one-off events and events
+  // already part of a series — picking anything other than "Does not repeat" on a one-off
+  // event turns it into a new series; changing the pattern on an existing series event applies
+  // when saved with "this and all future days" (see the scope radios above).
   modalIsNewEvent = isNew;
   modalHasSeries = !!hasSeries;
-  $("repeatFieldRow").style.display = "flex";
-  if (hasSeries){
-    const series = seriesCache.find(s => s.id === ev.seriesId);
-    $("fRepeat").style.display = "none";
-    $("repeatCheckboxLabel").style.display = "none";
-    $("fFrequency").value = (series && series.frequency) || "daily";
-    $("repeatFrequencyRow").style.display = "block";
-  } else {
-    $("fRepeat").style.display = "";
-    $("repeatCheckboxLabel").style.display = "";
-    $("fRepeat").checked = false;
-    $("fFrequency").value = "daily";
-    $("repeatFrequencyRow").style.display = "none";
-  }
+  $("fFrequency").value = hasSeries ? ((seriesCache.find(s => s.id === ev.seriesId) || {}).frequency || "daily") : "none";
   updateRepeatHint();
 
   overlay.classList.add("active");
@@ -649,6 +639,7 @@ overlay.addEventListener("click", (e) => { if (e.target === overlay) closeEventM
 // pattern, so the event follows whichever days actually turn out to have (or not have) visitors.
 function matchesFrequency(dateKey, anchorKey, frequency){
   if (!frequency || frequency === "daily") return true;
+  if (frequency === "none") return false;
   const d = toDate(dateKey), anchor = toDate(anchorKey);
   if (d < anchor) return false;
   if (frequency === "visitorOnly") return viewDay(dateKey).dayType === "visitor";
@@ -727,7 +718,7 @@ async function topUpAllSeries(){
 // from the series' current pattern, future occurrences that no longer fit the new pattern are
 // removed first, and materializeSeries then backfills any newly-matching days that don't have
 // the event yet — so switching e.g. "daily" to "visitor days only" cleans up as well as adds.
-async function updateSeriesForward(seriesId, fromKey, fields){
+async function updateSeriesForward(seriesId, fromKey, fields, currentEventId){
   const series = seriesCache.find(s => s.id === seriesId);
   const newFrequency = fields.frequency || (series && series.frequency) || "daily";
 
@@ -738,9 +729,14 @@ async function updateSeriesForward(seriesId, fromKey, fields){
       if (key < fromKey) return;
       const dayEntry = scheduleCache[key];
       if (!dayEntry || !dayEntry.events) return;
-      if (!dayEntry.events.some(e => e.seriesId === seriesId)) return;
+      const seriesEv = dayEntry.events.find(e => e.seriesId === seriesId);
+      if (!seriesEv) return;
       if (matchesFrequency(key, series.fromDate, newFrequency)) return;
-      dayEntry.events = dayEntry.events.filter(e => e.seriesId !== seriesId);
+      if (key === fromKey){
+        delete seriesEv.seriesId; // detach today's occurrence instead of deleting it
+      } else {
+        dayEntry.events = dayEntry.events.filter(e => e.seriesId !== seriesId);
+      }
       dropBatch.set(doc(db, "schedule", key), dayEntry);
       dropped++;
     });
@@ -753,7 +749,7 @@ async function updateSeriesForward(seriesId, fromKey, fields){
     if (key < fromKey) return;
     const dayEntry = scheduleCache[key];
     if (!dayEntry || !dayEntry.events) return;
-    const ev = dayEntry.events.find(e => e.seriesId === seriesId);
+    const ev = dayEntry.events.find(e => e.seriesId === seriesId || (key === fromKey && e.id === currentEventId));
     if (!ev) return;
     ev.start = fields.start; ev.end = fields.end; ev.title = fields.title; ev.person = fields.person; ev.notes = fields.notes;
     batch.set(doc(db, "schedule", key), dayEntry);
@@ -777,15 +773,15 @@ $("saveBtn").addEventListener("click", async () => {
   const title = $("fTitle").value.trim() || "Untitled Event";
   const person = $("fPerson").value.trim();
   const notes = $("fNotes").value.trim();
-  const repeat = $("fRepeat").checked;
   const frequency = $("fFrequency").value;
+  const repeat = frequency !== "none";
 
   if (editingEventId){
     const entry = editableDay(editingDate);
     const ev = entry.events.find(e => e.id === editingEventId);
     const scopeAll = ev && ev.seriesId && document.querySelector('input[name=seriesScope]:checked').value === "all";
     if (scopeAll){
-      await updateSeriesForward(ev.seriesId, editingDate, { start, end, title, person, notes, frequency });
+      await updateSeriesForward(ev.seriesId, editingDate, { start, end, title, person, notes, frequency }, editingEventId);
     } else if (ev && !ev.seriesId && repeat){
       await convertToRecurring(editingDate, editingEventId, { start, end, title, person, notes, frequency });
     } else {
@@ -2216,6 +2212,111 @@ function populatePlantTypeSelects(){
   });
 }
 
+// ---- Harvest Destinations (Firestore: harvestDestinations/{id}) — where
+// harvested crops go. Seeded once with a starter list if the collection is
+// empty; managed the same way as Plant Types (rename inline, delete, add).
+const DEFAULT_HARVEST_DESTINATIONS = ["Na Oh Restaurant", "Cafeteria", "Visitor Tour", "Food Bank"];
+let harvestDestinationsCache = [];
+let harvestDestinationsSeeded = false;
+
+onSnapshot(collection(db, "harvestDestinations"), async (snap) => {
+  harvestDestinationsCache = snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a,b) => (a.name||"").localeCompare(b.name||""));
+  renderHarvestDestinations();
+  populateHarvestDestinationSelects();
+  if (isDashboardActive()) renderDashboard();
+  if (snap.empty && isAdmin && !harvestDestinationsSeeded){
+    harvestDestinationsSeeded = true;
+    try {
+      const batch = writeBatch(db);
+      DEFAULT_HARVEST_DESTINATIONS.forEach(name => batch.set(doc(collection(db, "harvestDestinations")), { name }));
+      await batch.commit();
+    } catch (err){ /* admin can add these manually if seeding fails (e.g. rules not published yet) */ }
+  }
+}, () => setSyncStatus("err", "Connection error"));
+
+function harvestDestinationName(id){
+  const dest = harvestDestinationsCache.find(d => d.id === id);
+  return dest ? dest.name : null;
+}
+
+function renderHarvestDestinations(){
+  const list = $("destinationsList");
+  if (!list) return;
+  list.innerHTML = "";
+  if (harvestDestinationsCache.length === 0){
+    const empty = document.createElement("div");
+    empty.className = "empty-state";
+    empty.textContent = "No destinations added yet.";
+    list.appendChild(empty);
+    return;
+  }
+  harvestDestinationsCache.forEach(dest => {
+    const row = document.createElement("div");
+    row.className = "staff-row";
+
+    const name = document.createElement("div");
+    name.className = "staff-name";
+    name.contentEditable = "true";
+    name.textContent = dest.name;
+    name.addEventListener("blur", async () => {
+      const val = name.textContent.trim();
+      if (!val){ name.textContent = dest.name; return; }
+      if (val === dest.name) return;
+      try { await updateDoc(doc(db, "harvestDestinations", dest.id), { name: val }); }
+      catch (err){ alert("Couldn't rename this destination: " + err.message); name.textContent = dest.name; }
+    });
+    name.addEventListener("keydown", (e) => { if (e.key === "Enter"){ e.preventDefault(); name.blur(); } });
+
+    const del = document.createElement("button");
+    del.className = "icon-btn"; del.textContent = "✕"; del.title = "Remove destination";
+    del.addEventListener("click", async () => {
+      if (!confirm("Remove \"" + dest.name + "\" from destinations? Past harvest entries keep their recorded destination.")) return;
+      try { await deleteDoc(doc(db, "harvestDestinations", dest.id)); }
+      catch (err){ alert("Couldn't delete this destination: " + err.message); }
+    });
+
+    row.appendChild(name); row.appendChild(del);
+    list.appendChild(row);
+  });
+}
+
+$("toggleDestinationsBtn").addEventListener("click", () => {
+  const panel = $("destinationsPanel");
+  panel.style.display = panel.style.display === "none" ? "block" : "none";
+});
+
+$("addDestinationBtn").addEventListener("click", async () => {
+  if (!isAdmin) return;
+  const input = $("newDestinationName");
+  const name = requireValue(input, "a destination name");
+  if (!name) return;
+  try {
+    await addDoc(collection(db, "harvestDestinations"), { name });
+    input.value = "";
+  } catch (err){
+    alert("Couldn't add this destination: " + err.message);
+  }
+});
+
+function populateHarvestDestinationSelects(){
+  const sel = $("harvestsDestination");
+  if (!sel) return;
+  const prev = sel.value;
+  sel.innerHTML = "";
+  if (harvestDestinationsCache.length === 0){
+    const opt = document.createElement("option");
+    opt.value = ""; opt.textContent = "Add a destination first (⚙ above)";
+    sel.appendChild(opt);
+    return;
+  }
+  harvestDestinationsCache.forEach(dest => {
+    const opt = document.createElement("option");
+    opt.value = dest.id; opt.textContent = dest.name;
+    sel.appendChild(opt);
+  });
+  if (prev && harvestDestinationsCache.some(dest => dest.id === prev)) sel.value = prev;
+}
+
 // ---- Harvest / Seedling Transfer / Germination / Losses ----
 // All four are "dated log: plant type + quantity + one-or-two location
 // fields + notes + photos" — driven by one config-driven renderer instead
@@ -2223,6 +2324,7 @@ function populatePlantTypeSelects(){
 const LOG_CONFIGS = {
   harvests: {
     locationField: { key: "location", options: [["level1","Level 1"],["level3","Level 3"]] },
+    destinationField: { key: "destinationId" },
   },
   germinations: {
     locationField: { key: "room", options: [["germOnSite","On Site"],["germOffSite","Off Site"]] },
@@ -2251,7 +2353,7 @@ Object.keys(LOG_CONFIGS).forEach(col => {
   onSnapshot(collection(db, col), (snap) => {
     LOG_SETTERS[col](snap.docs.map(d => ({ id: d.id, photos: [], ...d.data() })));
     renderLogSection(col);
-    if (col !== "harvests" && isDashboardActive()) renderDashboard();
+    if (isDashboardActive()) renderDashboard();
     renderStandingStock();
   }, () => setSyncStatus("err", "Connection error"));
 });
@@ -2362,7 +2464,8 @@ function renderLogSection(col){
 
     const locLabel = locOptLabel(r[cfg.locationField.key], cfg.locationField.options);
     const secondLabel = cfg.secondLocationField ? (" → " + locOptLabel(r[cfg.secondLocationField.key], cfg.secondLocationField.options)) : "";
-    const summaryText = plantTypeName(r.plantTypeId) + " — " + (r.quantity != null ? r.quantity : "?") + " · " + locLabel + secondLabel;
+    const destLabel = cfg.destinationField ? (" · for " + (harvestDestinationName(r[cfg.destinationField.key]) || "—")) : "";
+    const summaryText = plantTypeName(r.plantTypeId) + " — " + (r.quantity != null ? r.quantity : "?") + " · " + locLabel + secondLabel + destLabel;
     if (!isOpen){
       const preview = document.createElement("span");
       preview.className = "finding-preview";
@@ -2461,6 +2564,7 @@ function wireLogAddForm(col){
     const notesInput = $(col + "Notes");
     const locSelect = $(col + "Location");
     const loc2Select = cfg.secondLocationField ? $(col + "Location2") : null;
+    const destSelect = cfg.destinationField ? $(col + "Destination") : null;
 
     const plantTypeId = plantTypeSelect.value;
     if (!plantTypeId){ alert("Add a plant type first, using the ⚙ Manage Plant Types button above."); return; }
@@ -2471,6 +2575,7 @@ function wireLogAddForm(col){
     const payload = { date, plantTypeId, quantity, notes: notesInput.value.trim(), photos: [] };
     payload[cfg.locationField.key] = locSelect.value;
     if (cfg.secondLocationField) payload[cfg.secondLocationField.key] = loc2Select.value;
+    if (cfg.destinationField) payload[cfg.destinationField.key] = destSelect.value;
 
     btn.disabled = true; btn.textContent = "Adding…";
     try {
@@ -2646,6 +2751,90 @@ function renderLineChart(canvasId, labels, data, label, color){
   });
 }
 
+const DASH_PALETTE = ["#0b57d0", "#1e7e34", "#b5540b", "#6a2fb5", "#c0392b", "#0a8f8f", "#8a5c00", "#555555", "#a53e8c", "#3f6b1f"];
+function renderDoughnutChart(canvasId, emptyId, labels, data){
+  const canvas = $(canvasId);
+  const emptyEl = $(emptyId);
+  if (!canvas || typeof Chart === "undefined") return;
+  if (chartInstances[canvasId]){ chartInstances[canvasId].destroy(); chartInstances[canvasId] = null; }
+  if (labels.length === 0){
+    canvas.style.display = "none";
+    if (emptyEl) emptyEl.style.display = "block";
+    return;
+  }
+  canvas.style.display = "";
+  if (emptyEl) emptyEl.style.display = "none";
+  chartInstances[canvasId] = new Chart(canvas.getContext("2d"), {
+    type: "doughnut",
+    data: { labels, datasets: [{ data, backgroundColor: labels.map((_, i) => DASH_PALETTE[i % DASH_PALETTE.length]) }] },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { position: "right", labels: { boxWidth: 12, font: { size: 11 } } } },
+    },
+  });
+}
+
+// Ratio of harvested quantity by plant type / by destination, for the current location scope —
+// answers "what are we growing the most of" and "who are we harvesting for" at a glance.
+function computeHarvestByPlantType(scopeLoc){
+  const totals = {};
+  harvestsCache.forEach(h => {
+    if (scopeLoc && h.location !== scopeLoc) return;
+    const key = h.plantTypeId || "";
+    if (!key) return;
+    totals[key] = (totals[key] || 0) + (Number(h.quantity) || 0);
+  });
+  const labels = [], data = [];
+  Object.entries(totals).forEach(([id, qty]) => {
+    if (qty <= 0) return;
+    labels.push(plantTypeName(id));
+    data.push(qty);
+  });
+  return { labels, data };
+}
+
+function computeHarvestByDestination(scopeLoc){
+  const totals = {};
+  harvestsCache.forEach(h => {
+    if (scopeLoc && h.location !== scopeLoc) return;
+    const key = h.destinationId || "";
+    totals[key] = (totals[key] || 0) + (Number(h.quantity) || 0);
+  });
+  const labels = [], data = [];
+  Object.entries(totals).forEach(([id, qty]) => {
+    if (qty <= 0) return;
+    labels.push(id ? (harvestDestinationName(id) || "(deleted destination)") : "Not specified");
+    data.push(qty);
+  });
+  return { labels, data };
+}
+
+function renderDashboardKPIs(){
+  const scopeLoc = dashboardScopeLoc;
+
+  const totalHarvested = harvestsCache
+    .filter(h => !scopeLoc || h.location === scopeLoc)
+    .reduce((sum, h) => sum + (Number(h.quantity) || 0), 0);
+
+  const stock = computeStandingStock();
+  const currentlyGrowing = Object.keys(LOCATIONS)
+    .filter(loc => !scopeLoc || loc === scopeLoc)
+    .reduce((sum, loc) => sum + Object.values(stock[loc]).reduce((s, q) => s + Math.max(0, q), 0), 0);
+
+  const thisWeek = weekKey(toKey(new Date()));
+  const lossesThisWeek = lossesCache
+    .filter(l => (!scopeLoc || l.location === scopeLoc) && weekKey(l.date) === thisWeek)
+    .reduce((sum, l) => sum + (Number(l.quantity) || 0), 0);
+
+  const deathSeries = computeDeathRateSeries(scopeLoc);
+  const latestRate = deathSeries.length ? deathSeries[deathSeries.length - 1].rate : null;
+
+  $("kpiTotalHarvested").textContent = totalHarvested.toLocaleString();
+  $("kpiCurrentlyGrowing").textContent = currentlyGrowing.toLocaleString();
+  $("kpiLossesThisWeek").textContent = lossesThisWeek.toLocaleString();
+  $("kpiDeathRate").textContent = latestRate != null ? latestRate.toFixed(1) + "%" : "—";
+}
+
 let dashboardScopeLoc = "";
 function isDashboardActive(){
   const el = document.querySelector('#tab-growlog .subtab-panel[data-subtab="dashboard"]');
@@ -2661,6 +2850,14 @@ $("dashLocationRow").addEventListener("click", (e) => {
 });
 
 function renderDashboard(){
+  renderDashboardKPIs();
+
+  const byType = computeHarvestByPlantType(dashboardScopeLoc);
+  renderDoughnutChart("harvestByTypeChart", "harvestByTypeEmpty", byType.labels, byType.data);
+
+  const byDestination = computeHarvestByDestination(dashboardScopeLoc);
+  renderDoughnutChart("harvestByDestinationChart", "harvestByDestinationEmpty", byDestination.labels, byDestination.data);
+
   const series = computeDeathRateSeries(dashboardScopeLoc);
   renderLineChart("deathRateChart", series.map(s => s.week), series.map(s => s.rate), "Death rate %", "#c0392b");
 
@@ -3194,7 +3391,7 @@ $("annotateSave").addEventListener("click", async () => {
 $("exportDataBtn").addEventListener("click", async () => {
   $("dataStatus").textContent = "Gathering data…";
   try {
-    const [scheduleSnap, seriesSnap, houseRulesSnap, findingsSnap, proposalsSnap, plantGuideSnap, specialEventsSnap, plantTypesSnap, harvestsSnap, transplantsSnap, germinationsSnap, lossesSnap, envReadingsSnap, staffSnap, attendanceSnap, inventoryAssetsSnap, inventoryConsumablesSnap] = await Promise.all([
+    const [scheduleSnap, seriesSnap, houseRulesSnap, findingsSnap, proposalsSnap, plantGuideSnap, specialEventsSnap, plantTypesSnap, harvestDestinationsSnap, harvestsSnap, transplantsSnap, germinationsSnap, lossesSnap, envReadingsSnap, staffSnap, attendanceSnap, inventoryAssetsSnap, inventoryConsumablesSnap] = await Promise.all([
       getDocs(collection(db, "schedule")),
       getDocs(collection(db, "series")),
       getDoc(doc(db, "meta", "houseRules")),
@@ -3203,6 +3400,7 @@ $("exportDataBtn").addEventListener("click", async () => {
       getDocs(collection(db, "plantGuide")),
       getDocs(collection(db, "specialEvents")),
       getDocs(collection(db, "plantTypes")),
+      getDocs(collection(db, "harvestDestinations")),
       getDocs(collection(db, "harvests")),
       getDocs(collection(db, "transplants")),
       getDocs(collection(db, "germinations")),
@@ -3223,6 +3421,7 @@ $("exportDataBtn").addEventListener("click", async () => {
       plantGuide: Object.fromEntries(plantGuideSnap.docs.map(d => [d.id, d.data()])),
       specialEvents: Object.fromEntries(specialEventsSnap.docs.map(d => [d.id, d.data()])),
       plantTypes: Object.fromEntries(plantTypesSnap.docs.map(d => [d.id, d.data()])),
+      harvestDestinations: Object.fromEntries(harvestDestinationsSnap.docs.map(d => [d.id, d.data()])),
       harvests: Object.fromEntries(harvestsSnap.docs.map(d => [d.id, d.data()])),
       transplants: Object.fromEntries(transplantsSnap.docs.map(d => [d.id, d.data()])),
       germinations: Object.fromEntries(germinationsSnap.docs.map(d => [d.id, d.data()])),
@@ -3264,6 +3463,7 @@ $("importFileInput").addEventListener("change", async () => {
     Object.entries(dump.plantGuide || {}).forEach(([id, data]) => ops.push(["plantGuide", id, data]));
     Object.entries(dump.specialEvents || {}).forEach(([id, data]) => ops.push(["specialEvents", id, data]));
     Object.entries(dump.plantTypes || {}).forEach(([id, data]) => ops.push(["plantTypes", id, data]));
+    Object.entries(dump.harvestDestinations || {}).forEach(([id, data]) => ops.push(["harvestDestinations", id, data]));
     Object.entries(dump.harvests || {}).forEach(([id, data]) => ops.push(["harvests", id, data]));
     Object.entries(dump.transplants || {}).forEach(([id, data]) => ops.push(["transplants", id, data]));
     Object.entries(dump.germinations || {}).forEach(([id, data]) => ops.push(["germinations", id, data]));

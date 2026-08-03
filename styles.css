@@ -89,7 +89,6 @@ header.top p { margin: 0; color: #666; font-size: 13px; }
 .ds-status-box { text-align: right; }
 .ds-now-clock { font-size: 11px; color: #999; margin-right: 8px; font-variant-numeric: tabular-nums; }
 .repeat-field { display: flex; align-items: flex-start; gap: 8px; margin-bottom: 12px; }
-.repeat-field input { margin-top: 2px; }
 .repeat-field .txt { font-size: 12px; color: #555; }
 .repeat-field .txt small { display: block; color: #999; margin-top: 2px; }
 .repeat-frequency { margin: 6px 0; }
@@ -381,6 +380,13 @@ header.top p { margin: 0; color: #666; font-size: 13px; }
   .standing-type { flex: 1; }
   .standing-qty { text-align: right; }
 }
+
+.kpi-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 18px; }
+.kpi-tile { background: #fff; border: 1px solid #e5e5e5; border-radius: 10px; padding: 14px 16px; }
+.kpi-label { font-size: 11px; color: #888; text-transform: uppercase; letter-spacing: 0.03em; margin-bottom: 6px; }
+.kpi-value { font-size: 24px; font-weight: 700; color: #1d1d1f; font-variant-numeric: tabular-nums; }
+
+.dash-donut-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; margin-bottom: 18px; }
 
 .chart-wrap { position: relative; height: 220px; margin-bottom: 14px; }
 .dash-table { width: 100%; border-collapse: collapse; font-size: 12.5px; margin-top: 10px; }
