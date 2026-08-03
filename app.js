@@ -561,19 +561,24 @@ $("dsResetBtn").addEventListener("click", async () => {
 const overlay = $("overlay");
 let editingDate = null, editingEventId = null;
 let modalIsNewEvent = true;
+let modalHasSeries = false;
 
 const REPEAT_FREQUENCY_TEXT = {
-  daily: "every day",
+  daily: "every day, including maintenance Mondays — skipping only days marked as a holiday / off day",
   weekly: "every week on this same weekday",
   biweekly: "every 2 weeks on this same weekday",
   monthly: "every month on this same day of the month",
-  yearly: "every year on this same date"
+  yearly: "every year on this same date",
+  visitorOnly: "on every visitor day (skipping maintenance and holiday days)",
+  noVisitorOnly: "on every maintenance day (skipping visitor and holiday days)"
 };
 function updateRepeatHint(){
   const freqText = REPEAT_FREQUENCY_TEXT[$("fFrequency").value] || REPEAT_FREQUENCY_TEXT.daily;
-  $("repeatHint").textContent = modalIsNewEvent
-    ? "Happens " + freqText + " going forward, including maintenance Mondays — skips only days marked as a holiday / off day. Keeps going indefinitely until you delete the series."
-    : "Turns this into a recurring series starting today that happens " + freqText + ", including maintenance Mondays — skips only days marked as a holiday / off day. Keeps going indefinitely until you delete the series.";
+  if (modalHasSeries){
+    $("repeatHint").textContent = "Save with \"This and all future days in the series\" selected above to switch this series to happen " + freqText + " going forward — future days that no longer match are removed, and newly-matching days are added automatically.";
+  } else {
+    $("repeatHint").textContent = (modalIsNewEvent ? "Happens " : "Turns this into a recurring series starting today that happens ") + freqText + ". Keeps going indefinitely until you delete the series.";
+  }
 }
 $("fRepeat").addEventListener("change", () => {
   $("repeatFrequencyRow").style.display = $("fRepeat").checked ? "block" : "none";
@@ -606,13 +611,25 @@ function openEventModal(dateKey, eventId){
 
   // Repeat checkbox: offered when creating a new event, and also when editing an
   // existing one-off event (so it can be turned into a recurring series later if you forgot
-  // to tick it originally). Not shown if the event is already part of a series — use the
-  // "this and all future days" scope option above instead.
+  // to tick it originally). When the event is already part of a series, the checkbox is
+  // replaced by a direct repeat-pattern editor — pick a new pattern and save with "this and
+  // all future days" to change how the series repeats (e.g. fix "daily" to "visitor days only").
   modalIsNewEvent = isNew;
-  $("fRepeat").checked = false;
-  $("fFrequency").value = "daily";
-  $("repeatFrequencyRow").style.display = "none";
-  $("repeatFieldRow").style.display = hasSeries ? "none" : "flex";
+  modalHasSeries = !!hasSeries;
+  $("repeatFieldRow").style.display = "flex";
+  if (hasSeries){
+    const series = seriesCache.find(s => s.id === ev.seriesId);
+    $("fRepeat").style.display = "none";
+    $("repeatCheckboxLabel").style.display = "none";
+    $("fFrequency").value = (series && series.frequency) || "daily";
+    $("repeatFrequencyRow").style.display = "block";
+  } else {
+    $("fRepeat").style.display = "";
+    $("repeatCheckboxLabel").style.display = "";
+    $("fRepeat").checked = false;
+    $("fFrequency").value = "daily";
+    $("repeatFrequencyRow").style.display = "none";
+  }
   updateRepeatHint();
 
   overlay.classList.add("active");
@@ -626,10 +643,14 @@ overlay.addEventListener("click", (e) => { if (e.target === overlay) closeEventM
 // frequency. Daily repeats every day; weekly/biweekly repeat on the same weekday every 1/2
 // weeks; monthly/yearly repeat on the same day-of-month / same date every 1/12 months —
 // months that don't have the anchor day (e.g. a 31st anchor in February) are simply skipped.
+// visitorOnly/noVisitorOnly repeat on every day of that dayType instead of a fixed calendar
+// pattern, so the event follows whichever days actually turn out to have (or not have) visitors.
 function matchesFrequency(dateKey, anchorKey, frequency){
   if (!frequency || frequency === "daily") return true;
   const d = toDate(dateKey), anchor = toDate(anchorKey);
   if (d < anchor) return false;
+  if (frequency === "visitorOnly") return viewDay(dateKey).dayType === "visitor";
+  if (frequency === "noVisitorOnly") return viewDay(dateKey).dayType === "maintenance";
   if (frequency === "weekly" || frequency === "biweekly"){
     const diffDays = Math.round((d - anchor) / 86400000);
     return diffDays % (frequency === "weekly" ? 7 : 14) === 0;
@@ -699,9 +720,31 @@ async function topUpAllSeries(){
   }
 }
 
-// updates every already-materialized occurrence of a series from fromKey onward,
-// and updates the series template so future auto-generated days match too.
+// Updates every already-materialized occurrence of a series from fromKey onward, and updates
+// the series template so future auto-generated days match too. If fields.frequency differs
+// from the series' current pattern, future occurrences that no longer fit the new pattern are
+// removed first, and materializeSeries then backfills any newly-matching days that don't have
+// the event yet — so switching e.g. "daily" to "visitor days only" cleans up as well as adds.
 async function updateSeriesForward(seriesId, fromKey, fields){
+  const series = seriesCache.find(s => s.id === seriesId);
+  const newFrequency = fields.frequency || (series && series.frequency) || "daily";
+
+  if (series && newFrequency !== series.frequency){
+    const dropBatch = writeBatch(db);
+    let dropped = 0;
+    Object.keys(scheduleCache).forEach(key => {
+      if (key < fromKey) return;
+      const dayEntry = scheduleCache[key];
+      if (!dayEntry || !dayEntry.events) return;
+      if (!dayEntry.events.some(e => e.seriesId === seriesId)) return;
+      if (matchesFrequency(key, series.fromDate, newFrequency)) return;
+      dayEntry.events = dayEntry.events.filter(e => e.seriesId !== seriesId);
+      dropBatch.set(doc(db, "schedule", key), dayEntry);
+      dropped++;
+    });
+    if (dropped > 0) await dropBatch.commit();
+  }
+
   const batch = writeBatch(db);
   let touched = 0;
   Object.keys(scheduleCache).forEach(key => {
@@ -716,10 +759,13 @@ async function updateSeriesForward(seriesId, fromKey, fields){
   });
   if (touched > 0) await batch.commit();
 
+  const seriesFields = { start: fields.start, end: fields.end, title: fields.title, person: fields.person, notes: fields.notes, frequency: newFrequency };
   const seriesRef = doc(db, "series", seriesId);
-  await updateDoc(seriesRef, fields);
+  await updateDoc(seriesRef, seriesFields);
   const idx = seriesCache.findIndex(s => s.id === seriesId);
-  if (idx >= 0) seriesCache[idx] = { ...seriesCache[idx], ...fields };
+  if (idx >= 0) seriesCache[idx] = { ...seriesCache[idx], ...seriesFields };
+
+  if (idx >= 0) await materializeSeries(seriesId, fromKey, seriesCache[idx], horizonEnd(fromKey));
 }
 
 $("saveBtn").addEventListener("click", async () => {
@@ -737,7 +783,7 @@ $("saveBtn").addEventListener("click", async () => {
     const ev = entry.events.find(e => e.id === editingEventId);
     const scopeAll = ev && ev.seriesId && document.querySelector('input[name=seriesScope]:checked').value === "all";
     if (scopeAll){
-      await updateSeriesForward(ev.seriesId, editingDate, { start, end, title, person, notes });
+      await updateSeriesForward(ev.seriesId, editingDate, { start, end, title, person, notes, frequency });
     } else if (ev && !ev.seriesId && repeat){
       await convertToRecurring(editingDate, editingEventId, { start, end, title, person, notes, frequency });
     } else {

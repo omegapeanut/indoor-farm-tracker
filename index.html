@@ -30,7 +30,7 @@
     </button>
     <button class="tab-btn" data-tab="opslog">
       <span class="tab-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4.5" y="4" width="15" height="17" rx="2"/><line x1="8" y1="9" x2="16" y2="9"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="13" y2="17"/></svg></span>
-      <span class="tab-label">Ops Log</span>
+      <span class="tab-label">Ops &amp; Planning</span>
     </button>
     <button class="tab-btn" data-tab="plants">
       <span class="tab-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 4c-9 0-16 6-16 15 9 0 15-6 15-15z"/><path d="M5 19c3-4 7-8 12-12"/></svg></span>
@@ -551,7 +551,7 @@
     <div class="repeat-field" id="repeatFieldRow">
       <input type="checkbox" id="fRepeat">
       <div class="txt">
-        <label for="fRepeat" style="margin:0; font-size:12px; color:#333;">Repeat this event</label>
+        <label for="fRepeat" id="repeatCheckboxLabel" style="margin:0; font-size:12px; color:#333;">Repeat this event</label>
         <div class="repeat-frequency" id="repeatFrequencyRow" style="display:none;">
           <select id="fFrequency">
             <option value="daily">Daily</option>
@@ -559,6 +559,8 @@
             <option value="biweekly">Bi-weekly</option>
             <option value="monthly">Monthly</option>
             <option value="yearly">Yearly</option>
+            <option value="visitorOnly">Only on visitor days</option>
+            <option value="noVisitorOnly">Only on non-visitor days (maintenance)</option>
           </select>
         </div>
         <small id="repeatHint">Happens every day going forward, including maintenance Mondays — skips only days marked as a holiday / off day. Keeps going indefinitely until you delete the series.</small>
