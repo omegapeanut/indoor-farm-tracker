@@ -93,5 +93,20 @@ service cloud.firestore {
       allow create: if true;
       allow update, delete: if isAdmin();
     }
+
+    match /specialEvents/{id} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /inventoryAssets/{id} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /inventoryConsumables/{id} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
   }
 }
