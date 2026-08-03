@@ -73,6 +73,7 @@
             <span><span class="dot" style="background:#e6f4ea"></span>Visitor day</span>
             <span><span class="dot" style="background:#fde7d9"></span>Maintenance / no visitors</span>
             <span><span class="dot" style="background:#ede4fb"></span>Holiday / off day</span>
+            <span><span class="dot" style="background:#f0c86b"></span>★ Special event</span>
             <span>Click a day to view its full schedule</span>
           </div>
         </div>
@@ -533,8 +534,17 @@
     <div class="repeat-field" id="repeatFieldRow">
       <input type="checkbox" id="fRepeat">
       <div class="txt">
-        <label for="fRepeat" style="margin:0; font-size:12px; color:#333;">Repeat daily, ongoing</label>
-        <small>Happens every day going forward — skips Mondays (maintenance) and any day marked as a holiday / off day. Keeps going indefinitely until you delete the series.</small>
+        <label for="fRepeat" style="margin:0; font-size:12px; color:#333;">Repeat this event</label>
+        <div class="repeat-frequency" id="repeatFrequencyRow" style="display:none;">
+          <select id="fFrequency">
+            <option value="daily">Daily</option>
+            <option value="weekly">Weekly</option>
+            <option value="biweekly">Bi-weekly</option>
+            <option value="monthly">Monthly</option>
+            <option value="yearly">Yearly</option>
+          </select>
+        </div>
+        <small id="repeatHint">Happens every day going forward, including maintenance Mondays — skips only days marked as a holiday / off day. Keeps going indefinitely until you delete the series.</small>
       </div>
     </div>
     <div class="series-scope" id="seriesScopeRow" style="display:none;">
