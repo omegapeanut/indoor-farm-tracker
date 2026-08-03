@@ -1862,6 +1862,7 @@ onSnapshot(collection(db, "plantTypes"), (snap) => {
   plantTypesCache = snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a,b) => (a.name||"").localeCompare(b.name||""));
   renderPlantTypes();
   populatePlantTypeSelects();
+  renderStandingStock();
 }, () => setSyncStatus("err", "Connection error"));
 
 function plantTypeName(id){
@@ -1984,8 +1985,76 @@ Object.keys(LOG_CONFIGS).forEach(col => {
     LOG_SETTERS[col](snap.docs.map(d => ({ id: d.id, photos: [], ...d.data() })));
     renderLogSection(col);
     if (col !== "harvests" && isDashboardActive()) renderDashboard();
+    renderStandingStock();
   }, () => setSyncStatus("err", "Connection error"));
 });
+
+// ---- Currently Growing (computed live count, not its own collection) ----
+// Standing quantity per location per plant type, derived entirely from the four logs above:
+// germinations add to a germination room, transplants move stock from a germination room to a
+// growing level, and harvests/losses remove stock from wherever they're logged against.
+let standingFilterLoc = "";
+function computeStandingStock(){
+  const stock = {};
+  Object.keys(LOCATIONS).forEach(loc => stock[loc] = {});
+  const add = (loc, plantTypeId, delta) => {
+    if (!loc || !plantTypeId || !stock[loc]) return;
+    stock[loc][plantTypeId] = (stock[loc][plantTypeId] || 0) + delta;
+  };
+  germinationsCache.forEach(g => add(g.room, g.plantTypeId, g.quantity || 0));
+  transplantsCache.forEach(t => {
+    add(t.sourceRoom, t.plantTypeId, -(t.quantity || 0));
+    add(t.destLevel, t.plantTypeId, t.quantity || 0);
+  });
+  harvestsCache.forEach(h => add(h.location, h.plantTypeId, -(h.quantity || 0)));
+  lossesCache.forEach(l => add(l.location, l.plantTypeId, -(l.quantity || 0)));
+  return stock;
+}
+
+$("standingLocationRow").addEventListener("click", (e) => {
+  const btn = e.target.closest(".dash-loc-btn");
+  if (!btn) return;
+  standingFilterLoc = btn.dataset.loc;
+  $("standingLocationRow").querySelectorAll(".dash-loc-btn").forEach(b => b.classList.toggle("active", b === btn));
+  renderStandingStock();
+});
+
+function renderStandingStock(){
+  const list = $("standingList");
+  if (!list) return;
+  list.innerHTML = "";
+
+  const stock = computeStandingStock();
+  const rows = [];
+  Object.keys(LOCATIONS).forEach(loc => {
+    if (standingFilterLoc && loc !== standingFilterLoc) return;
+    Object.entries(stock[loc]).forEach(([plantTypeId, qty]) => {
+      const clamped = Math.max(0, qty);
+      if (clamped === 0) return;
+      const pt = plantTypesCache.find(p => p.id === plantTypeId);
+      rows.push({ loc, plantType: pt ? pt.name : "(deleted plant type)", qty: clamped });
+    });
+  });
+  rows.sort((a,b) => LOCATIONS[a.loc].localeCompare(LOCATIONS[b.loc]) || a.plantType.localeCompare(b.plantType));
+
+  if (rows.length === 0){
+    const empty = document.createElement("div");
+    empty.className = "empty-state";
+    empty.textContent = "Nothing currently growing yet — log germinations, transfers, harvests, and losses to see live counts here.";
+    list.appendChild(empty);
+    return;
+  }
+
+  rows.forEach(r => {
+    const row = document.createElement("div");
+    row.className = "standing-row";
+    const locEl = document.createElement("span"); locEl.className = "standing-loc"; locEl.textContent = LOCATIONS[r.loc];
+    const typeEl = document.createElement("span"); typeEl.className = "standing-type"; typeEl.textContent = r.plantType;
+    const qtyEl = document.createElement("span"); qtyEl.className = "standing-qty"; qtyEl.textContent = r.qty;
+    row.appendChild(locEl); row.appendChild(typeEl); row.appendChild(qtyEl);
+    list.appendChild(row);
+  });
+}
 
 function locOptLabel(key, opts){
   const found = opts.find(([k]) => k === key);
@@ -2320,7 +2389,7 @@ $("dashLocationRow").addEventListener("click", (e) => {
   const btn = e.target.closest(".dash-loc-btn");
   if (!btn) return;
   dashboardScopeLoc = btn.dataset.loc;
-  document.querySelectorAll(".dash-loc-btn").forEach(b => b.classList.toggle("active", b === btn));
+  $("dashLocationRow").querySelectorAll(".dash-loc-btn").forEach(b => b.classList.toggle("active", b === btn));
   renderDashboard();
 });
 
