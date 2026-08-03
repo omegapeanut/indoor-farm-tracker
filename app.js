@@ -297,6 +297,9 @@ function renderCalendar(){
     if (key === toKey(new Date())) cell.classList.add("today");
     if (key === highlightDate) cell.classList.add("search-highlight");
 
+    const specialToday = specialEventsCache.filter(ev => key >= (ev.startDate || "") && key <= (ev.endDate || ev.startDate || ""));
+    if (specialToday.length) cell.classList.add("has-special");
+
     const numRow = document.createElement("div");
     numRow.className = "day-num";
     const tagClass = entry.dayType === "visitor" ? "visitor" : (entry.dayType === "holiday" ? "holiday" : "maint");
@@ -305,6 +308,12 @@ function renderCalendar(){
 
     const summary = document.createElement("div");
     summary.className = "day-summary";
+    specialToday.forEach(ev => {
+      const line = document.createElement("span");
+      line.className = "ev special";
+      line.textContent = "★ " + ev.title;
+      summary.appendChild(line);
+    });
     const sorted = entry.events.slice().sort((a,b) => a.start.localeCompare(b.start));
     sorted.slice(0,3).forEach(ev => {
       const line = document.createElement("span");
