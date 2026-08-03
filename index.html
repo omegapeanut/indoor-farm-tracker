@@ -546,6 +546,7 @@
       <div class="subtabs">
         <button class="subtab-btn active" data-subtab="assets">Assets</button>
         <button class="subtab-btn" data-subtab="consumables">Consumables</button>
+        <button class="subtab-btn" data-subtab="purchasePlanning">Purchase Planning</button>
       </div>
 
       <!-- ASSETS -->
@@ -584,6 +585,24 @@
           <span>Item</span><span>Quantity</span><span>Last counted</span><span></span>
         </div>
         <div id="consumablesList"></div>
+      </div>
+
+      <!-- PURCHASE PLANNING -->
+      <div class="subtab-panel" data-subtab="purchasePlanning">
+        <p class="hint">Items you're planning to buy. Price is only visible when logged in as admin.</p>
+        <div class="finding-add" id="addPurchasePlanRow" style="display:none;">
+          <input type="text" id="newPurchasePlanItem" placeholder="Item name (e.g. Extra grow light)">
+          <div class="row2">
+            <div class="field"><label>Quantity</label><input type="number" id="newPurchasePlanQuantity" min="0" step="1" value="1"></div>
+            <div class="field"><label>Price</label><input type="number" id="newPurchasePlanPrice" min="0" step="0.01" placeholder="e.g. 49.90"></div>
+          </div>
+          <textarea id="newPurchasePlanNotes" rows="2" placeholder="Optional notes…"></textarea>
+          <div class="finding-add-actions">
+            <span class="hint" style="margin:0;">Price is only shown to admin</span>
+            <button id="addPurchasePlanBtn">Add</button>
+          </div>
+        </div>
+        <div id="purchasePlanList" style="margin-top:10px;"></div>
       </div>
     </div>
   </div>

@@ -118,5 +118,10 @@ service cloud.firestore {
       allow read: if true;
       allow write: if isAdmin();
     }
+
+    match /purchasePlans/{id} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
   }
 }

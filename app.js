@@ -117,6 +117,7 @@ onAuthStateChanged(auth, (user) => {
   if (isDashboardActive()) renderDashboard();
   renderAssets();
   renderConsumables();
+  renderPurchasePlans();
 });
 
 function refreshAdminUI(){
@@ -139,6 +140,7 @@ function refreshAdminUI(){
   $("addEnvReadingsRow").style.display = isAdmin ? "flex" : "none";
   $("addAssetRow").style.display = isAdmin ? "flex" : "none";
   $("addConsumableRow").style.display = isAdmin ? "flex" : "none";
+  $("addPurchasePlanRow").style.display = isAdmin ? "flex" : "none";
   $("dataTabBtn").style.display = isAdmin ? "inline-block" : "none";
   if (!isAdmin){
     $("staffPanel").style.display = "none";
@@ -3224,6 +3226,194 @@ $("addConsumableBtn").addEventListener("click", async () => {
   }
 });
 
+// ============================================================================
+// INVENTORY — Purchase Planning (Firestore: purchasePlans/{id}) — items you're
+// planning to buy. Price is stored on the same document as everything else
+// (this app's Firestore rules are open-read, same as staff PINs — see the
+// note at the top of firestore.rules) but is only ever rendered in the UI
+// when isAdmin is true, so casual visitors browsing the site don't see it.
+// ============================================================================
+let purchasePlansCache = [];
+const expandedPurchasePlans = {};
+
+onSnapshot(collection(db, "purchasePlans"), (snap) => {
+  purchasePlansCache = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  renderPurchasePlans();
+}, () => setSyncStatus("err", "Connection error"));
+
+function renderPurchasePlans(){
+  const list = $("purchasePlanList");
+  if (!list) return;
+  list.innerHTML = "";
+
+  const items = purchasePlansCache.slice().sort((a,b) => (a.purchased === b.purchased) ? (a.item || "").localeCompare(b.item || "") : (a.purchased ? 1 : -1));
+  if (items.length === 0){
+    const empty = document.createElement("div");
+    empty.className = "empty-state";
+    empty.textContent = "No items planned yet.";
+    list.appendChild(empty);
+    return;
+  }
+
+  items.forEach(p => {
+    const isOpen = !!expandedPurchasePlans[p.id];
+    const card = document.createElement("div");
+    card.className = "finding-card" + (isOpen ? " expanded" : "");
+
+    const header = document.createElement("div");
+    header.className = "finding-header";
+    const left = document.createElement("div");
+    left.className = "finding-header-left";
+
+    const checkWrap = document.createElement("label");
+    checkWrap.className = "purchase-purchased-check";
+    const check = document.createElement("input");
+    check.type = "checkbox"; check.checked = !!p.purchased;
+    check.disabled = !isAdmin;
+    check.addEventListener("click", (e) => e.stopPropagation());
+    check.addEventListener("change", async () => {
+      try { await updateDoc(doc(db, "purchasePlans", p.id), { purchased: check.checked }); }
+      catch (err){ alert("Couldn't update this item: " + err.message); check.checked = !check.checked; }
+    });
+    checkWrap.appendChild(check);
+    left.appendChild(checkWrap);
+
+    const chevron = document.createElement("span");
+    chevron.className = "finding-chevron"; chevron.textContent = "▶";
+    left.appendChild(chevron);
+
+    const nameEl = document.createElement("span");
+    nameEl.className = "finding-date purchase-item-name" + (p.purchased ? " purchased" : "");
+    nameEl.textContent = p.item || "Untitled item";
+    left.appendChild(nameEl);
+
+    const qtyTag = document.createElement("span");
+    qtyTag.className = "finding-latest-tag";
+    qtyTag.textContent = "Qty " + (p.quantity ?? 1);
+    left.appendChild(qtyTag);
+
+    if (isAdmin && p.price != null && p.price !== ""){
+      const priceTag = document.createElement("span");
+      priceTag.className = "purchase-price-tag";
+      priceTag.textContent = "$" + Number(p.price).toFixed(2);
+      left.appendChild(priceTag);
+    }
+
+    if (!isOpen && p.notes){
+      const preview = document.createElement("span");
+      preview.className = "finding-preview";
+      preview.textContent = p.notes;
+      left.appendChild(preview);
+    }
+    header.appendChild(left);
+
+    if (isAdmin){
+      const del = document.createElement("button");
+      del.className = "icon-btn"; del.textContent = "✕"; del.title = "Delete item";
+      del.addEventListener("click", async (e) => {
+        e.stopPropagation();
+        if (!confirm("Delete \"" + (p.item || "this item") + "\" from the purchase plan?")) return;
+        try { await deleteDoc(doc(db, "purchasePlans", p.id)); }
+        catch (err){ alert("Couldn't delete this item: " + err.message); }
+      });
+      header.appendChild(del);
+    }
+    header.addEventListener("click", () => {
+      if (expandedPurchasePlans[p.id]) delete expandedPurchasePlans[p.id]; else expandedPurchasePlans[p.id] = true;
+      renderPurchasePlans();
+    });
+    card.appendChild(header);
+
+    const body = document.createElement("div");
+    body.className = "finding-body";
+    if (isOpen){
+      const nameInput = document.createElement("div");
+      nameInput.className = "finding-text";
+      nameInput.style.fontWeight = "600";
+      nameInput.contentEditable = isAdmin ? "true" : "false";
+      nameInput.textContent = p.item || "";
+      nameInput.addEventListener("click", (e) => e.stopPropagation());
+      nameInput.addEventListener("blur", async () => {
+        if (!isAdmin) return;
+        const val = nameInput.innerText.trim();
+        if (!val || val === p.item) { nameInput.textContent = p.item || ""; return; }
+        try { await updateDoc(doc(db, "purchasePlans", p.id), { item: val }); }
+        catch (err){ alert("Couldn't save the item name: " + err.message); nameInput.textContent = p.item || ""; }
+      });
+      body.appendChild(nameInput);
+
+      if (isAdmin){
+        const row = document.createElement("div");
+        row.className = "row2";
+        row.style.marginTop = "8px";
+        const qtyField = document.createElement("div"); qtyField.className = "field";
+        qtyField.innerHTML = "<label>Quantity</label>";
+        const qtyInput = document.createElement("input");
+        qtyInput.type = "number"; qtyInput.min = "0"; qtyInput.step = "1"; qtyInput.value = p.quantity ?? 1;
+        qtyInput.addEventListener("change", async () => {
+          const val = parseInt(qtyInput.value, 10) || 0;
+          try { await updateDoc(doc(db, "purchasePlans", p.id), { quantity: val }); }
+          catch (err){ alert("Couldn't save the quantity: " + err.message); }
+        });
+        qtyField.appendChild(qtyInput);
+
+        const priceField = document.createElement("div"); priceField.className = "field";
+        priceField.innerHTML = "<label>Price</label>";
+        const priceInput = document.createElement("input");
+        priceInput.type = "number"; priceInput.min = "0"; priceInput.step = "0.01"; priceInput.value = p.price ?? "";
+        priceInput.addEventListener("change", async () => {
+          const val = priceInput.value === "" ? null : Number(priceInput.value);
+          try { await updateDoc(doc(db, "purchasePlans", p.id), { price: val }); }
+          catch (err){ alert("Couldn't save the price: " + err.message); }
+        });
+        priceField.appendChild(priceInput);
+
+        row.appendChild(qtyField); row.appendChild(priceField);
+        body.appendChild(row);
+      }
+
+      const notes = document.createElement("div");
+      notes.className = "finding-text";
+      notes.contentEditable = isAdmin ? "true" : "false";
+      notes.textContent = p.notes || "";
+      notes.addEventListener("click", (e) => e.stopPropagation());
+      notes.addEventListener("blur", async () => {
+        if (!isAdmin) return;
+        const val = notes.innerText.trim();
+        if (val === p.notes) return;
+        try { await updateDoc(doc(db, "purchasePlans", p.id), { notes: val }); }
+        catch (err){ alert("Couldn't save the notes: " + err.message); notes.textContent = p.notes || ""; }
+      });
+      body.appendChild(notes);
+    }
+    card.appendChild(body);
+    list.appendChild(card);
+  });
+}
+
+$("addPurchasePlanBtn").addEventListener("click", async () => {
+  if (!isAdmin) return;
+  const itemInput = $("newPurchasePlanItem");
+  const qtyInput = $("newPurchasePlanQuantity");
+  const priceInput = $("newPurchasePlanPrice");
+  const notesInput = $("newPurchasePlanNotes");
+  const item = requireValue(itemInput, "an item name");
+  if (!item) return;
+  const quantity = parseInt(qtyInput.value, 10) || 1;
+  const price = priceInput.value === "" ? null : Number(priceInput.value);
+  const notes = notesInput.value.trim();
+  const btn = $("addPurchasePlanBtn");
+  btn.disabled = true; btn.textContent = "Adding…";
+  try {
+    await addDoc(collection(db, "purchasePlans"), { item, quantity, price, notes, purchased: false });
+    itemInput.value = ""; qtyInput.value = "1"; priceInput.value = ""; notesInput.value = "";
+  } catch (err){
+    alert("Couldn't save this item: " + err.message + "\n\nIf this says \"permission denied\", the purchasePlans rule in firestore.rules needs to be published in the Firebase console (Firestore Database → Rules).");
+  } finally {
+    btn.disabled = false; btn.textContent = "Add";
+  }
+});
+
 // Photo/annotate pipeline is shared by every collection that stores records
 // as { id, photos: [...] } — Findings Log, Plant Guide, Special Events,
 // Inventory Assets, and the four Grow Log sections. Registry keeps adding a
@@ -3391,7 +3581,7 @@ $("annotateSave").addEventListener("click", async () => {
 $("exportDataBtn").addEventListener("click", async () => {
   $("dataStatus").textContent = "Gathering data…";
   try {
-    const [scheduleSnap, seriesSnap, houseRulesSnap, findingsSnap, proposalsSnap, plantGuideSnap, specialEventsSnap, plantTypesSnap, harvestDestinationsSnap, harvestsSnap, transplantsSnap, germinationsSnap, lossesSnap, envReadingsSnap, staffSnap, attendanceSnap, inventoryAssetsSnap, inventoryConsumablesSnap] = await Promise.all([
+    const [scheduleSnap, seriesSnap, houseRulesSnap, findingsSnap, proposalsSnap, plantGuideSnap, specialEventsSnap, plantTypesSnap, harvestDestinationsSnap, harvestsSnap, transplantsSnap, germinationsSnap, lossesSnap, envReadingsSnap, staffSnap, attendanceSnap, inventoryAssetsSnap, inventoryConsumablesSnap, purchasePlansSnap] = await Promise.all([
       getDocs(collection(db, "schedule")),
       getDocs(collection(db, "series")),
       getDoc(doc(db, "meta", "houseRules")),
@@ -3409,7 +3599,8 @@ $("exportDataBtn").addEventListener("click", async () => {
       getDocs(collection(db, "staff")),
       getDocs(collection(db, "attendance")),
       getDocs(collection(db, "inventoryAssets")),
-      getDocs(collection(db, "inventoryConsumables"))
+      getDocs(collection(db, "inventoryConsumables")),
+      getDocs(collection(db, "purchasePlans"))
     ]);
     const dump = {
       exportedAt: new Date().toISOString(),
@@ -3430,7 +3621,8 @@ $("exportDataBtn").addEventListener("click", async () => {
       staff: Object.fromEntries(staffSnap.docs.map(d => [d.id, d.data()])),
       attendance: Object.fromEntries(attendanceSnap.docs.map(d => [d.id, d.data()])),
       inventoryAssets: Object.fromEntries(inventoryAssetsSnap.docs.map(d => [d.id, d.data()])),
-      inventoryConsumables: Object.fromEntries(inventoryConsumablesSnap.docs.map(d => [d.id, d.data()]))
+      inventoryConsumables: Object.fromEntries(inventoryConsumablesSnap.docs.map(d => [d.id, d.data()])),
+      purchasePlans: Object.fromEntries(purchasePlansSnap.docs.map(d => [d.id, d.data()]))
     };
     const blob = new Blob([JSON.stringify(dump, null, 2)], { type: "application/json" });
     const a = document.createElement("a");
@@ -3473,6 +3665,7 @@ $("importFileInput").addEventListener("change", async () => {
     Object.entries(dump.attendance || {}).forEach(([id, data]) => ops.push(["attendance", id, data]));
     Object.entries(dump.inventoryAssets || {}).forEach(([id, data]) => ops.push(["inventoryAssets", id, data]));
     Object.entries(dump.inventoryConsumables || {}).forEach(([id, data]) => ops.push(["inventoryConsumables", id, data]));
+    Object.entries(dump.purchasePlans || {}).forEach(([id, data]) => ops.push(["purchasePlans", id, data]));
 
     // Firestore batches cap at 500 operations — chunk to be safe.
     for (let i = 0; i < ops.length; i += 400){
