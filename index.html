@@ -632,11 +632,11 @@
       <textarea id="fNotes" placeholder="Optional notes"></textarea>
     </div>
     <div class="repeat-field" id="repeatFieldRow">
-      <input type="checkbox" id="fRepeat">
-      <div class="txt">
-        <label for="fRepeat" id="repeatCheckboxLabel" style="margin:0; font-size:12px; color:#333;">Repeat this event</label>
-        <div class="repeat-frequency" id="repeatFrequencyRow" style="display:none;">
+      <div class="txt" style="width:100%;">
+        <label for="fFrequency" style="display:block; margin:0 0 4px; font-size:12px; color:#333;">Repeat</label>
+        <div class="repeat-frequency" id="repeatFrequencyRow">
           <select id="fFrequency">
+            <option value="none">Does not repeat</option>
             <option value="daily">Daily</option>
             <option value="weekly">Weekly</option>
             <option value="biweekly">Bi-weekly</option>
@@ -646,7 +646,7 @@
             <option value="noVisitorOnly">Only on non-visitor days (maintenance)</option>
           </select>
         </div>
-        <small id="repeatHint">Happens every day going forward, including maintenance Mondays — skips only days marked as a holiday / off day. Keeps going indefinitely until you delete the series.</small>
+        <small id="repeatHint">This event happens once, on this date only.</small>
       </div>
     </div>
     <div class="series-scope" id="seriesScopeRow" style="display:none;">
