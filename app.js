@@ -57,6 +57,15 @@ function escapeHtml(s){
 }
 function $(id){ return document.getElementById(id); }
 
+// Reads a text input's trimmed value; if empty, alerts, focuses the field, and returns null so
+// the caller can bail out — used by every "Add" button so a missing required field is obvious
+// instead of the button silently doing nothing.
+function requireValue(input, label){
+  const val = input.value.trim();
+  if (!val){ alert("Please enter " + label + " before adding."); input.focus(); return null; }
+  return val;
+}
+
 function defaultDay(key){
   const d = toDate(key);
   const isMonday = d.getDay() === 1;
@@ -868,8 +877,13 @@ $("addStaffBtn").addEventListener("click", async () => {
   const pin = pinInput.value.trim();
   if (!name || !/^\d{4}$/.test(pin)){ errEl.textContent = "Enter a name and a 4-digit PIN."; errEl.style.display = "block"; return; }
   if (staffCache.some(s => s.pin === pin)){ errEl.textContent = "That PIN is already assigned to someone else — pick a different one."; errEl.style.display = "block"; return; }
-  await addDoc(collection(db, "staff"), { name, pin });
-  nameInput.value = ""; pinInput.value = "";
+  try {
+    await addDoc(collection(db, "staff"), { name, pin });
+    nameInput.value = ""; pinInput.value = "";
+  } catch (err){
+    errEl.textContent = "Couldn't save this staff member: " + err.message;
+    errEl.style.display = "block";
+  }
 });
 
 // ============================================================================
@@ -1052,10 +1066,14 @@ function makeAttTimeGroup(rec, field, label, kind){
 $("addAttBtn").addEventListener("click", async () => {
   if (!isAdmin) return;
   const input = $("newAttName");
-  const name = input.value.trim();
+  const name = requireValue(input, "a staff name");
   if (!name) return;
-  await addDoc(collection(db, "attendance"), { date: attSelectedDate, name, signIn: "", signOut: "", signInLoc: null, signOutLoc: null });
-  input.value = "";
+  try {
+    await addDoc(collection(db, "attendance"), { date: attSelectedDate, name, signIn: "", signOut: "", signInLoc: null, signOutLoc: null });
+    input.value = "";
+  } catch (err){
+    alert("Couldn't add this attendance row: " + err.message);
+  }
 });
 $("newAttName").addEventListener("keydown", (e) => { if (e.key === "Enter") $("addAttBtn").click(); });
 
@@ -1211,11 +1229,16 @@ function renderRules(){
 $("addRuleBtn").addEventListener("click", async () => {
   if (!isAdmin) return;
   const input = $("newRuleInput");
-  const val = input.value.trim();
+  const val = requireValue(input, "a rule");
   if (!val) return;
   rulesCache.push(val);
   input.value = "";
-  await saveRules();
+  try {
+    await saveRules();
+  } catch (err){
+    rulesCache.pop();
+    alert("Couldn't save this rule: " + err.message + "\n\nIf this says \"permission denied\", the meta rule in firestore.rules needs to be published in the Firebase console (Firestore Database → Rules).");
+  }
   renderRules();
 });
 $("newRuleInput").addEventListener("keydown", (e) => { if (e.key === "Enter") $("addRuleBtn").click(); });
@@ -1378,12 +1401,20 @@ $("addFindingBtn").addEventListener("click", async () => {
   if (!isAdmin) return;
   const dateInput = $("newFindingDate");
   const textInput = $("newFindingInput");
-  const val = textInput.value.trim();
+  const val = requireValue(textInput, "some finding text");
   if (!val) return;
   const date = dateInput.value || toKey(new Date());
-  const newDoc = await addDoc(collection(db, "findings"), { date, text: val, photos: [] });
-  expandedFindings[newDoc.id] = true;
-  textInput.value = "";
+  const btn = $("addFindingBtn");
+  btn.disabled = true; btn.textContent = "Adding…";
+  try {
+    const newDoc = await addDoc(collection(db, "findings"), { date, text: val, photos: [] });
+    expandedFindings[newDoc.id] = true;
+    textInput.value = "";
+  } catch (err){
+    alert("Couldn't save this finding: " + err.message + "\n\nIf this says \"permission denied\", the findings rule in firestore.rules needs to be published in the Firebase console (Firestore Database → Rules).");
+  } finally {
+    btn.disabled = false; btn.textContent = "Add";
+  }
 });
 $("newFindingInput").addEventListener("keydown", (e) => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) $("addFindingBtn").click(); });
 (() => { const t = toKey(new Date()); $("newFindingDate").value = inRange(t) ? t : START_DATE; })();
@@ -1555,7 +1586,7 @@ $("addPlantBtn").addEventListener("click", async () => {
   if (!isAdmin) return;
   const titleInput = $("newPlantTitle");
   const notesInput = $("newPlantNotes");
-  const title = titleInput.value.trim();
+  const title = requireValue(titleInput, "a plant / topic name");
   if (!title) return;
   const notes = notesInput.value.trim();
   const btn = $("addPlantBtn");
@@ -1798,7 +1829,7 @@ $("addSpecialEventBtn").addEventListener("click", async () => {
   const startTimeInput = $("newSpecialEventStartTime");
   const endTimeInput = $("newSpecialEventEndTime");
   const notesInput = $("newSpecialEventNotes");
-  const title = titleInput.value.trim();
+  const title = requireValue(titleInput, "an event name");
   if (!title) return;
   const startDate = startInput.value || toKey(new Date());
   const endDate = endInput.value || "";
@@ -1886,7 +1917,7 @@ $("togglePlantTypesBtn").addEventListener("click", () => {
 $("addPlantTypeBtn").addEventListener("click", async () => {
   if (!isAdmin) return;
   const input = $("newPlantTypeName");
-  const name = input.value.trim();
+  const name = requireValue(input, "a plant type name");
   if (!name) return;
   try {
     await addDoc(collection(db, "plantTypes"), { name });
@@ -2518,7 +2549,7 @@ $("addAssetBtn").addEventListener("click", async () => {
   const nameInput = $("newAssetName");
   const qtyInput = $("newAssetQuantity");
   const notesInput = $("newAssetNotes");
-  const name = nameInput.value.trim();
+  const name = requireValue(nameInput, "an asset name");
   if (!name) return;
   const quantity = parseInt(qtyInput.value, 10) || 0;
   const notes = notesInput.value.trim();
@@ -2642,7 +2673,7 @@ $("addConsumableBtn").addEventListener("click", async () => {
   const qtyInput = $("newConsumableQuantity");
   const thresholdInput = $("newConsumableThreshold");
   const notesInput = $("newConsumableNotes");
-  const name = nameInput.value.trim();
+  const name = requireValue(nameInput, "an item name");
   if (!name) return;
   const unit = unitInput.value.trim();
   const quantity = parseInt(qtyInput.value, 10) || 0;
