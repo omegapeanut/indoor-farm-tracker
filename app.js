@@ -107,6 +107,7 @@ onAuthStateChanged(auth, (user) => {
   renderStaffList();
   renderRules();
   renderFindings();
+  renderProposals();
   renderPlantGuide();
   renderSpecialEvents();
   renderPlantTypes();
@@ -121,6 +122,7 @@ function refreshAdminUI(){
   $("adminArea").style.display = isAdmin ? "flex" : "none";
   $("addRuleRow").style.display = isAdmin ? "flex" : "none";
   $("addFindingRow").style.display = isAdmin ? "flex" : "none";
+  $("addProposalRow").style.display = isAdmin ? "flex" : "none";
   $("addPlantRow").style.display = isAdmin ? "flex" : "none";
   $("addSpecialEventRow").style.display = isAdmin ? "flex" : "none";
   $("dsAddEventBtn").style.display = isAdmin ? "inline-block" : "none";
@@ -1464,6 +1466,225 @@ $("addFindingBtn").addEventListener("click", async () => {
 });
 $("newFindingInput").addEventListener("keydown", (e) => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) $("addFindingBtn").click(); });
 (() => { const t = toKey(new Date()); $("newFindingDate").value = inRange(t) ? t : START_DATE; })();
+
+// ============================================================================
+// PLANNING / PROPOSALS (Firestore: proposals/{id}) — suggested future changes
+// or improvements, tracked with a status (Proposed/Approved/On Hold/Rejected).
+// Same collapsible-card/photo-strip pattern as Findings Log.
+// ============================================================================
+const PROPOSAL_STATUS_LABELS = { proposed: "Proposed", approved: "Approved", onHold: "On Hold", rejected: "Rejected" };
+let proposalsCache = [];
+let proposalsSearchTerm = "";
+const expandedProposals = {};
+
+onSnapshot(collection(db, "proposals"), (snap) => {
+  proposalsCache = snap.docs.map(d => ({ id: d.id, photos: [], ...d.data() }));
+  renderProposals();
+}, () => setSyncStatus("err", "Connection error"));
+
+$("proposalsSearch").addEventListener("input", (e) => { proposalsSearchTerm = e.target.value.trim().toLowerCase(); renderProposals(); });
+$("proposalsSearchClear").addEventListener("click", () => { $("proposalsSearch").value = ""; proposalsSearchTerm = ""; renderProposals(); });
+
+function renderProposals(){
+  const list = $("proposalsList");
+  list.innerHTML = "";
+
+  let items = proposalsCache.slice().sort((a,b) => (b.date || "").localeCompare(a.date || ""));
+  if (proposalsSearchTerm){
+    items = items.filter(p =>
+      (p.title || "").toLowerCase().includes(proposalsSearchTerm) ||
+      (p.notes || "").toLowerCase().includes(proposalsSearchTerm)
+    );
+  }
+
+  if (items.length === 0){
+    const empty = document.createElement("div");
+    empty.className = "empty-state";
+    empty.textContent = proposalsSearchTerm ? "No proposals match your search." : "No proposals logged yet.";
+    list.appendChild(empty);
+    return;
+  }
+
+  items.forEach(p => {
+    const isOpen = proposalsSearchTerm ? true : !!expandedProposals[p.id];
+    const card = document.createElement("div");
+    card.className = "finding-card" + (isOpen ? " expanded" : "");
+
+    const header = document.createElement("div");
+    header.className = "finding-header";
+    const left = document.createElement("div");
+    left.className = "finding-header-left";
+    const chevron = document.createElement("span");
+    chevron.className = "finding-chevron"; chevron.textContent = "▶";
+    const dateEl = document.createElement("span");
+    dateEl.className = "finding-date"; dateEl.textContent = p.date || "";
+    left.appendChild(chevron); left.appendChild(dateEl);
+    const badge = document.createElement("span");
+    badge.className = "proposal-badge " + (p.status || "proposed");
+    badge.textContent = PROPOSAL_STATUS_LABELS[p.status] || "Proposed";
+    left.appendChild(badge);
+    const titleTag = document.createElement("span");
+    titleTag.className = "finding-preview"; titleTag.style.fontWeight = "600"; titleTag.style.color = "#333";
+    titleTag.textContent = p.title || "Untitled proposal";
+    left.appendChild(titleTag);
+    if (!isOpen && p.notes){
+      const preview = document.createElement("span");
+      preview.className = "finding-preview";
+      preview.textContent = p.notes;
+      left.appendChild(preview);
+    }
+    header.appendChild(left);
+
+    if (isAdmin){
+      const del = document.createElement("button");
+      del.className = "icon-btn"; del.textContent = "✕"; del.title = "Delete proposal";
+      del.addEventListener("click", async (e) => {
+        e.stopPropagation();
+        if (!confirm("Delete this proposal and its photos?")) return;
+        try { await deleteDoc(doc(db, "proposals", p.id)); }
+        catch (err){ alert("Couldn't delete this proposal: " + err.message); }
+      });
+      header.appendChild(del);
+    }
+    header.addEventListener("click", () => {
+      if (expandedProposals[p.id]) delete expandedProposals[p.id]; else expandedProposals[p.id] = true;
+      renderProposals();
+    });
+    card.appendChild(header);
+
+    const body = document.createElement("div");
+    body.className = "finding-body";
+    if (isOpen){
+      const titleInput = document.createElement("div");
+      titleInput.className = "finding-text";
+      titleInput.style.fontWeight = "600";
+      titleInput.contentEditable = isAdmin ? "true" : "false";
+      titleInput.textContent = p.title || "";
+      titleInput.addEventListener("click", (e) => e.stopPropagation());
+      titleInput.addEventListener("blur", async () => {
+        if (!isAdmin) return;
+        const val = titleInput.innerText.trim();
+        if (!val || val === p.title) { titleInput.textContent = p.title || ""; return; }
+        try { await updateDoc(doc(db, "proposals", p.id), { title: val }); }
+        catch (err){ alert("Couldn't save the title: " + err.message); titleInput.textContent = p.title || ""; }
+      });
+      body.appendChild(titleInput);
+
+      if (isAdmin){
+        const row = document.createElement("div");
+        row.className = "row2";
+        row.style.marginTop = "8px";
+        const dateField = document.createElement("div"); dateField.className = "field";
+        dateField.innerHTML = "<label>Date</label>";
+        const dateInput = document.createElement("input");
+        dateInput.type = "date"; dateInput.value = p.date || "";
+        dateInput.addEventListener("change", async () => {
+          try { await updateDoc(doc(db, "proposals", p.id), { date: dateInput.value }); }
+          catch (err){ alert("Couldn't save the date: " + err.message); }
+        });
+        dateField.appendChild(dateInput);
+        const statusField = document.createElement("div"); statusField.className = "field";
+        statusField.innerHTML = "<label>Status</label>";
+        const statusSelect = document.createElement("select");
+        statusSelect.className = "proposal-status-select";
+        Object.entries(PROPOSAL_STATUS_LABELS).forEach(([val, label]) => {
+          const opt = document.createElement("option");
+          opt.value = val; opt.textContent = label;
+          statusSelect.appendChild(opt);
+        });
+        statusSelect.value = p.status || "proposed";
+        statusSelect.addEventListener("change", async () => {
+          try { await updateDoc(doc(db, "proposals", p.id), { status: statusSelect.value }); }
+          catch (err){ alert("Couldn't save the status: " + err.message); }
+        });
+        statusField.appendChild(statusSelect);
+        row.appendChild(dateField); row.appendChild(statusField);
+        body.appendChild(row);
+      }
+
+      const notes = document.createElement("div");
+      notes.className = "finding-text";
+      notes.contentEditable = isAdmin ? "true" : "false";
+      notes.textContent = p.notes || "";
+      notes.addEventListener("click", (e) => e.stopPropagation());
+      notes.addEventListener("blur", async () => {
+        if (!isAdmin) return;
+        const val = notes.innerText.trim();
+        if (val === p.notes) return;
+        try { await updateDoc(doc(db, "proposals", p.id), { notes: val }); }
+        catch (err){ alert("Couldn't save the notes: " + err.message); notes.textContent = p.notes || ""; }
+      });
+      body.appendChild(notes);
+
+      const strip = document.createElement("div");
+      strip.className = "photo-strip";
+      p.photos.forEach(photo => {
+        const item = document.createElement("div");
+        item.className = "photo-item";
+        const wrap = document.createElement("div");
+        wrap.className = "photo-thumb-wrap";
+        const img = document.createElement("img");
+        img.className = "photo-thumb"; img.src = photo.url; img.loading = "lazy";
+        img.addEventListener("click", (e) => { e.stopPropagation(); openLightbox(photo.url); });
+        wrap.appendChild(img);
+        if (isAdmin){
+          const rem = document.createElement("button");
+          rem.className = "photo-remove"; rem.textContent = "✕"; rem.title = "Delete photo";
+          rem.addEventListener("click", async (e) => {
+            e.stopPropagation();
+            if (!confirm("Delete this photo?")) return;
+            const newPhotos = p.photos.filter(ph => ph.id !== photo.id);
+            try { await updateDoc(doc(db, "proposals", p.id), { photos: newPhotos }); }
+            catch (err){ alert("Couldn't delete this photo: " + err.message); }
+          });
+          wrap.appendChild(rem);
+        }
+        item.appendChild(wrap);
+        if (isAdmin){
+          const ann = document.createElement("button");
+          ann.className = "annotate-btn"; ann.textContent = "✎ Annotate";
+          ann.addEventListener("click", (e) => { e.stopPropagation(); openAnnotateModal("proposals", p.id, photo.id); });
+          item.appendChild(ann);
+        }
+        strip.appendChild(item);
+      });
+      if (isAdmin){
+        const addBtn = document.createElement("div");
+        addBtn.className = "add-photo-btn"; addBtn.textContent = "+ Add photo";
+        addBtn.addEventListener("click", (e) => { e.stopPropagation(); openPhotoPicker("proposals", p.id, addBtn); });
+        strip.appendChild(addBtn);
+      }
+      body.appendChild(strip);
+    }
+    card.appendChild(body);
+    list.appendChild(card);
+  });
+}
+
+$("addProposalBtn").addEventListener("click", async () => {
+  if (!isAdmin) return;
+  const titleInput = $("newProposalTitle");
+  const dateInput = $("newProposalDate");
+  const statusInput = $("newProposalStatus");
+  const notesInput = $("newProposalNotes");
+  const title = requireValue(titleInput, "a proposal title");
+  if (!title) return;
+  const date = dateInput.value || toKey(new Date());
+  const status = statusInput.value || "proposed";
+  const notes = notesInput.value.trim();
+  const btn = $("addProposalBtn");
+  btn.disabled = true; btn.textContent = "Adding…";
+  try {
+    const newDoc = await addDoc(collection(db, "proposals"), { title, date, status, notes, photos: [] });
+    expandedProposals[newDoc.id] = true;
+    titleInput.value = ""; notesInput.value = ""; statusInput.value = "proposed";
+  } catch (err){
+    alert("Couldn't save this proposal: " + err.message + "\n\nIf this says \"permission denied\", the proposals rule in firestore.rules needs to be published in the Firebase console (Firestore Database → Rules).");
+  } finally {
+    btn.disabled = false; btn.textContent = "Add";
+  }
+});
+(() => { const t = toKey(new Date()); $("newProposalDate").value = inRange(t) ? t : START_DATE; })();
 
 // ============================================================================
 // PLANT GUIDE (Firestore: plantGuide/{id}) — reference infographics + notes,
@@ -2815,6 +3036,7 @@ const GALLERY_REGISTRY = {
   findings: { cache: () => findingsCache, expanded: () => expandedFindings },
   plantGuide: { cache: () => plantGuideCache, expanded: () => expandedPlants },
   specialEvents: { cache: () => specialEventsCache, expanded: () => expandedSpecialEvents },
+  proposals: { cache: () => proposalsCache, expanded: () => expandedProposals },
   inventoryAssets: { cache: () => assetsCache, expanded: () => expandedAssets },
   harvests: { cache: () => harvestsCache, expanded: () => expandedHarvests },
   transplants: { cache: () => transplantsCache, expanded: () => expandedTransplants },
@@ -2972,11 +3194,12 @@ $("annotateSave").addEventListener("click", async () => {
 $("exportDataBtn").addEventListener("click", async () => {
   $("dataStatus").textContent = "Gathering data…";
   try {
-    const [scheduleSnap, seriesSnap, houseRulesSnap, findingsSnap, plantGuideSnap, specialEventsSnap, plantTypesSnap, harvestsSnap, transplantsSnap, germinationsSnap, lossesSnap, envReadingsSnap, staffSnap, attendanceSnap, inventoryAssetsSnap, inventoryConsumablesSnap] = await Promise.all([
+    const [scheduleSnap, seriesSnap, houseRulesSnap, findingsSnap, proposalsSnap, plantGuideSnap, specialEventsSnap, plantTypesSnap, harvestsSnap, transplantsSnap, germinationsSnap, lossesSnap, envReadingsSnap, staffSnap, attendanceSnap, inventoryAssetsSnap, inventoryConsumablesSnap] = await Promise.all([
       getDocs(collection(db, "schedule")),
       getDocs(collection(db, "series")),
       getDoc(doc(db, "meta", "houseRules")),
       getDocs(collection(db, "findings")),
+      getDocs(collection(db, "proposals")),
       getDocs(collection(db, "plantGuide")),
       getDocs(collection(db, "specialEvents")),
       getDocs(collection(db, "plantTypes")),
@@ -2996,6 +3219,7 @@ $("exportDataBtn").addEventListener("click", async () => {
       series: Object.fromEntries(seriesSnap.docs.map(d => [d.id, d.data()])),
       houseRules: houseRulesSnap.exists() ? houseRulesSnap.data() : { rules: DEFAULT_RULES },
       findings: Object.fromEntries(findingsSnap.docs.map(d => [d.id, d.data()])),
+      proposals: Object.fromEntries(proposalsSnap.docs.map(d => [d.id, d.data()])),
       plantGuide: Object.fromEntries(plantGuideSnap.docs.map(d => [d.id, d.data()])),
       specialEvents: Object.fromEntries(specialEventsSnap.docs.map(d => [d.id, d.data()])),
       plantTypes: Object.fromEntries(plantTypesSnap.docs.map(d => [d.id, d.data()])),
@@ -3036,6 +3260,7 @@ $("importFileInput").addEventListener("change", async () => {
     Object.entries(dump.schedule || {}).forEach(([id, data]) => ops.push(["schedule", id, data]));
     Object.entries(dump.series || {}).forEach(([id, data]) => ops.push(["series", id, data]));
     Object.entries(dump.findings || {}).forEach(([id, data]) => ops.push(["findings", id, data]));
+    Object.entries(dump.proposals || {}).forEach(([id, data]) => ops.push(["proposals", id, data]));
     Object.entries(dump.plantGuide || {}).forEach(([id, data]) => ops.push(["plantGuide", id, data]));
     Object.entries(dump.specialEvents || {}).forEach(([id, data]) => ops.push(["specialEvents", id, data]));
     Object.entries(dump.plantTypes || {}).forEach(([id, data]) => ops.push(["plantTypes", id, data]));

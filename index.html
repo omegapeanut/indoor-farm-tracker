@@ -139,6 +139,7 @@
       <div class="subtabs">
         <button class="subtab-btn active" data-subtab="rules">Rules</button>
         <button class="subtab-btn" data-subtab="findings">Findings</button>
+        <button class="subtab-btn" data-subtab="planning">Planning</button>
         <button class="subtab-btn" data-subtab="attendance">Attendance</button>
       </div>
 
@@ -167,6 +168,35 @@
           </div>
         </div>
         <div id="findingsList" style="margin-top:10px;"></div>
+      </div>
+
+      <!-- PLANNING (proposals for future changes/improvements) -->
+      <div class="subtab-panel" data-subtab="planning">
+        <p class="hint">Proposals for future changes or improvements — track what's been suggested and whether it's approved.</p>
+        <div class="search-row">
+          <input type="text" id="proposalsSearch" placeholder="Search proposals by title or notes…">
+          <button id="proposalsSearchClear">Clear</button>
+        </div>
+        <div class="finding-add" id="addProposalRow" style="display:none;">
+          <input type="text" id="newProposalTitle" placeholder="Proposal title (e.g. Add drip irrigation to Level 3)">
+          <div class="row2">
+            <div class="field"><label>Date</label><input type="date" id="newProposalDate"></div>
+            <div class="field"><label>Status</label>
+              <select id="newProposalStatus">
+                <option value="proposed">Proposed</option>
+                <option value="approved">Approved</option>
+                <option value="onHold">On Hold</option>
+                <option value="rejected">Rejected</option>
+              </select>
+            </div>
+          </div>
+          <textarea id="newProposalNotes" rows="3" placeholder="Details, reasoning, cost, who suggested it…"></textarea>
+          <div class="finding-add-actions">
+            <span class="hint" style="margin:0;">Add photos after creating the entry</span>
+            <button id="addProposalBtn">Add</button>
+          </div>
+        </div>
+        <div id="proposalsList" style="margin-top:10px;"></div>
       </div>
 
       <!-- ATTENDANCE -->
