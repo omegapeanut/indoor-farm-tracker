@@ -502,8 +502,8 @@ function openEventModal(dateKey, eventId){
   $("fRepeat").checked = false;
   $("repeatFieldRow").style.display = hasSeries ? "none" : "flex";
   $("repeatFieldRow").querySelector("small").textContent = isNew
-    ? "Happens every day going forward — skips Mondays (maintenance) and any day marked as a holiday / off day. Keeps going indefinitely until you delete the series."
-    : "Turns this into a recurring series starting today — skips Mondays (maintenance) and any day marked as a holiday / off day. Keeps going indefinitely until you delete the series.";
+    ? "Happens every day going forward, including maintenance Mondays — skips only days marked as a holiday / off day. Keeps going indefinitely until you delete the series."
+    : "Turns this into a recurring series starting today, including maintenance Mondays — skips only days marked as a holiday / off day. Keeps going indefinitely until you delete the series.";
 
   overlay.classList.add("active");
 }
@@ -521,7 +521,7 @@ async function materializeSeries(seriesId, fromKey, template, toKeyStr){
     const key = toKey(d);
     const dayEntry = editableDay(key);
     if (dayEntry.events.some(e => e.seriesId === seriesId)) continue;
-    if (dayEntry.dayType !== "visitor") continue;
+    if (dayEntry.dayType === "holiday") continue;
     dayEntry.events.push({ id: uid(), seriesId, start: template.start, end: template.end, title: template.title, person: template.person, notes: template.notes });
     batch.set(doc(db, "schedule", key), dayEntry);
     scheduleCache[key] = dayEntry; // optimistic
@@ -563,15 +563,11 @@ async function topUpAllSeries(){
   if (!seriesCache.length) return;
   const horizon = horizonEnd();
   for (const series of seriesCache){
-    let lastKey = series.fromDate;
-    Object.keys(scheduleCache).forEach(key => {
-      const dayEntry = scheduleCache[key];
-      if (dayEntry && dayEntry.events && dayEntry.events.some(e => e.seriesId === series.id) && key > lastKey) lastKey = key;
-    });
-    const nextStart = toDate(lastKey);
-    nextStart.setDate(nextStart.getDate() + 1);
-    const nextStartKey = toKey(nextStart);
-    if (nextStartKey <= horizon) await materializeSeries(series.id, nextStartKey, series, horizon);
+    // Re-materializing the whole range (not just past the last-seen day) is safe —
+    // materializeSeries skips any day that already has this series' event — and it
+    // also backfills days that were wrongly skipped by an earlier version of the
+    // maintenance-day rule (see the dayType check above).
+    if (series.fromDate <= horizon) await materializeSeries(series.id, series.fromDate, series, horizon);
   }
 }
 
