@@ -26,11 +26,11 @@
   <div class="tabs">
     <button class="tab-btn active" data-tab="calgroup">
       <span class="tab-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4.5" width="18" height="16" rx="2"/><line x1="16" y1="2.5" x2="16" y2="6.5"/><line x1="8" y1="2.5" x2="8" y2="6.5"/><line x1="3" y1="9.5" x2="21" y2="9.5"/></svg></span>
-      <span class="tab-label">Calendar &amp; Events</span>
+      <span class="tab-label">Cal &amp; Events</span>
     </button>
     <button class="tab-btn" data-tab="opslog">
       <span class="tab-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4.5" y="4" width="15" height="17" rx="2"/><line x1="8" y1="9" x2="16" y2="9"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="13" y2="17"/></svg></span>
-      <span class="tab-label">Operations Log</span>
+      <span class="tab-label">Ops &amp; Planning</span>
     </button>
     <button class="tab-btn" data-tab="plants">
       <span class="tab-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 4c-9 0-16 6-16 15 9 0 15-6 15-15z"/><path d="M5 19c3-4 7-8 12-12"/></svg></span>
@@ -139,6 +139,7 @@
       <div class="subtabs">
         <button class="subtab-btn active" data-subtab="rules">Rules</button>
         <button class="subtab-btn" data-subtab="findings">Findings</button>
+        <button class="subtab-btn" data-subtab="planning">Planning</button>
         <button class="subtab-btn" data-subtab="attendance">Attendance</button>
       </div>
 
@@ -167,6 +168,35 @@
           </div>
         </div>
         <div id="findingsList" style="margin-top:10px;"></div>
+      </div>
+
+      <!-- PLANNING (proposals for future changes/improvements) -->
+      <div class="subtab-panel" data-subtab="planning">
+        <p class="hint">Proposals for future changes or improvements — track what's been suggested and whether it's approved.</p>
+        <div class="search-row">
+          <input type="text" id="proposalsSearch" placeholder="Search proposals by title or notes…">
+          <button id="proposalsSearchClear">Clear</button>
+        </div>
+        <div class="finding-add" id="addProposalRow" style="display:none;">
+          <input type="text" id="newProposalTitle" placeholder="Proposal title (e.g. Add drip irrigation to Level 3)">
+          <div class="row2">
+            <div class="field"><label>Date</label><input type="date" id="newProposalDate"></div>
+            <div class="field"><label>Status</label>
+              <select id="newProposalStatus">
+                <option value="proposed">Proposed</option>
+                <option value="approved">Approved</option>
+                <option value="onHold">On Hold</option>
+                <option value="rejected">Rejected</option>
+              </select>
+            </div>
+          </div>
+          <textarea id="newProposalNotes" rows="3" placeholder="Details, reasoning, cost, who suggested it…"></textarea>
+          <div class="finding-add-actions">
+            <span class="hint" style="margin:0;">Add photos after creating the entry</span>
+            <button id="addProposalBtn">Add</button>
+          </div>
+        </div>
+        <div id="proposalsList" style="margin-top:10px;"></div>
       </div>
 
       <!-- ATTENDANCE -->
@@ -551,7 +581,7 @@
     <div class="repeat-field" id="repeatFieldRow">
       <input type="checkbox" id="fRepeat">
       <div class="txt">
-        <label for="fRepeat" style="margin:0; font-size:12px; color:#333;">Repeat this event</label>
+        <label for="fRepeat" id="repeatCheckboxLabel" style="margin:0; font-size:12px; color:#333;">Repeat this event</label>
         <div class="repeat-frequency" id="repeatFrequencyRow" style="display:none;">
           <select id="fFrequency">
             <option value="daily">Daily</option>
@@ -559,6 +589,8 @@
             <option value="biweekly">Bi-weekly</option>
             <option value="monthly">Monthly</option>
             <option value="yearly">Yearly</option>
+            <option value="visitorOnly">Only on visitor days</option>
+            <option value="noVisitorOnly">Only on non-visitor days (maintenance)</option>
           </select>
         </div>
         <small id="repeatHint">Happens every day going forward, including maintenance Mondays — skips only days marked as a holiday / off day. Keeps going indefinitely until you delete the series.</small>

@@ -176,6 +176,13 @@ header.top p { margin: 0; color: #666; font-size: 13px; }
 .finding-add-actions { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
 .finding-add-actions button { padding: 7px 14px; border-radius: 6px; border: none; background: #0b57d0; color: #fff; cursor: pointer; font-size: 13px; }
 
+.proposal-badge { font-size: 9px; padding: 2px 8px; border-radius: 8px; font-weight: 700; flex-shrink: 0; text-transform: uppercase; letter-spacing: 0.03em; }
+.proposal-badge.proposed { background: #eef4fe; color: #0b57d0; }
+.proposal-badge.approved { background: #e6f4ea; color: #1e7e34; }
+.proposal-badge.onHold { background: #fde9bf; color: #8a5c00; }
+.proposal-badge.rejected { background: #fdeceb; color: #c0392b; }
+.proposal-status-select { font-size: 11px; padding: 3px 6px; border-radius: 6px; border: 1px solid #d8d8d8; font-family: inherit; }
+
 .finding-card { border: 1px solid #eee; border-radius: 8px; margin-bottom: 10px; overflow: hidden; }
 .finding-header { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 10px 12px; cursor: pointer; background: #fafafa; }
 .finding-header:hover { background: #f3f3f3; }
