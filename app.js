@@ -141,6 +141,7 @@ onAuthStateChanged(auth, (user) => {
   renderPurchaseAreas();
   renderPurchasePlans();
   if (isPurchaseDashboardActive()) renderPurchaseDashboard();
+  renderReports();
 });
 
 function refreshAdminUI(){
@@ -168,6 +169,8 @@ function refreshAdminUI(){
   $("addConsumablePurchaseRow").style.display = isAdmin ? "flex" : "none";
   $("purchaseAreasToggleRow").style.display = isAdmin ? "block" : "none";
   $("purchaseDashboardBtn").style.display = isAdmin ? "inline-block" : "none";
+  $("reportsTabBtn").style.display = isAdmin ? "inline-block" : "none";
+  $("addReportRow").style.display = isAdmin ? "flex" : "none";
   $("dataTabBtn").style.display = isAdmin ? "inline-block" : "none";
   if (!isAdmin){
     $("staffPanel").style.display = "none";
@@ -177,7 +180,7 @@ function refreshAdminUI(){
     if (document.querySelector('#tab-inventory .subtab-panel[data-subtab="purchaseDashboard"]').classList.contains("active")){
       document.querySelector('#tab-inventory .subtab-btn[data-subtab="assets"]').click();
     }
-    if ($("tab-data").classList.contains("active")) activateTab("calendar");
+    if ($("tab-data").classList.contains("active") || $("tab-reports").classList.contains("active")) activateTab("calendar");
   }
 }
 
@@ -3826,6 +3829,447 @@ if (inventoryTabBtn) inventoryTabBtn.addEventListener("click", () => {
   if (isPurchaseDashboardActive()) requestAnimationFrame(renderPurchaseDashboard);
 });
 
+// ============================================================================
+// REPORTS TAB — formal reports for the client. First kind: Weekly Farm
+// Inspection & Maintenance Report. Firestore: reports/{id} is the report
+// header (date, who contacted/attended/fixed, notes, status); reportTasks/{id}
+// is one issue within a report, kept as its own document (not a nested array)
+// so the shared photo/annotate pipeline above can be reused for its two
+// independent photo arrays — issuePhotos (the client-spotted problem, usually
+// annotated) and fixPhotos (the follow-up rectification photo).
+// ============================================================================
+let reportsCache = [];
+let reportTasksCache = [];
+const expandedReports = {};
+const expandedReportTasks = {};
+
+onSnapshot(collection(db, "reports"), (snap) => {
+  reportsCache = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  renderReports();
+}, () => setSyncStatus("err", "Connection error"));
+
+onSnapshot(collection(db, "reportTasks"), (snap) => {
+  reportTasksCache = snap.docs.map(d => ({ id: d.id, issuePhotos: [], fixPhotos: [], ...d.data() }));
+  renderReports();
+}, () => setSyncStatus("err", "Connection error"));
+
+function tasksForReport(reportId){
+  return reportTasksCache.filter(t => t.reportId === reportId).sort((a,b) => (a.seq||0) - (b.seq||0));
+}
+
+function renderReports(){
+  const list = $("reportsList");
+  if (!list) return;
+  list.innerHTML = "";
+
+  const items = reportsCache.slice().sort((a,b) => (b.date||"").localeCompare(a.date||""));
+  if (items.length === 0){
+    const empty = document.createElement("div");
+    empty.className = "empty-state";
+    empty.textContent = "No reports yet.";
+    list.appendChild(empty);
+    return;
+  }
+  items.forEach(r => list.appendChild(buildReportCard(r)));
+}
+
+function buildReportCard(r){
+  const isOpen = !!expandedReports[r.id];
+  const card = document.createElement("div");
+  card.className = "finding-card" + (isOpen ? " expanded" : "");
+
+  const header = document.createElement("div");
+  header.className = "finding-header";
+  const left = document.createElement("div");
+  left.className = "finding-header-left";
+  const chevron = document.createElement("span");
+  chevron.className = "finding-chevron"; chevron.textContent = "▶";
+  const dateEl = document.createElement("span");
+  dateEl.className = "finding-date"; dateEl.textContent = r.date || "—";
+  left.appendChild(chevron); left.appendChild(dateEl);
+
+  const badge = document.createElement("span");
+  badge.className = "report-badge " + (r.status === "closed" ? "closed" : "open");
+  badge.textContent = r.status === "closed" ? "Closed" : "Open";
+  left.appendChild(badge);
+
+  if (!isOpen){
+    const preview = document.createElement("span");
+    preview.className = "finding-preview";
+    const bits = [];
+    if (r.contactedBy) bits.push("Contacted: " + r.contactedBy);
+    if (r.attendedBy) bits.push("Attended: " + r.attendedBy);
+    preview.textContent = bits.join(" · ");
+    left.appendChild(preview);
+  }
+  header.appendChild(left);
+
+  if (isAdmin){
+    const del = document.createElement("button");
+    del.className = "icon-btn"; del.textContent = "✕"; del.title = "Delete report";
+    del.addEventListener("click", async (e) => {
+      e.stopPropagation();
+      if (!confirm("Delete this report and all of its issues?")) return;
+      try {
+        await Promise.all(tasksForReport(r.id).map(t => deleteDoc(doc(db, "reportTasks", t.id))));
+        await deleteDoc(doc(db, "reports", r.id));
+      } catch (err){ alert("Couldn't delete this report: " + err.message); }
+    });
+    header.appendChild(del);
+  }
+  header.addEventListener("click", () => {
+    if (expandedReports[r.id]) delete expandedReports[r.id]; else expandedReports[r.id] = true;
+    renderReports();
+  });
+  card.appendChild(header);
+
+  const body = document.createElement("div");
+  body.className = "finding-body";
+  if (isOpen) body.appendChild(buildReportBody(r));
+  card.appendChild(body);
+  return card;
+}
+
+function reportEditableField(label, value, onSave, type){
+  const field = document.createElement("div");
+  field.className = "field";
+  const lbl = document.createElement("label"); lbl.textContent = label;
+  field.appendChild(lbl);
+  const input = document.createElement("input");
+  input.type = type || "text";
+  input.value = value || "";
+  input.disabled = !isAdmin;
+  const commit = async () => {
+    if (input.value === (value || "")) return;
+    try { await onSave(input.value.trim()); }
+    catch (err){ alert("Couldn't save: " + err.message); input.value = value || ""; }
+  };
+  input.addEventListener("blur", commit);
+  input.addEventListener("change", () => { if (type === "date") commit(); });
+  field.appendChild(input);
+  return field;
+}
+
+function buildReportBody(r){
+  const wrap = document.createElement("div");
+
+  const row1 = document.createElement("div"); row1.className = "row2";
+  row1.appendChild(reportEditableField("Date", r.date, (v) => updateDoc(doc(db,"reports", r.id), { date: v }), "date"));
+  row1.appendChild(reportEditableField("Contacted by", r.contactedBy, (v) => updateDoc(doc(db,"reports", r.id), { contactedBy: v })));
+  wrap.appendChild(row1);
+
+  const row2 = document.createElement("div"); row2.className = "row2";
+  row2.appendChild(reportEditableField("Attended by", r.attendedBy, (v) => updateDoc(doc(db,"reports", r.id), { attendedBy: v })));
+  row2.appendChild(reportEditableField("Fixed by", r.fixedBy, (v) => updateDoc(doc(db,"reports", r.id), { fixedBy: v })));
+  wrap.appendChild(row2);
+
+  const notes = document.createElement("div");
+  notes.className = "finding-text";
+  notes.contentEditable = isAdmin ? "true" : "false";
+  notes.textContent = r.notes || "";
+  if (isAdmin) notes.dataset.placeholder = "Click to add overall notes…";
+  notes.addEventListener("click", (e) => e.stopPropagation());
+  notes.addEventListener("blur", async () => {
+    if (!isAdmin) return;
+    const val = notes.innerText.trim();
+    if (val === (r.notes || "")) return;
+    try { await updateDoc(doc(db, "reports", r.id), { notes: val }); }
+    catch (err){ alert("Couldn't save notes: " + err.message); notes.textContent = r.notes || ""; }
+  });
+  wrap.appendChild(notes);
+
+  const statusRow = document.createElement("div");
+  statusRow.style.margin = "12px 0";
+  const statusBadge = document.createElement("span");
+  statusBadge.className = "report-badge " + (r.status === "closed" ? "closed" : "open") + (isAdmin ? " clickable" : "");
+  statusBadge.textContent = r.status === "closed" ? "Closed — click to reopen" : "Open — click to mark closed";
+  if (isAdmin) statusBadge.addEventListener("click", async () => {
+    try { await updateDoc(doc(db, "reports", r.id), { status: r.status === "closed" ? "open" : "closed" }); }
+    catch (err){ alert("Couldn't update status: " + err.message); }
+  });
+  statusRow.appendChild(statusBadge);
+  const statusHint = document.createElement("p");
+  statusHint.className = "hint"; statusHint.style.margin = "6px 0 0";
+  statusHint.textContent = "Mark closed once the client confirms the fix. If the client never comes back with feedback, this report stands as deemed closed either way — no signature required.";
+  statusRow.appendChild(statusHint);
+  wrap.appendChild(statusRow);
+
+  const tasksWrap = document.createElement("div");
+  tasksWrap.style.marginTop = "14px";
+  const tasksHeading = document.createElement("h2"); tasksHeading.textContent = "Issues";
+  tasksWrap.appendChild(tasksHeading);
+  const tasks = tasksForReport(r.id);
+  if (tasks.length === 0){
+    const empty = document.createElement("div");
+    empty.className = "empty-state";
+    empty.textContent = "No issues logged yet.";
+    tasksWrap.appendChild(empty);
+  } else {
+    tasks.forEach((t, i) => tasksWrap.appendChild(buildTaskCard(t, i + 1)));
+  }
+
+  if (isAdmin){
+    const addTaskRow = document.createElement("div");
+    addTaskRow.className = "add-row"; addTaskRow.style.marginTop = "10px";
+    const input = document.createElement("input");
+    input.type = "text"; input.placeholder = "Describe the issue the client spotted…";
+    const btn = document.createElement("button"); btn.textContent = "+ Add Issue";
+    btn.addEventListener("click", async () => {
+      const val = requireValue(input, "an issue description");
+      if (!val) return;
+      try {
+        const newDoc = await addDoc(collection(db, "reportTasks"), {
+          reportId: r.id, seq: Date.now(), issueDescription: val,
+          comments: "", issuePhotos: [], rectificationNotes: "", fixPhotos: []
+        });
+        expandedReportTasks[newDoc.id] = true;
+        input.value = "";
+      } catch (err){ alert("Couldn't add this issue: " + err.message); }
+    });
+    input.addEventListener("keydown", (e) => { if (e.key === "Enter") btn.click(); });
+    addTaskRow.appendChild(input); addTaskRow.appendChild(btn);
+    tasksWrap.appendChild(addTaskRow);
+  }
+  wrap.appendChild(tasksWrap);
+
+  if (isAdmin){
+    const pdfRow = document.createElement("div");
+    pdfRow.style.marginTop = "14px";
+    const pdfBtn = document.createElement("button");
+    pdfBtn.textContent = "⬇ Download PDF";
+    pdfBtn.addEventListener("click", async () => {
+      const original = pdfBtn.textContent;
+      pdfBtn.disabled = true; pdfBtn.textContent = "Preparing PDF…";
+      const area = $("pdfPrintArea");
+      area.innerHTML = buildReportPdfHtml(r);
+      await waitForImages(area, 8000);
+      document.body.classList.add("printing-pdf");
+      window.print();
+      pdfBtn.disabled = false; pdfBtn.textContent = original;
+    });
+    pdfRow.appendChild(pdfBtn);
+    wrap.appendChild(pdfRow);
+  }
+
+  return wrap;
+}
+
+function buildTaskPhotoStrip(t, field, addLabel){
+  const strip = document.createElement("div");
+  strip.className = "photo-strip";
+  (t[field] || []).forEach(photo => {
+    const item = document.createElement("div");
+    item.className = "photo-item";
+    const wrap = document.createElement("div");
+    wrap.className = "photo-thumb-wrap";
+    const img = document.createElement("img");
+    img.className = "photo-thumb"; img.src = photo.url; img.loading = "lazy";
+    img.addEventListener("click", (e) => { e.stopPropagation(); openLightbox(photo.url); });
+    wrap.appendChild(img);
+    if (isAdmin){
+      const rem = document.createElement("button");
+      rem.className = "photo-remove"; rem.textContent = "✕"; rem.title = "Delete photo";
+      rem.addEventListener("click", async (e) => {
+        e.stopPropagation();
+        if (!confirm("Delete this photo?")) return;
+        const newPhotos = (t[field] || []).filter(p => p.id !== photo.id);
+        try { await updateDoc(doc(db, "reportTasks", t.id), { [field]: newPhotos }); }
+        catch (err){ alert("Couldn't delete this photo: " + err.message); }
+      });
+      wrap.appendChild(rem);
+    }
+    item.appendChild(wrap);
+    if (isAdmin){
+      const ann = document.createElement("button");
+      ann.className = "annotate-btn"; ann.textContent = "✎ Annotate";
+      ann.addEventListener("click", (e) => { e.stopPropagation(); openAnnotateModal("reportTasks", t.id, photo.id, field); });
+      item.appendChild(ann);
+    }
+    strip.appendChild(item);
+  });
+  if (isAdmin){
+    const addBtn = document.createElement("div");
+    addBtn.className = "add-photo-btn"; addBtn.textContent = "+ " + addLabel;
+    addBtn.addEventListener("click", (e) => { e.stopPropagation(); openPhotoPicker("reportTasks", t.id, addBtn, field); });
+    strip.appendChild(addBtn);
+  }
+  return strip;
+}
+
+function buildTaskCard(t, index){
+  const isOpen = !!expandedReportTasks[t.id];
+  const card = document.createElement("div");
+  card.className = "finding-card" + (isOpen ? " expanded" : "");
+
+  const header = document.createElement("div");
+  header.className = "finding-header";
+  const left = document.createElement("div");
+  left.className = "finding-header-left";
+  const chevron = document.createElement("span");
+  chevron.className = "finding-chevron"; chevron.textContent = "▶";
+  const idxTag = document.createElement("span");
+  idxTag.className = "finding-latest-tag"; idxTag.textContent = "Issue " + index;
+  left.appendChild(chevron); left.appendChild(idxTag);
+  if (!isOpen){
+    const preview = document.createElement("span");
+    preview.className = "finding-preview";
+    preview.textContent = t.issueDescription || "(no description)";
+    left.appendChild(preview);
+  }
+  header.appendChild(left);
+
+  if (isAdmin){
+    const del = document.createElement("button");
+    del.className = "icon-btn"; del.textContent = "✕"; del.title = "Delete issue";
+    del.addEventListener("click", async (e) => {
+      e.stopPropagation();
+      if (!confirm("Delete this issue?")) return;
+      try { await deleteDoc(doc(db, "reportTasks", t.id)); }
+      catch (err){ alert("Couldn't delete this issue: " + err.message); }
+    });
+    header.appendChild(del);
+  }
+  header.addEventListener("click", () => {
+    if (expandedReportTasks[t.id]) delete expandedReportTasks[t.id]; else expandedReportTasks[t.id] = true;
+    renderReports();
+  });
+  card.appendChild(header);
+
+  const body = document.createElement("div");
+  body.className = "finding-body";
+  if (isOpen){
+    const descLabel = document.createElement("div"); descLabel.className = "hint"; descLabel.style.margin = "8px 0 2px"; descLabel.textContent = "Issue";
+    body.appendChild(descLabel);
+    const desc = document.createElement("div");
+    desc.className = "finding-text"; desc.style.fontWeight = "600";
+    desc.contentEditable = isAdmin ? "true" : "false";
+    desc.textContent = t.issueDescription || "";
+    if (isAdmin) desc.dataset.placeholder = "Describe the issue…";
+    desc.addEventListener("click", (e) => e.stopPropagation());
+    desc.addEventListener("blur", async () => {
+      if (!isAdmin) return;
+      const val = desc.innerText.trim();
+      if (val === (t.issueDescription || "")) return;
+      try { await updateDoc(doc(db, "reportTasks", t.id), { issueDescription: val }); }
+      catch (err){ alert("Couldn't save: " + err.message); desc.textContent = t.issueDescription || ""; }
+    });
+    body.appendChild(desc);
+
+    const commentsLabel = document.createElement("div"); commentsLabel.className = "hint"; commentsLabel.style.margin = "8px 0 2px"; commentsLabel.textContent = "Comments";
+    body.appendChild(commentsLabel);
+    const comments = document.createElement("div");
+    comments.className = "finding-text";
+    comments.contentEditable = isAdmin ? "true" : "false";
+    comments.textContent = t.comments || "";
+    if (isAdmin) comments.dataset.placeholder = "Click to add comments…";
+    comments.addEventListener("click", (e) => e.stopPropagation());
+    comments.addEventListener("blur", async () => {
+      if (!isAdmin) return;
+      const val = comments.innerText.trim();
+      if (val === (t.comments || "")) return;
+      try { await updateDoc(doc(db, "reportTasks", t.id), { comments: val }); }
+      catch (err){ alert("Couldn't save: " + err.message); comments.textContent = t.comments || ""; }
+    });
+    body.appendChild(comments);
+
+    body.appendChild(buildTaskPhotoStrip(t, "issuePhotos", "Issue photo"));
+
+    const rectLabel = document.createElement("div"); rectLabel.className = "hint"; rectLabel.style.margin = "14px 0 2px"; rectLabel.textContent = "Rectification done";
+    body.appendChild(rectLabel);
+    const rect = document.createElement("div");
+    rect.className = "finding-text";
+    rect.contentEditable = isAdmin ? "true" : "false";
+    rect.textContent = t.rectificationNotes || "";
+    if (isAdmin) rect.dataset.placeholder = "Click to describe the fix…";
+    rect.addEventListener("click", (e) => e.stopPropagation());
+    rect.addEventListener("blur", async () => {
+      if (!isAdmin) return;
+      const val = rect.innerText.trim();
+      if (val === (t.rectificationNotes || "")) return;
+      try { await updateDoc(doc(db, "reportTasks", t.id), { rectificationNotes: val }); }
+      catch (err){ alert("Couldn't save: " + err.message); rect.textContent = t.rectificationNotes || ""; }
+    });
+    body.appendChild(rect);
+
+    body.appendChild(buildTaskPhotoStrip(t, "fixPhotos", "Fix photo"));
+  }
+  card.appendChild(body);
+  return card;
+}
+
+function buildReportPdfHtml(report){
+  const tasks = tasksForReport(report.id);
+  const generated = new Date().toLocaleString("default", { dateStyle: "medium", timeStyle: "short" });
+  let html = '<div class="pdf-doc pdf-report"><h1>Weekly Farm Inspection &amp; Maintenance Report</h1>';
+  html += '<p class="pdf-meta">Indoor Farm — Takeover Tracker · Generated ' + escapeHtml(generated) + '</p>';
+  html += '<div class="pdf-report-meta">';
+  html += '<div><strong>Date:</strong> ' + escapeHtml(report.date || "—") + '</div>';
+  html += '<div><strong>Contacted by:</strong> ' + escapeHtml(report.contactedBy || "—") + '</div>';
+  html += '<div><strong>Attended by:</strong> ' + escapeHtml(report.attendedBy || "—") + '</div>';
+  html += '<div><strong>Fixed by:</strong> ' + escapeHtml(report.fixedBy || "—") + '</div>';
+  html += '<div><strong>Status:</strong> ' + (report.status === "closed" ? "Closed" : "Open") + '</div>';
+  html += '</div>';
+  if (report.notes) html += '<p class="pdf-report-notes">' + escapeHtml(report.notes).replace(/\n/g, "<br>") + '</p>';
+
+  if (tasks.length === 0){
+    html += '<p>No issues logged for this report.</p>';
+  } else {
+    tasks.forEach((t, i) => {
+      html += '<div class="pdf-issue"><h2>Issue ' + (i + 1) + '</h2>';
+      html += '<p class="pdf-issue-desc">' + escapeHtml(t.issueDescription || "(no description)").replace(/\n/g, "<br>") + '</p>';
+      if (t.comments) html += '<p><strong>Comments:</strong> ' + escapeHtml(t.comments).replace(/\n/g, "<br>") + '</p>';
+      if ((t.issuePhotos || []).length){
+        html += '<div class="pdf-report-photo-grid">';
+        t.issuePhotos.forEach(p => { html += '<img class="pdf-report-photo" src="' + escapeHtml(cloudinaryThumb(p.url, 1000)) + '">'; });
+        html += '</div>';
+      }
+      html += '<div class="pdf-rect"><h3>Rectification</h3>';
+      html += '<p>' + escapeHtml(t.rectificationNotes || "Pending.").replace(/\n/g, "<br>") + '</p>';
+      if ((t.fixPhotos || []).length){
+        html += '<div class="pdf-report-photo-grid">';
+        t.fixPhotos.forEach(p => { html += '<img class="pdf-report-photo" src="' + escapeHtml(cloudinaryThumb(p.url, 1000)) + '">'; });
+        html += '</div>';
+      }
+      html += '</div></div>';
+    });
+  }
+
+  html += '<div class="pdf-report-footer">';
+  html += '<p>This report is system-generated. No signature is required.</p>';
+  html += '<p>If the client does not come back with feedback, this report is deemed closed — no signature required either way.</p>';
+  html += '</div></div>';
+  return html;
+}
+
+$("addReportBtn").addEventListener("click", async () => {
+  if (!isAdmin) return;
+  const dateInput = $("newReportDate");
+  const contactedInput = $("newReportContactedBy");
+  const attendedInput = $("newReportAttendedBy");
+  const fixedInput = $("newReportFixedBy");
+  const notesInput = $("newReportNotes");
+  const date = dateInput.value || toKey(new Date());
+  const btn = $("addReportBtn");
+  btn.disabled = true; btn.textContent = "Adding…";
+  try {
+    const newDoc = await addDoc(collection(db, "reports"), {
+      type: "weeklyInspection", date,
+      contactedBy: contactedInput.value.trim(),
+      attendedBy: attendedInput.value.trim(),
+      fixedBy: fixedInput.value.trim(),
+      notes: notesInput.value.trim(),
+      status: "open"
+    });
+    expandedReports[newDoc.id] = true;
+    contactedInput.value = ""; attendedInput.value = ""; fixedInput.value = ""; notesInput.value = "";
+  } catch (err){
+    alert("Couldn't create this report: " + err.message + "\n\nIf this says \"permission denied\", the reports rule in firestore.rules needs to be published in the Firebase console.");
+  } finally {
+    btn.disabled = false; btn.textContent = "Add Report";
+  }
+});
+(() => { const t = toKey(new Date()); $("newReportDate").value = inRange(t) ? t : START_DATE; })();
+
 // Photo/annotate pipeline is shared by every collection that stores records
 // as { id, photos: [...] } — Findings Log, Plant Guide, Special Events,
 // Inventory Assets, and the four Grow Log sections. Registry keeps adding a
@@ -3841,6 +4285,7 @@ const GALLERY_REGISTRY = {
   transplants: { cache: () => transplantsCache, expanded: () => expandedTransplants },
   germinations: { cache: () => germinationsCache, expanded: () => expandedGerminations },
   losses: { cache: () => lossesCache, expanded: () => expandedLosses },
+  reportTasks: { cache: () => reportTasksCache, expanded: () => expandedReportTasks },
 };
 function galleryCache(col){ return GALLERY_REGISTRY[col].cache(); }
 function galleryExpanded(col){ return GALLERY_REGISTRY[col].expanded(); }
@@ -3848,9 +4293,14 @@ function galleryExpanded(col){ return GALLERY_REGISTRY[col].expanded(); }
 let photoTargetCollection = "findings";
 let photoTargetFindingId = null;
 let photoTargetBtn = null;
+let photoTargetField = "photos";
 const photoFileInput = $("photoFileInput");
-function openPhotoPicker(col, recordId, btnEl){
+// field defaults to "photos" (every existing caller keeps working unchanged) — Report
+// tasks are the first record with two independent photo arrays on one document
+// (issuePhotos, fixPhotos), so a specific field name can be passed instead.
+function openPhotoPicker(col, recordId, btnEl, field){
   photoTargetCollection = col; photoTargetFindingId = recordId; photoTargetBtn = btnEl || null;
+  photoTargetField = field || "photos";
   photoFileInput.value = ""; photoFileInput.click();
 }
 
@@ -3860,6 +4310,7 @@ photoFileInput.addEventListener("change", async () => {
   const col = photoTargetCollection;
   const recordId = photoTargetFindingId;
   const btn = photoTargetBtn;
+  const field = photoTargetField;
   const record = galleryCache(col).find(r => r.id === recordId);
   if (!record) return;
 
@@ -3878,18 +4329,18 @@ photoFileInput.addEventListener("change", async () => {
     }
     if (uploaded.length === 0) return;
     if (btn) btn.textContent = "Saving…";
-    const newPhotos = [...(record.photos || []), ...uploaded];
+    const newPhotos = [...(record[field] || []), ...uploaded];
     try {
-      await updateDoc(doc(db, col, recordId), { photos: newPhotos });
+      await updateDoc(doc(db, col, recordId), { [field]: newPhotos });
     } catch (err){
       alert("Photo uploaded, but saving it to the entry failed: " + err.message + "\n\nIf this says \"permission denied\", the Firestore rules for this collection need to be published in the Firebase console.");
       return;
     }
 
-    if (uploaded.length === 1 && col === "findings"){
+    if (uploaded.length === 1 && (col === "findings" || (col === "reportTasks" && field === "issuePhotos"))){
       // jump straight into annotate mode for a single upload, same as before
-      // (skipped for Plant Guide — reference uploads don't need the auto-jump)
-      setTimeout(() => openAnnotateModal(col, recordId, uploaded[0].id), 300);
+      // (skipped for Plant Guide and fix/rectification photos — those don't need the auto-jump)
+      setTimeout(() => openAnnotateModal(col, recordId, uploaded[0].id, field), 300);
     }
   } finally {
     if (btn){ btn.textContent = "+ Add photo"; btn.style.pointerEvents = ""; btn.style.opacity = ""; }
@@ -3906,7 +4357,7 @@ lightbox.addEventListener("click", (e) => { if (e.target === lightbox) lightbox.
 const annotateOverlay = $("annotateOverlay");
 const baseCanvas = $("baseCanvas"), drawCanvas = $("drawCanvas");
 const baseCtx = baseCanvas.getContext("2d"), drawCtx = drawCanvas.getContext("2d");
-let annotateCollection = "findings", annotateFindingId = null, annotatePhotoId = null;
+let annotateCollection = "findings", annotateFindingId = null, annotatePhotoId = null, annotateField = "photos";
 let currentColor = "#e02020";
 let drawing = false, lastX = 0, lastY = 0;
 
@@ -3918,11 +4369,12 @@ document.querySelectorAll(".color-dot").forEach(dot => {
   });
 });
 
-function openAnnotateModal(col, recordId, photoId){
+function openAnnotateModal(col, recordId, photoId, field){
   if (!isAdmin) return;
   annotateCollection = col; annotateFindingId = recordId; annotatePhotoId = photoId;
+  annotateField = field || "photos";
   const record = galleryCache(col).find(r => r.id === recordId);
-  const photo = record.photos.find(p => p.id === photoId);
+  const photo = record[annotateField].find(p => p.id === photoId);
   $("annotateStatus").textContent = "";
 
   const img = new Image();
@@ -3978,8 +4430,8 @@ $("annotateSave").addEventListener("click", async () => {
     try {
       const { url, publicId } = await uploadToCloudinary(blob);
       const record = galleryCache(annotateCollection).find(r => r.id === annotateFindingId);
-      const newPhotos = record.photos.map(p => p.id === annotatePhotoId ? { ...p, url, publicId } : p);
-      await updateDoc(doc(db, annotateCollection, annotateFindingId), { photos: newPhotos });
+      const newPhotos = record[annotateField].map(p => p.id === annotatePhotoId ? { ...p, url, publicId } : p);
+      await updateDoc(doc(db, annotateCollection, annotateFindingId), { [annotateField]: newPhotos });
       annotateOverlay.classList.remove("active");
     } catch (err){
       $("annotateStatus").textContent = "Upload failed: " + err.message;
@@ -3993,7 +4445,7 @@ $("annotateSave").addEventListener("click", async () => {
 $("exportDataBtn").addEventListener("click", async () => {
   $("dataStatus").textContent = "Gathering data…";
   try {
-    const [scheduleSnap, seriesSnap, houseRulesSnap, findingsSnap, proposalsSnap, plantGuideSnap, specialEventsSnap, plantTypesSnap, harvestDestinationsSnap, harvestsSnap, transplantsSnap, germinationsSnap, lossesSnap, envReadingsSnap, staffSnap, attendanceSnap, inventoryAssetsSnap, inventoryConsumablesSnap, purchaseAreasSnap, purchasePlansSnap] = await Promise.all([
+    const [scheduleSnap, seriesSnap, houseRulesSnap, findingsSnap, proposalsSnap, plantGuideSnap, specialEventsSnap, plantTypesSnap, harvestDestinationsSnap, harvestsSnap, transplantsSnap, germinationsSnap, lossesSnap, envReadingsSnap, staffSnap, attendanceSnap, inventoryAssetsSnap, inventoryConsumablesSnap, purchaseAreasSnap, purchasePlansSnap, reportsSnap, reportTasksSnap] = await Promise.all([
       getDocs(collection(db, "schedule")),
       getDocs(collection(db, "series")),
       getDoc(doc(db, "meta", "houseRules")),
@@ -4013,7 +4465,9 @@ $("exportDataBtn").addEventListener("click", async () => {
       getDocs(collection(db, "inventoryAssets")),
       getDocs(collection(db, "inventoryConsumables")),
       getDocs(collection(db, "purchaseAreas")),
-      getDocs(collection(db, "purchasePlans"))
+      getDocs(collection(db, "purchasePlans")),
+      getDocs(collection(db, "reports")),
+      getDocs(collection(db, "reportTasks"))
     ]);
     const dump = {
       exportedAt: new Date().toISOString(),
@@ -4036,7 +4490,9 @@ $("exportDataBtn").addEventListener("click", async () => {
       inventoryAssets: Object.fromEntries(inventoryAssetsSnap.docs.map(d => [d.id, d.data()])),
       inventoryConsumables: Object.fromEntries(inventoryConsumablesSnap.docs.map(d => [d.id, d.data()])),
       purchaseAreas: Object.fromEntries(purchaseAreasSnap.docs.map(d => [d.id, d.data()])),
-      purchasePlans: Object.fromEntries(purchasePlansSnap.docs.map(d => [d.id, d.data()]))
+      purchasePlans: Object.fromEntries(purchasePlansSnap.docs.map(d => [d.id, d.data()])),
+      reports: Object.fromEntries(reportsSnap.docs.map(d => [d.id, d.data()])),
+      reportTasks: Object.fromEntries(reportTasksSnap.docs.map(d => [d.id, d.data()]))
     };
     const blob = new Blob([JSON.stringify(dump, null, 2)], { type: "application/json" });
     const a = document.createElement("a");
@@ -4081,6 +4537,8 @@ $("importFileInput").addEventListener("change", async () => {
     Object.entries(dump.inventoryConsumables || {}).forEach(([id, data]) => ops.push(["inventoryConsumables", id, data]));
     Object.entries(dump.purchaseAreas || {}).forEach(([id, data]) => ops.push(["purchaseAreas", id, data]));
     Object.entries(dump.purchasePlans || {}).forEach(([id, data]) => ops.push(["purchasePlans", id, data]));
+    Object.entries(dump.reports || {}).forEach(([id, data]) => ops.push(["reports", id, data]));
+    Object.entries(dump.reportTasks || {}).forEach(([id, data]) => ops.push(["reportTasks", id, data]));
 
     // Firestore batches cap at 500 operations — chunk to be safe.
     for (let i = 0; i < ops.length; i += 400){
