@@ -204,6 +204,7 @@ header.top p { margin: 0; color: #666; font-size: 13px; }
 .finding-card.expanded .finding-body { display: block; }
 .finding-text { font-size: 13px; margin-top: 8px; padding: 3px 4px; border-radius: 5px; white-space: pre-wrap; }
 .finding-text[contenteditable=true]:focus { background: #f6f8fc; outline: 1px solid #cfe0fb; }
+.finding-text[contenteditable=true]:empty::before { content: attr(data-placeholder); color: #999; }
 .photo-strip { display: flex; gap: 10px; margin-top: 10px; flex-wrap: wrap; }
 .photo-item { width: 90px; display: flex; flex-direction: column; gap: 4px; }
 .photo-thumb-wrap { position: relative; width: 90px; height: 90px; }
