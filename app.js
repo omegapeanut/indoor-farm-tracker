@@ -62,19 +62,15 @@ function scheduleSortKey(t){
 }
 function eventTimeStatus(ev, isToday){
   if (!isToday) return "";
-  const now = nowTimeStr();
-  const overnight = ev.end < ev.start;
-  if (overnight){
-    // isToday is only true while farmTodayKey() matches, i.e. wall-clock time is
-    // somewhere in [07:00 today, 07:00 tomorrow) — so now < 07:00 unambiguously means
-    // we're in the early-morning continuation of last night's shift, not "before it
-    // starts". Without this split, an overnight event goes dark forever once the
-    // clock crosses midnight instead of staying "current" until it actually ends.
-    if (now < "07:00") return now < ev.end ? "current" : "past";
-    return now >= ev.start ? "current" : "";
-  }
-  if (now >= ev.end) return "past";
-  if (now >= ev.start) return "current";
+  // scheduleSortKey() places every time on the same 07:00-to-07:00 farm-day axis, so
+  // comparing keys instead of raw "HH:MM" strings handles overnight events for free —
+  // no separate branch needed. Without this, an evening task (e.g. 21:30-23:00) looked
+  // "not started yet" instead of "past" once now (e.g. 03:48) sorted before it as a string.
+  const now = scheduleSortKey(nowTimeStr());
+  const start = scheduleSortKey(ev.start);
+  const end = scheduleSortKey(ev.end);
+  if (now >= end) return "past";
+  if (now >= start) return "current";
   return "";
 }
 function escapeHtml(s){
