@@ -128,5 +128,15 @@ service cloud.firestore {
       allow read: if true;
       allow write: if isAdmin();
     }
+
+    match /reports/{id} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /reportTasks/{id} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
   }
 }
