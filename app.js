@@ -2602,10 +2602,20 @@ function renderLogSection(col){
       summary.textContent = summaryText;
       body.appendChild(summary);
 
-      if (r.notes){
+      if (isAdmin || r.notes){
         const notes = document.createElement("div");
         notes.className = "finding-text";
-        notes.textContent = r.notes;
+        notes.contentEditable = isAdmin ? "true" : "false";
+        notes.textContent = r.notes || "";
+        if (isAdmin) notes.dataset.placeholder = "Click to add notes…";
+        notes.addEventListener("click", (e) => e.stopPropagation());
+        notes.addEventListener("blur", async () => {
+          if (!isAdmin) return;
+          const val = notes.innerText.trim();
+          if (val === (r.notes || "")) return;
+          try { await updateDoc(doc(db, col, r.id), { notes: val }); }
+          catch (err){ alert("Couldn't save notes: " + err.message); notes.textContent = r.notes || ""; }
+        });
         body.appendChild(notes);
       }
 
