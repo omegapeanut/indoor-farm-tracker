@@ -1079,6 +1079,24 @@ function renderAttendance(){
   });
 }
 
+// Attendance records are keyed by farm day, not calendar date (see farmTodayKey()), so a
+// night-shift sign-out like "03:25" actually happened the calendar day AFTER the record's
+// own date. Same 07:00 boundary as farmTodayKey(): a time before it belongs to the next day.
+function actualDateForTime(farmDayKey, timeStr){
+  if (!timeStr) return null;
+  const d = toDate(farmDayKey);
+  if (timeStr < "07:00") d.setDate(d.getDate() + 1);
+  return toKey(d);
+}
+function formatShortDate(key){
+  return toDate(key).toLocaleDateString("default", { month: "short", day: "numeric" });
+}
+function makeAttDateLine(farmDayKey, timeStr){
+  const line = document.createElement("div");
+  line.className = "att-time-date";
+  if (timeStr) line.textContent = formatShortDate(actualDateForTime(farmDayKey, timeStr));
+  return line;
+}
 function makeLocLine(loc){
   const line = document.createElement("div");
   line.className = "att-loc";
@@ -1108,6 +1126,7 @@ function makeAttTimeGroup(rec, field, label, kind){
     val.className = "att-time-value" + (rec[field] ? "" : " empty");
     val.textContent = rec[field] || "—";
     group.appendChild(val);
+    group.appendChild(makeAttDateLine(rec.date, rec[field]));
     group.appendChild(makeLocLine(rec[field] ? rec[locField] : null));
     return group;
   }
@@ -1127,6 +1146,7 @@ function makeAttTimeGroup(rec, field, label, kind){
     });
     valWrap.appendChild(input); valWrap.appendChild(clear);
     group.appendChild(valWrap);
+    group.appendChild(makeAttDateLine(rec.date, rec[field]));
     group.appendChild(makeLocLine(rec[locField]));
   } else if (canAct){
     const btn = document.createElement("button");
