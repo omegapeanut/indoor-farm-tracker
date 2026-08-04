@@ -117,6 +117,9 @@ onAuthStateChanged(auth, (user) => {
   if (isDashboardActive()) renderDashboard();
   renderAssets();
   renderConsumables();
+  renderPurchaseAreas();
+  renderPurchasePlans();
+  if (isPurchaseDashboardActive()) renderPurchaseDashboard();
 });
 
 function refreshAdminUI(){
@@ -139,11 +142,19 @@ function refreshAdminUI(){
   $("addEnvReadingsRow").style.display = isAdmin ? "flex" : "none";
   $("addAssetRow").style.display = isAdmin ? "flex" : "none";
   $("addConsumableRow").style.display = isAdmin ? "flex" : "none";
+  $("addAssetPurchaseRow").style.display = isAdmin ? "flex" : "none";
+  $("addConsumablePurchaseRow").style.display = isAdmin ? "flex" : "none";
+  $("purchaseAreasToggleRow").style.display = isAdmin ? "block" : "none";
+  $("purchaseDashboardBtn").style.display = isAdmin ? "inline-block" : "none";
   $("dataTabBtn").style.display = isAdmin ? "inline-block" : "none";
   if (!isAdmin){
     $("staffPanel").style.display = "none";
     $("plantTypesPanel").style.display = "none";
     $("destinationsPanel").style.display = "none";
+    $("purchaseAreasPanel").style.display = "none";
+    if (document.querySelector('#tab-inventory .subtab-panel[data-subtab="purchaseDashboard"]').classList.contains("active")){
+      document.querySelector('#tab-inventory .subtab-btn[data-subtab="assets"]').click();
+    }
     if ($("tab-data").classList.contains("active")) activateTab("calendar");
   }
 }
@@ -215,6 +226,7 @@ document.querySelectorAll(".subtab-btn").forEach(btn => {
     container.querySelectorAll(".subtab-btn").forEach(b => b.classList.toggle("active", b === btn));
     container.querySelectorAll(".subtab-panel").forEach(p => p.classList.toggle("active", p.dataset.subtab === key));
     if (container.id === "tab-growlog" && key === "dashboard") renderDashboard();
+    if (container.id === "tab-inventory" && key === "purchaseDashboard") renderPurchaseDashboard();
   });
 });
 
@@ -3224,6 +3236,480 @@ $("addConsumableBtn").addEventListener("click", async () => {
   }
 });
 
+// ============================================================================
+// INVENTORY — Purchase Areas (Firestore: purchaseAreas/{id}) — where a planned
+// purchase is for (Level 1, Level 3, Office, etc). Managed the same way as
+// Plant Types / Harvest Destinations.
+// ============================================================================
+let purchaseAreasCache = [];
+
+onSnapshot(collection(db, "purchaseAreas"), (snap) => {
+  purchaseAreasCache = snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a,b) => (a.name||"").localeCompare(b.name||""));
+  renderPurchaseAreas();
+  populatePurchaseAreaSelects();
+  renderPurchasePlans();
+  if (isPurchaseDashboardActive()) renderPurchaseDashboard();
+}, () => setSyncStatus("err", "Connection error"));
+
+function purchaseAreaName(id){
+  const area = purchaseAreasCache.find(a => a.id === id);
+  return area ? area.name : null;
+}
+
+function renderPurchaseAreas(){
+  const list = $("purchaseAreasList");
+  if (!list) return;
+  list.innerHTML = "";
+  if (purchaseAreasCache.length === 0){
+    const empty = document.createElement("div");
+    empty.className = "empty-state";
+    empty.textContent = "No areas added yet.";
+    list.appendChild(empty);
+    return;
+  }
+  purchaseAreasCache.forEach(area => {
+    const row = document.createElement("div");
+    row.className = "staff-row";
+
+    const name = document.createElement("div");
+    name.className = "staff-name";
+    name.contentEditable = "true";
+    name.textContent = area.name;
+    name.addEventListener("blur", async () => {
+      const val = name.textContent.trim();
+      if (!val){ name.textContent = area.name; return; }
+      if (val === area.name) return;
+      try { await updateDoc(doc(db, "purchaseAreas", area.id), { name: val }); }
+      catch (err){ alert("Couldn't rename this area: " + err.message); name.textContent = area.name; }
+    });
+    name.addEventListener("keydown", (e) => { if (e.key === "Enter"){ e.preventDefault(); name.blur(); } });
+
+    const del = document.createElement("button");
+    del.className = "icon-btn"; del.textContent = "✕"; del.title = "Remove area";
+    del.addEventListener("click", async () => {
+      if (!confirm("Remove \"" + area.name + "\" from areas? Past purchase entries keep their recorded area.")) return;
+      try { await deleteDoc(doc(db, "purchaseAreas", area.id)); }
+      catch (err){ alert("Couldn't delete this area: " + err.message); }
+    });
+
+    row.appendChild(name); row.appendChild(del);
+    list.appendChild(row);
+  });
+}
+
+$("togglePurchaseAreasBtn").addEventListener("click", () => {
+  const panel = $("purchaseAreasPanel");
+  panel.style.display = panel.style.display === "none" ? "block" : "none";
+});
+
+$("addPurchaseAreaBtn").addEventListener("click", async () => {
+  if (!isAdmin) return;
+  const input = $("newPurchaseAreaName");
+  const name = requireValue(input, "an area name");
+  if (!name) return;
+  try {
+    await addDoc(collection(db, "purchaseAreas"), { name });
+    input.value = "";
+  } catch (err){
+    alert("Couldn't add this area: " + err.message);
+  }
+});
+
+function populatePurchaseAreaSelects(){
+  ["newAssetPurchaseArea", "newConsumablePurchaseArea"].forEach(id => {
+    const sel = $(id);
+    if (!sel) return;
+    const prev = sel.value;
+    sel.innerHTML = "";
+    if (purchaseAreasCache.length === 0){
+      const opt = document.createElement("option");
+      opt.value = ""; opt.textContent = "Add an area first (⚙ above)";
+      sel.appendChild(opt);
+      return;
+    }
+    purchaseAreasCache.forEach(area => {
+      const opt = document.createElement("option");
+      opt.value = area.id; opt.textContent = area.name;
+      sel.appendChild(opt);
+    });
+    if (prev && purchaseAreasCache.some(a => a.id === prev)) sel.value = prev;
+  });
+}
+
+// ============================================================================
+// INVENTORY — Purchase Planning (Firestore: purchasePlans/{id}) — items you're
+// planning to buy, labeled "asset" or "consumable" depending on which tab's
+// add form was used, and shown in that same tab's "Planning to Buy" section.
+// Price and purchaseDate are stored on the same document as everything else
+// (this app's Firestore rules are open-read, same as staff PINs — see the
+// note at the top of firestore.rules) but are only ever rendered in the UI
+// when isAdmin is true, so casual visitors browsing the site don't see them.
+// ============================================================================
+let purchasePlansCache = [];
+const expandedPurchasePlans = {};
+
+onSnapshot(collection(db, "purchasePlans"), (snap) => {
+  purchasePlansCache = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  renderPurchasePlans();
+  if (isPurchaseDashboardActive()) renderPurchaseDashboard();
+}, () => setSyncStatus("err", "Connection error"));
+
+function renderPurchasePlans(){
+  renderPurchaseList("asset", "assetPurchaseList");
+  renderPurchaseList("consumable", "consumablePurchaseList");
+}
+
+function renderPurchaseList(label, listId){
+  const list = $(listId);
+  if (!list) return;
+  list.innerHTML = "";
+
+  const items = purchasePlansCache
+    .filter(p => p.label === label)
+    .sort((a,b) => (a.purchased === b.purchased) ? (a.item || "").localeCompare(b.item || "") : (a.purchased ? 1 : -1));
+  if (items.length === 0){
+    const empty = document.createElement("div");
+    empty.className = "empty-state";
+    empty.textContent = "No items planned yet.";
+    list.appendChild(empty);
+    return;
+  }
+
+  items.forEach(p => list.appendChild(buildPurchaseCard(p)));
+}
+
+function buildPurchaseCard(p){
+  const isOpen = !!expandedPurchasePlans[p.id];
+  const card = document.createElement("div");
+  card.className = "finding-card" + (isOpen ? " expanded" : "");
+
+  const header = document.createElement("div");
+  header.className = "finding-header";
+  const left = document.createElement("div");
+  left.className = "finding-header-left";
+
+  const checkWrap = document.createElement("label");
+  checkWrap.className = "purchase-purchased-check";
+  const check = document.createElement("input");
+  check.type = "checkbox"; check.checked = !!p.purchased;
+  check.disabled = !isAdmin;
+  check.addEventListener("click", (e) => e.stopPropagation());
+  check.addEventListener("change", async () => {
+    const fields = { purchased: check.checked };
+    if (check.checked && !p.purchaseDate) fields.purchaseDate = toKey(new Date());
+    try { await updateDoc(doc(db, "purchasePlans", p.id), fields); }
+    catch (err){ alert("Couldn't update this item: " + err.message); check.checked = !check.checked; }
+  });
+  checkWrap.appendChild(check);
+  left.appendChild(checkWrap);
+
+  const chevron = document.createElement("span");
+  chevron.className = "finding-chevron"; chevron.textContent = "▶";
+  left.appendChild(chevron);
+
+  const nameEl = document.createElement("span");
+  nameEl.className = "finding-date purchase-item-name" + (p.purchased ? " purchased" : "");
+  nameEl.textContent = p.item || "Untitled item";
+  left.appendChild(nameEl);
+
+  const qtyTag = document.createElement("span");
+  qtyTag.className = "finding-latest-tag";
+  qtyTag.textContent = "Qty " + (p.quantity ?? 1);
+  left.appendChild(qtyTag);
+
+  if (p.areaId){
+    const areaTag = document.createElement("span");
+    areaTag.className = "finding-latest-tag";
+    areaTag.style.background = "#eef4fe"; areaTag.style.color = "#0b57d0";
+    areaTag.textContent = purchaseAreaName(p.areaId) || "(deleted area)";
+    left.appendChild(areaTag);
+  }
+
+  if (isAdmin && p.price != null && p.price !== ""){
+    const priceTag = document.createElement("span");
+    priceTag.className = "purchase-price-tag";
+    priceTag.textContent = "$" + Number(p.price).toFixed(2);
+    left.appendChild(priceTag);
+  }
+
+  if (!isOpen && p.notes){
+    const preview = document.createElement("span");
+    preview.className = "finding-preview";
+    preview.textContent = p.notes;
+    left.appendChild(preview);
+  }
+  header.appendChild(left);
+
+  if (isAdmin){
+    const del = document.createElement("button");
+    del.className = "icon-btn"; del.textContent = "✕"; del.title = "Delete item";
+    del.addEventListener("click", async (e) => {
+      e.stopPropagation();
+      if (!confirm("Delete \"" + (p.item || "this item") + "\" from the purchase plan?")) return;
+      try { await deleteDoc(doc(db, "purchasePlans", p.id)); }
+      catch (err){ alert("Couldn't delete this item: " + err.message); }
+    });
+    header.appendChild(del);
+  }
+  header.addEventListener("click", () => {
+    if (expandedPurchasePlans[p.id]) delete expandedPurchasePlans[p.id]; else expandedPurchasePlans[p.id] = true;
+    renderPurchasePlans();
+  });
+  card.appendChild(header);
+
+  const body = document.createElement("div");
+  body.className = "finding-body";
+  if (isOpen){
+    const nameInput = document.createElement("div");
+    nameInput.className = "finding-text";
+    nameInput.style.fontWeight = "600";
+    nameInput.contentEditable = isAdmin ? "true" : "false";
+    nameInput.textContent = p.item || "";
+    nameInput.addEventListener("click", (e) => e.stopPropagation());
+    nameInput.addEventListener("blur", async () => {
+      if (!isAdmin) return;
+      const val = nameInput.innerText.trim();
+      if (!val || val === p.item) { nameInput.textContent = p.item || ""; return; }
+      try { await updateDoc(doc(db, "purchasePlans", p.id), { item: val }); }
+      catch (err){ alert("Couldn't save the item name: " + err.message); nameInput.textContent = p.item || ""; }
+    });
+    body.appendChild(nameInput);
+
+    const row1 = document.createElement("div");
+    row1.className = "row2";
+    row1.style.marginTop = "8px";
+    const areaField = document.createElement("div"); areaField.className = "field";
+    areaField.innerHTML = "<label>Area</label>";
+    const areaSelect = document.createElement("select");
+    areaSelect.disabled = !isAdmin;
+    purchaseAreasCache.forEach(area => {
+      const opt = document.createElement("option");
+      opt.value = area.id; opt.textContent = area.name;
+      areaSelect.appendChild(opt);
+    });
+    if (p.areaId) areaSelect.value = p.areaId;
+    areaSelect.addEventListener("change", async () => {
+      try { await updateDoc(doc(db, "purchasePlans", p.id), { areaId: areaSelect.value }); }
+      catch (err){ alert("Couldn't save the area: " + err.message); }
+    });
+    areaField.appendChild(areaSelect);
+
+    const qtyField = document.createElement("div"); qtyField.className = "field";
+    qtyField.innerHTML = "<label>Quantity</label>";
+    const qtyInput = document.createElement("input");
+    qtyInput.type = "number"; qtyInput.min = "0"; qtyInput.step = "1"; qtyInput.value = p.quantity ?? 1;
+    qtyInput.disabled = !isAdmin;
+    qtyInput.addEventListener("change", async () => {
+      const val = parseInt(qtyInput.value, 10) || 0;
+      try { await updateDoc(doc(db, "purchasePlans", p.id), { quantity: val }); }
+      catch (err){ alert("Couldn't save the quantity: " + err.message); }
+    });
+    qtyField.appendChild(qtyInput);
+
+    row1.appendChild(areaField); row1.appendChild(qtyField);
+    if (isAdmin) body.appendChild(row1);
+
+    if (isAdmin){
+      const row2 = document.createElement("div");
+      row2.className = "row2";
+      const priceField = document.createElement("div"); priceField.className = "field";
+      priceField.innerHTML = "<label>Price</label>";
+      const priceInput = document.createElement("input");
+      priceInput.type = "number"; priceInput.min = "0"; priceInput.step = "0.01"; priceInput.value = p.price ?? "";
+      priceInput.addEventListener("change", async () => {
+        const val = priceInput.value === "" ? null : Number(priceInput.value);
+        try { await updateDoc(doc(db, "purchasePlans", p.id), { price: val }); }
+        catch (err){ alert("Couldn't save the price: " + err.message); }
+      });
+      priceField.appendChild(priceInput);
+
+      const dateField = document.createElement("div"); dateField.className = "field";
+      dateField.innerHTML = "<label>Purchase date</label>";
+      const dateInput = document.createElement("input");
+      dateInput.type = "date"; dateInput.value = p.purchaseDate || "";
+      dateInput.addEventListener("change", async () => {
+        try { await updateDoc(doc(db, "purchasePlans", p.id), { purchaseDate: dateInput.value }); }
+        catch (err){ alert("Couldn't save the purchase date: " + err.message); }
+      });
+      dateField.appendChild(dateInput);
+
+      row2.appendChild(priceField); row2.appendChild(dateField);
+      body.appendChild(row2);
+    }
+
+    const notes = document.createElement("div");
+    notes.className = "finding-text";
+    notes.contentEditable = isAdmin ? "true" : "false";
+    notes.textContent = p.notes || "";
+    notes.addEventListener("click", (e) => e.stopPropagation());
+    notes.addEventListener("blur", async () => {
+      if (!isAdmin) return;
+      const val = notes.innerText.trim();
+      if (val === p.notes) return;
+      try { await updateDoc(doc(db, "purchasePlans", p.id), { notes: val }); }
+      catch (err){ alert("Couldn't save the notes: " + err.message); notes.textContent = p.notes || ""; }
+    });
+    body.appendChild(notes);
+  }
+  card.appendChild(body);
+  return card;
+}
+
+function wirePurchaseAddForm(label, prefix){
+  const btn = $("add" + prefix + "PurchaseBtn");
+  if (!btn) return;
+  btn.addEventListener("click", async () => {
+    if (!isAdmin) return;
+    const itemInput = $("new" + prefix + "PurchaseItem");
+    const areaSelect = $("new" + prefix + "PurchaseArea");
+    const qtyInput = $("new" + prefix + "PurchaseQuantity");
+    const priceInput = $("new" + prefix + "PurchasePrice");
+    const notesInput = $("new" + prefix + "PurchaseNotes");
+    const item = requireValue(itemInput, "an item name");
+    if (!item) return;
+    const areaId = areaSelect.value || null;
+    const quantity = parseInt(qtyInput.value, 10) || 1;
+    const price = priceInput.value === "" ? null : Number(priceInput.value);
+    const notes = notesInput.value.trim();
+    btn.disabled = true; btn.textContent = "Adding…";
+    try {
+      await addDoc(collection(db, "purchasePlans"), { item, label, areaId, quantity, price, notes, purchased: false, purchaseDate: null });
+      itemInput.value = ""; qtyInput.value = "1"; priceInput.value = ""; notesInput.value = "";
+    } catch (err){
+      alert("Couldn't save this item: " + err.message + "\n\nIf this says \"permission denied\", the purchasePlans rule in firestore.rules needs to be published in the Firebase console (Firestore Database → Rules).");
+    } finally {
+      btn.disabled = false; btn.textContent = "Add";
+    }
+  });
+}
+wirePurchaseAddForm("asset", "Asset");
+wirePurchaseAddForm("consumable", "Consumable");
+
+// ---- Purchases Dashboard (admin-only sub-tab) ----
+function isPurchaseDashboardActive(){
+  const el = document.querySelector('#tab-inventory .subtab-panel[data-subtab="purchaseDashboard"]');
+  return !!el && el.classList.contains("active");
+}
+
+function computeSpendByArea(){
+  const totals = {};
+  purchasePlansCache.forEach(p => {
+    if (!p.purchased) return;
+    const key = p.areaId || "";
+    totals[key] = (totals[key] || 0) + (Number(p.price) || 0) * (Number(p.quantity) || 1);
+  });
+  const labels = [], data = [];
+  Object.entries(totals).forEach(([id, amt]) => {
+    if (amt <= 0) return;
+    labels.push(id ? (purchaseAreaName(id) || "(deleted area)") : "No area set");
+    data.push(Number(amt.toFixed(2)));
+  });
+  return { labels, data };
+}
+
+function computeSpendByLabel(){
+  const totals = { asset: 0, consumable: 0 };
+  purchasePlansCache.forEach(p => {
+    if (!p.purchased) return;
+    totals[p.label] = (totals[p.label] || 0) + (Number(p.price) || 0) * (Number(p.quantity) || 1);
+  });
+  const labels = [], data = [];
+  if (totals.asset > 0){ labels.push("Assets"); data.push(Number(totals.asset.toFixed(2))); }
+  if (totals.consumable > 0){ labels.push("Consumables"); data.push(Number(totals.consumable.toFixed(2))); }
+  return { labels, data };
+}
+
+// For each consumable item name bought 2+ times, average the days between purchases and
+// project that forward from the last purchase date — a lightweight reorder prediction that
+// doesn't require any extra data entry beyond marking items purchased with a date.
+function computeReorderPredictions(){
+  const groups = {};
+  purchasePlansCache.forEach(p => {
+    if (p.label !== "consumable" || !p.purchased || !p.purchaseDate) return;
+    const key = (p.item || "").trim();
+    if (!key) return;
+    (groups[key] = groups[key] || []).push(p.purchaseDate);
+  });
+  const predictions = [];
+  Object.entries(groups).forEach(([item, dates]) => {
+    const sorted = dates.slice().sort();
+    const last = sorted[sorted.length - 1];
+    if (sorted.length < 2){
+      predictions.push({ item, last, avgDays: null, nextDate: null });
+      return;
+    }
+    let totalGap = 0;
+    for (let i = 1; i < sorted.length; i++) totalGap += (toDate(sorted[i]) - toDate(sorted[i-1])) / 86400000;
+    const avgDays = Math.round(totalGap / (sorted.length - 1));
+    const nextD = toDate(last);
+    nextD.setDate(nextD.getDate() + avgDays);
+    predictions.push({ item, last, avgDays, nextDate: toKey(nextD) });
+  });
+  predictions.sort((a,b) => (a.nextDate || "9999-99-99").localeCompare(b.nextDate || "9999-99-99"));
+  return predictions;
+}
+
+function renderReorderPredictions(){
+  const list = $("reorderPredictionList");
+  if (!list) return;
+  list.innerHTML = "";
+  const predictions = computeReorderPredictions();
+  if (predictions.length === 0){
+    const empty = document.createElement("div");
+    empty.className = "empty-state";
+    empty.textContent = "Not enough purchase history yet — mark consumable items as purchased (with a date) to start predicting reorder timing.";
+    list.appendChild(empty);
+    return;
+  }
+  predictions.forEach(pr => {
+    const row = document.createElement("div");
+    row.className = "reorder-row";
+    const nameEl = document.createElement("span"); nameEl.className = "reorder-item"; nameEl.textContent = pr.item;
+    row.appendChild(nameEl);
+    const lastEl = document.createElement("span"); lastEl.className = "reorder-detail"; lastEl.textContent = "Last bought " + pr.last;
+    row.appendChild(lastEl);
+    if (pr.avgDays != null){
+      const intervalEl = document.createElement("span"); intervalEl.className = "reorder-detail"; intervalEl.textContent = "Avg every " + pr.avgDays + " days";
+      row.appendChild(intervalEl);
+      const nextEl = document.createElement("span"); nextEl.className = "reorder-next"; nextEl.textContent = "Predicted next: " + pr.nextDate;
+      row.appendChild(nextEl);
+    } else {
+      const noteEl = document.createElement("span"); noteEl.className = "reorder-detail"; noteEl.textContent = "Bought once so far — buy again to start predicting.";
+      row.appendChild(noteEl);
+    }
+    list.appendChild(row);
+  });
+}
+
+function renderPurchaseDashboardKPIs(){
+  const purchased = purchasePlansCache.filter(p => p.purchased);
+  const pending = purchasePlansCache.filter(p => !p.purchased);
+  const amount = p => (Number(p.price) || 0) * (Number(p.quantity) || 1);
+  const totalSpent = purchased.reduce((s,p) => s + amount(p), 0);
+  const thisMonthPrefix = toKey(new Date()).slice(0, 7);
+  const spentThisMonth = purchased.filter(p => (p.purchaseDate || "").startsWith(thisMonthPrefix)).reduce((s,p) => s + amount(p), 0);
+  const pendingCost = pending.reduce((s,p) => s + amount(p), 0);
+
+  $("kpiTotalSpent").textContent = "$" + totalSpent.toFixed(2);
+  $("kpiSpentThisMonth").textContent = "$" + spentThisMonth.toFixed(2);
+  $("kpiPendingCount").textContent = pending.length;
+  $("kpiPendingCost").textContent = "$" + pendingCost.toFixed(2);
+}
+
+function renderPurchaseDashboard(){
+  renderPurchaseDashboardKPIs();
+  const byArea = computeSpendByArea();
+  renderDoughnutChart("spendByAreaChart", "spendByAreaEmpty", byArea.labels, byArea.data);
+  const byLabel = computeSpendByLabel();
+  renderDoughnutChart("spendByLabelChart", "spendByLabelEmpty", byLabel.labels, byLabel.data);
+  renderReorderPredictions();
+}
+
+const inventoryTabBtn = document.querySelector('.tab-btn[data-tab="inventory"]');
+if (inventoryTabBtn) inventoryTabBtn.addEventListener("click", () => {
+  if (isPurchaseDashboardActive()) requestAnimationFrame(renderPurchaseDashboard);
+});
+
 // Photo/annotate pipeline is shared by every collection that stores records
 // as { id, photos: [...] } — Findings Log, Plant Guide, Special Events,
 // Inventory Assets, and the four Grow Log sections. Registry keeps adding a
@@ -3391,7 +3877,7 @@ $("annotateSave").addEventListener("click", async () => {
 $("exportDataBtn").addEventListener("click", async () => {
   $("dataStatus").textContent = "Gathering data…";
   try {
-    const [scheduleSnap, seriesSnap, houseRulesSnap, findingsSnap, proposalsSnap, plantGuideSnap, specialEventsSnap, plantTypesSnap, harvestDestinationsSnap, harvestsSnap, transplantsSnap, germinationsSnap, lossesSnap, envReadingsSnap, staffSnap, attendanceSnap, inventoryAssetsSnap, inventoryConsumablesSnap] = await Promise.all([
+    const [scheduleSnap, seriesSnap, houseRulesSnap, findingsSnap, proposalsSnap, plantGuideSnap, specialEventsSnap, plantTypesSnap, harvestDestinationsSnap, harvestsSnap, transplantsSnap, germinationsSnap, lossesSnap, envReadingsSnap, staffSnap, attendanceSnap, inventoryAssetsSnap, inventoryConsumablesSnap, purchaseAreasSnap, purchasePlansSnap] = await Promise.all([
       getDocs(collection(db, "schedule")),
       getDocs(collection(db, "series")),
       getDoc(doc(db, "meta", "houseRules")),
@@ -3409,7 +3895,9 @@ $("exportDataBtn").addEventListener("click", async () => {
       getDocs(collection(db, "staff")),
       getDocs(collection(db, "attendance")),
       getDocs(collection(db, "inventoryAssets")),
-      getDocs(collection(db, "inventoryConsumables"))
+      getDocs(collection(db, "inventoryConsumables")),
+      getDocs(collection(db, "purchaseAreas")),
+      getDocs(collection(db, "purchasePlans"))
     ]);
     const dump = {
       exportedAt: new Date().toISOString(),
@@ -3430,7 +3918,9 @@ $("exportDataBtn").addEventListener("click", async () => {
       staff: Object.fromEntries(staffSnap.docs.map(d => [d.id, d.data()])),
       attendance: Object.fromEntries(attendanceSnap.docs.map(d => [d.id, d.data()])),
       inventoryAssets: Object.fromEntries(inventoryAssetsSnap.docs.map(d => [d.id, d.data()])),
-      inventoryConsumables: Object.fromEntries(inventoryConsumablesSnap.docs.map(d => [d.id, d.data()]))
+      inventoryConsumables: Object.fromEntries(inventoryConsumablesSnap.docs.map(d => [d.id, d.data()])),
+      purchaseAreas: Object.fromEntries(purchaseAreasSnap.docs.map(d => [d.id, d.data()])),
+      purchasePlans: Object.fromEntries(purchasePlansSnap.docs.map(d => [d.id, d.data()]))
     };
     const blob = new Blob([JSON.stringify(dump, null, 2)], { type: "application/json" });
     const a = document.createElement("a");
@@ -3473,6 +3963,8 @@ $("importFileInput").addEventListener("change", async () => {
     Object.entries(dump.attendance || {}).forEach(([id, data]) => ops.push(["attendance", id, data]));
     Object.entries(dump.inventoryAssets || {}).forEach(([id, data]) => ops.push(["inventoryAssets", id, data]));
     Object.entries(dump.inventoryConsumables || {}).forEach(([id, data]) => ops.push(["inventoryConsumables", id, data]));
+    Object.entries(dump.purchaseAreas || {}).forEach(([id, data]) => ops.push(["purchaseAreas", id, data]));
+    Object.entries(dump.purchasePlans || {}).forEach(([id, data]) => ops.push(["purchasePlans", id, data]));
 
     // Firestore batches cap at 500 operations — chunk to be safe.
     for (let i = 0; i < ops.length; i += 400){
