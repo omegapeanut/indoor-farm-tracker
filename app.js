@@ -52,6 +52,14 @@ function nowTimeStr(){
   const d = new Date();
   return String(d.getHours()).padStart(2,"0") + ":" + String(d.getMinutes()).padStart(2,"0");
 }
+// Sort key for a day's event list: the farm day runs 07:00-07:00, so a task that starts
+// before 07:00 (the tail end of the night shift, technically the next calendar date) needs
+// to sort after everything from that evening instead of jumping to the top of the list —
+// otherwise a 01:00 task added after midnight looks like it happens before the morning shift.
+function scheduleSortKey(t){
+  const [h, m] = t.split(":").map(Number);
+  return (h < 7 ? h + 24 : h) * 60 + m;
+}
 function eventTimeStatus(ev, isToday){
   if (!isToday) return "";
   const now = nowTimeStr();
@@ -358,7 +366,7 @@ function renderCalendar(){
       line.textContent = "★ " + ev.title;
       summary.appendChild(line);
     });
-    const sorted = entry.events.slice().sort((a,b) => a.start.localeCompare(b.start));
+    const sorted = entry.events.slice().sort((a,b) => scheduleSortKey(a.start) - scheduleSortKey(b.start));
     sorted.slice(0,3).forEach(ev => {
       const line = document.createElement("span");
       line.className = "ev";
@@ -471,7 +479,7 @@ function renderDailySchedule(){
       start: ev.startTime || "00:00", end: ev.endTime || ev.startTime || "23:59",
       title: ev.title, notes: ev.notes, allDay: !ev.startTime, id: ev.id, isSpecial: true
     }));
-  const sorted = shiftItems.concat(specialItems).sort((a,b) => a.start.localeCompare(b.start));
+  const sorted = shiftItems.concat(specialItems).sort((a,b) => (a.allDay ? -1 : scheduleSortKey(a.start)) - (b.allDay ? -1 : scheduleSortKey(b.start)));
 
   if (sorted.length === 0){
     const empty = document.createElement("div");
@@ -1493,6 +1501,15 @@ $("addFindingBtn").addEventListener("click", async () => {
 $("newFindingInput").addEventListener("keydown", (e) => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) $("addFindingBtn").click(); });
 (() => { const t = toKey(new Date()); $("newFindingDate").value = inRange(t) ? t : START_DATE; })();
 
+// Findings photos are stored at full upload resolution (original camera size, often
+// several MB). Printing dozens of those directly makes Chrome's print preview hang
+// for a very long time fetching/rasterizing them, so the PDF report requests a small
+// Cloudinary-resized version instead — same photo, a fraction of the bytes.
+function cloudinaryThumb(url, width){
+  if (!url) return url;
+  return url.replace("/upload/", "/upload/w_" + width + ",q_auto,f_auto/");
+}
+
 function buildFindingsPdfHtml(){
   const items = findingsCache.slice().sort((a,b) => b.date.localeCompare(a.date));
   const generated = new Date().toLocaleString("default", { dateStyle: "medium", timeStyle: "short" });
@@ -1506,7 +1523,7 @@ function buildFindingsPdfHtml(){
       html += '<div class="pdf-entry-text">' + escapeHtml(f.text || "").replace(/\n/g, "<br>") + '</div>';
       if (f.photos && f.photos.length){
         html += '<div class="pdf-photo-grid">';
-        f.photos.forEach(p => { html += '<img class="pdf-photo" src="' + escapeHtml(p.url) + '">'; });
+        f.photos.forEach(p => { html += '<img class="pdf-photo" src="' + escapeHtml(cloudinaryThumb(p.url, 220)) + '">'; });
         html += '</div>';
       }
       html += '</div>';
@@ -1516,11 +1533,32 @@ function buildFindingsPdfHtml(){
   return html;
 }
 
-$("downloadFindingsPdfBtn").addEventListener("click", () => {
+// Waits for every <img> in the print area to either load or fail, capped per-image so
+// one broken/slow URL can't hang the whole thing forever.
+function waitForImages(container, timeoutMs){
+  const imgs = Array.from(container.querySelectorAll("img"));
+  return Promise.all(imgs.map(img => {
+    if (img.complete) return Promise.resolve();
+    return new Promise(resolve => {
+      const done = () => { img.removeEventListener("load", done); img.removeEventListener("error", done); resolve(); };
+      img.addEventListener("load", done);
+      img.addEventListener("error", done);
+      setTimeout(done, timeoutMs);
+    });
+  }));
+}
+
+$("downloadFindingsPdfBtn").addEventListener("click", async () => {
   if (!isAdmin) return;
-  $("pdfPrintArea").innerHTML = buildFindingsPdfHtml();
+  const btn = $("downloadFindingsPdfBtn");
+  const originalLabel = btn.textContent;
+  btn.disabled = true; btn.textContent = "Preparing PDF…";
+  const area = $("pdfPrintArea");
+  area.innerHTML = buildFindingsPdfHtml();
+  await waitForImages(area, 8000);
   document.body.classList.add("printing-pdf");
   window.print();
+  btn.disabled = false; btn.textContent = originalLabel;
 });
 window.addEventListener("afterprint", () => {
   document.body.classList.remove("printing-pdf");

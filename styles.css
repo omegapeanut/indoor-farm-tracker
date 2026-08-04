@@ -483,6 +483,13 @@ header.top p { margin: 0; color: #666; font-size: 13px; }
 
   .photo-item, .photo-thumb-wrap, .photo-thumb, .add-photo-btn { width: 76px; }
   .photo-thumb-wrap, .photo-thumb, .add-photo-btn { height: 76px; }
+
+  /* Findings' search row grew a 3rd button (Download PDF); on narrow phones the
+     row no longer fits on one line without pushing that button off-screen, so
+     wrap it: search input full-width on its own row, Clear/Download PDF below. */
+  .search-row { flex-wrap: wrap; }
+  .search-row input[type=text] { flex: 1 1 100%; }
+  .search-row button { flex: 1 1 auto; }
 }
 
 /* ============================================================================
