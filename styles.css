@@ -276,6 +276,7 @@ header.top p { margin: 0; color: #666; font-size: 13px; }
 .att-time-input { border: 1px solid #d8d8d8; border-radius: 5px; padding: 3px 5px; font-size: 12px; }
 .att-clear { border: none; background: none; color: #bbb; cursor: pointer; font-size: 11px; padding: 0 2px; }
 .att-clear:hover { color: #c0392b; }
+.att-time-date { font-size: 10px; color: #888; font-weight: 600; text-transform: uppercase; letter-spacing: 0.02em; min-height: 12px; }
 .att-loc { font-size: 9.5px; color: #999; margin-top: 1px; white-space: nowrap; min-height: 12px; }
 .att-loc a { color: #999; text-decoration: none; }
 .att-loc a:hover { text-decoration: underline; }
