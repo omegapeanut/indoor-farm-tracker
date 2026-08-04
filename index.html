@@ -158,6 +158,7 @@
         <div class="search-row">
           <input type="text" id="findingsSearch" placeholder="Search findings by keyword…">
           <button id="findingsSearchClear">Clear</button>
+          <button id="downloadFindingsPdfBtn" style="display:none;">⬇ Download PDF</button>
         </div>
         <div class="finding-add" id="addFindingRow" style="display:none;">
           <input type="date" id="newFindingDate">
@@ -831,6 +832,9 @@
 </div>
 
 <input type="file" id="photoFileInput" accept="image/*" multiple style="display:none;">
+
+<!-- PDF export target: only visible during print (see @media print in styles.css) -->
+<div id="pdfPrintArea"></div>
 
 <!-- Firebase (modular v10 SDK, loaded straight from Google's CDN — no build step needed) -->
 <script src="firebase-config.js"></script>
