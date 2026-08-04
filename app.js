@@ -52,6 +52,14 @@ function nowTimeStr(){
   const d = new Date();
   return String(d.getHours()).padStart(2,"0") + ":" + String(d.getMinutes()).padStart(2,"0");
 }
+// Sort key for a day's event list: the farm day runs 07:00-07:00, so a task that starts
+// before 07:00 (the tail end of the night shift, technically the next calendar date) needs
+// to sort after everything from that evening instead of jumping to the top of the list —
+// otherwise a 01:00 task added after midnight looks like it happens before the morning shift.
+function scheduleSortKey(t){
+  const [h, m] = t.split(":").map(Number);
+  return (h < 7 ? h + 24 : h) * 60 + m;
+}
 function eventTimeStatus(ev, isToday){
   if (!isToday) return "";
   const now = nowTimeStr();
@@ -358,7 +366,7 @@ function renderCalendar(){
       line.textContent = "★ " + ev.title;
       summary.appendChild(line);
     });
-    const sorted = entry.events.slice().sort((a,b) => a.start.localeCompare(b.start));
+    const sorted = entry.events.slice().sort((a,b) => scheduleSortKey(a.start) - scheduleSortKey(b.start));
     sorted.slice(0,3).forEach(ev => {
       const line = document.createElement("span");
       line.className = "ev";
@@ -471,7 +479,7 @@ function renderDailySchedule(){
       start: ev.startTime || "00:00", end: ev.endTime || ev.startTime || "23:59",
       title: ev.title, notes: ev.notes, allDay: !ev.startTime, id: ev.id, isSpecial: true
     }));
-  const sorted = shiftItems.concat(specialItems).sort((a,b) => a.start.localeCompare(b.start));
+  const sorted = shiftItems.concat(specialItems).sort((a,b) => (a.allDay ? -1 : scheduleSortKey(a.start)) - (b.allDay ? -1 : scheduleSortKey(b.start)));
 
   if (sorted.length === 0){
     const empty = document.createElement("div");
