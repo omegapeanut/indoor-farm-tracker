@@ -484,3 +484,24 @@ header.top p { margin: 0; color: #666; font-size: 13px; }
   .photo-item, .photo-thumb-wrap, .photo-thumb, .add-photo-btn { width: 76px; }
   .photo-thumb-wrap, .photo-thumb, .add-photo-btn { height: 76px; }
 }
+
+/* ============================================================================
+   FINDINGS PDF EXPORT — #pdfPrintArea is filled just before window.print() and
+   is otherwise empty/hidden; @media print swaps the whole page for it so the
+   browser's own "Save as PDF" produces a clean A4 report with no extra libs.
+   ============================================================================ */
+#pdfPrintArea { display: none; }
+@media print {
+  @page { size: A4; margin: 15mm; }
+  body.printing-pdf { background: #fff; }
+  body.printing-pdf > *:not(#pdfPrintArea) { display: none !important; }
+  body.printing-pdf #pdfPrintArea { display: block !important; }
+}
+.pdf-doc { font-family: Arial, Helvetica, sans-serif; color: #111; }
+.pdf-doc h1 { font-size: 20px; margin: 0 0 4px; }
+.pdf-doc .pdf-meta { font-size: 11px; color: #666; margin: 0 0 18px; padding-bottom: 10px; border-bottom: 1px solid #ccc; }
+.pdf-doc .pdf-entry { margin-bottom: 16px; page-break-inside: avoid; }
+.pdf-doc .pdf-entry-date { font-size: 13px; font-weight: 700; margin-bottom: 4px; }
+.pdf-doc .pdf-entry-text { font-size: 12px; line-height: 1.5; white-space: pre-wrap; }
+.pdf-doc .pdf-photo-grid { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.pdf-doc .pdf-photo { width: 90px; height: 90px; object-fit: cover; border: 1px solid #ccc; }

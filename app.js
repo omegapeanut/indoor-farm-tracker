@@ -34,6 +34,15 @@ function uid(){ return Date.now().toString(36) + Math.random().toString(36).slic
 function toDate(s){ const p = s.split("-"); return new Date(parseInt(p[0]), parseInt(p[1]) - 1, parseInt(p[2])); }
 function toKey(d){ return d.getFullYear() + "-" + String(d.getMonth()+1).padStart(2,"0") + "-" + String(d.getDate()).padStart(2,"0"); }
 function inRange(key){ return key >= START_DATE; }
+// Night shift runs 19:00-07:00, crossing midnight. Before 07:00 the farm day still
+// in progress is yesterday's, so "today" for schedule/attendance purposes needs this
+// instead of the raw calendar date, or everything tied to the night shift breaks the
+// moment the clock passes midnight.
+function farmTodayKey(){
+  const d = new Date();
+  if (d.getHours() < 7) d.setDate(d.getDate() - 1);
+  return toKey(d);
+}
 function horizonEnd(fromKey){
   const d = fromKey ? toDate(fromKey) : new Date();
   d.setDate(d.getDate() + HORIZON_DAYS);
@@ -47,7 +56,15 @@ function eventTimeStatus(ev, isToday){
   if (!isToday) return "";
   const now = nowTimeStr();
   const overnight = ev.end < ev.start;
-  if (overnight) return now >= ev.start ? "current" : "";
+  if (overnight){
+    // isToday is only true while farmTodayKey() matches, i.e. wall-clock time is
+    // somewhere in [07:00 today, 07:00 tomorrow) — so now < 07:00 unambiguously means
+    // we're in the early-morning continuation of last night's shift, not "before it
+    // starts". Without this split, an overnight event goes dark forever once the
+    // clock crosses midnight instead of staying "current" until it actually ends.
+    if (now < "07:00") return now < ev.end ? "current" : "past";
+    return now >= ev.start ? "current" : "";
+  }
   if (now >= ev.end) return "past";
   if (now >= ev.start) return "current";
   return "";
@@ -126,6 +143,7 @@ function refreshAdminUI(){
   $("adminArea").style.display = isAdmin ? "flex" : "none";
   $("addRuleRow").style.display = isAdmin ? "flex" : "none";
   $("addFindingRow").style.display = isAdmin ? "flex" : "none";
+  $("downloadFindingsPdfBtn").style.display = isAdmin ? "inline-block" : "none";
   $("addProposalRow").style.display = isAdmin ? "flex" : "none";
   $("addPlantRow").style.display = isAdmin ? "flex" : "none";
   $("addSpecialEventRow").style.display = isAdmin ? "flex" : "none";
@@ -320,7 +338,7 @@ function renderCalendar(){
     const entry = viewDay(key);
     if (entry.dayType === "maintenance") cell.classList.add("maintenance");
     if (entry.dayType === "holiday") cell.classList.add("holiday");
-    if (key === toKey(new Date())) cell.classList.add("today");
+    if (key === farmTodayKey()) cell.classList.add("today");
     if (key === highlightDate) cell.classList.add("search-highlight");
 
     const specialToday = specialEventsCache.filter(ev => key >= (ev.startDate || "") && key <= (ev.endDate || ev.startDate || ""));
@@ -377,13 +395,13 @@ function jumpCalendarToDate(key){
   renderCalendar();
   setTimeout(() => { if (highlightDate === key){ highlightDate = null; renderCalendar(); } }, 2000);
 }
-$("calTodayBtn").addEventListener("click", () => jumpCalendarToDate(toKey(new Date())));
+$("calTodayBtn").addEventListener("click", () => jumpCalendarToDate(farmTodayKey()));
 $("calGoToDate").addEventListener("change", (e) => { if (e.target.value) jumpCalendarToDate(e.target.value); });
 
 // ============================================================================
 // DAILY SCHEDULE TAB
 // ============================================================================
-const todayKeyGlobal = toKey(new Date());
+const todayKeyGlobal = farmTodayKey();
 let selectedDate = inRange(todayKeyGlobal) ? todayKeyGlobal : START_DATE;
 
 const dsDatePicker = $("dsDatePicker");
@@ -408,7 +426,7 @@ function shiftDay(delta){
 $("dsPrevDay").addEventListener("click", () => shiftDay(-1));
 $("dsNextDay").addEventListener("click", () => shiftDay(1));
 $("dsToday").addEventListener("click", () => {
-  const t = toKey(new Date());
+  const t = farmTodayKey();
   selectedDate = inRange(t) ? t : START_DATE;
   dsDatePicker.value = selectedDate;
   renderDailySchedule();
@@ -432,7 +450,7 @@ function renderDailySchedule(){
     renderDailySchedule();
   } : null;
 
-  const isToday = selectedDate === toKey(new Date());
+  const isToday = selectedDate === farmTodayKey();
   const nowClock = $("dsNowClock");
   if (isToday){
     nowClock.textContent = "Now " + nowTimeStr();
@@ -551,7 +569,7 @@ function renderDailySchedule(){
 }
 
 setInterval(() => {
-  if (selectedDate === toKey(new Date())) renderDailySchedule();
+  if (selectedDate === farmTodayKey()) renderDailySchedule();
 }, 60000);
 
 $("dsAddEventBtn").addEventListener("click", () => { if (isAdmin) openEventModal(selectedDate, null); });
@@ -981,7 +999,7 @@ function shiftAttDay(delta){
 $("attPrevDay").addEventListener("click", () => shiftAttDay(-1));
 $("attNextDay").addEventListener("click", () => shiftAttDay(1));
 $("attToday").addEventListener("click", () => {
-  const t = toKey(new Date());
+  const t = farmTodayKey();
   attSelectedDate = inRange(t) ? t : START_DATE;
   attDatePicker.value = attSelectedDate;
   subscribeAttendance();
@@ -1193,7 +1211,7 @@ function captureLocation(cb){
 function formatLoc(loc){ return loc ? loc.lat.toFixed(5) + ", " + loc.lng.toFixed(5) : "location unavailable"; }
 
 async function performCheckAction(staffMember, mode){
-  const today = toKey(new Date());
+  const today = farmTodayKey();
   const q = query(collection(db, "attendance"), where("date", "==", today), where("staffId", "==", staffMember.id));
   const snap = await getDocs(q);
   const recDoc = snap.docs[0];
@@ -1474,6 +1492,40 @@ $("addFindingBtn").addEventListener("click", async () => {
 });
 $("newFindingInput").addEventListener("keydown", (e) => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) $("addFindingBtn").click(); });
 (() => { const t = toKey(new Date()); $("newFindingDate").value = inRange(t) ? t : START_DATE; })();
+
+function buildFindingsPdfHtml(){
+  const items = findingsCache.slice().sort((a,b) => b.date.localeCompare(a.date));
+  const generated = new Date().toLocaleString("default", { dateStyle: "medium", timeStyle: "short" });
+  let html = '<div class="pdf-doc"><h1>Findings Log</h1>';
+  html += '<p class="pdf-meta">Indoor Farm — Takeover Tracker · Generated ' + escapeHtml(generated) + ' · ' + items.length + ' entr' + (items.length === 1 ? "y" : "ies") + '</p>';
+  if (items.length === 0){
+    html += "<p>No findings logged yet.</p>";
+  } else {
+    items.forEach(f => {
+      html += '<div class="pdf-entry"><div class="pdf-entry-date">' + escapeHtml(f.date) + '</div>';
+      html += '<div class="pdf-entry-text">' + escapeHtml(f.text || "").replace(/\n/g, "<br>") + '</div>';
+      if (f.photos && f.photos.length){
+        html += '<div class="pdf-photo-grid">';
+        f.photos.forEach(p => { html += '<img class="pdf-photo" src="' + escapeHtml(p.url) + '">'; });
+        html += '</div>';
+      }
+      html += '</div>';
+    });
+  }
+  html += '</div>';
+  return html;
+}
+
+$("downloadFindingsPdfBtn").addEventListener("click", () => {
+  if (!isAdmin) return;
+  $("pdfPrintArea").innerHTML = buildFindingsPdfHtml();
+  document.body.classList.add("printing-pdf");
+  window.print();
+});
+window.addEventListener("afterprint", () => {
+  document.body.classList.remove("printing-pdf");
+  $("pdfPrintArea").innerHTML = "";
+});
 
 // ============================================================================
 // PLANNING / PROPOSALS (Firestore: proposals/{id}) — suggested future changes
