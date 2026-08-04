@@ -1493,6 +1493,15 @@ $("addFindingBtn").addEventListener("click", async () => {
 $("newFindingInput").addEventListener("keydown", (e) => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) $("addFindingBtn").click(); });
 (() => { const t = toKey(new Date()); $("newFindingDate").value = inRange(t) ? t : START_DATE; })();
 
+// Findings photos are stored at full upload resolution (original camera size, often
+// several MB). Printing dozens of those directly makes Chrome's print preview hang
+// for a very long time fetching/rasterizing them, so the PDF report requests a small
+// Cloudinary-resized version instead — same photo, a fraction of the bytes.
+function cloudinaryThumb(url, width){
+  if (!url) return url;
+  return url.replace("/upload/", "/upload/w_" + width + ",q_auto,f_auto/");
+}
+
 function buildFindingsPdfHtml(){
   const items = findingsCache.slice().sort((a,b) => b.date.localeCompare(a.date));
   const generated = new Date().toLocaleString("default", { dateStyle: "medium", timeStyle: "short" });
@@ -1506,7 +1515,7 @@ function buildFindingsPdfHtml(){
       html += '<div class="pdf-entry-text">' + escapeHtml(f.text || "").replace(/\n/g, "<br>") + '</div>';
       if (f.photos && f.photos.length){
         html += '<div class="pdf-photo-grid">';
-        f.photos.forEach(p => { html += '<img class="pdf-photo" src="' + escapeHtml(p.url) + '">'; });
+        f.photos.forEach(p => { html += '<img class="pdf-photo" src="' + escapeHtml(cloudinaryThumb(p.url, 220)) + '">'; });
         html += '</div>';
       }
       html += '</div>';
@@ -1516,11 +1525,32 @@ function buildFindingsPdfHtml(){
   return html;
 }
 
-$("downloadFindingsPdfBtn").addEventListener("click", () => {
+// Waits for every <img> in the print area to either load or fail, capped per-image so
+// one broken/slow URL can't hang the whole thing forever.
+function waitForImages(container, timeoutMs){
+  const imgs = Array.from(container.querySelectorAll("img"));
+  return Promise.all(imgs.map(img => {
+    if (img.complete) return Promise.resolve();
+    return new Promise(resolve => {
+      const done = () => { img.removeEventListener("load", done); img.removeEventListener("error", done); resolve(); };
+      img.addEventListener("load", done);
+      img.addEventListener("error", done);
+      setTimeout(done, timeoutMs);
+    });
+  }));
+}
+
+$("downloadFindingsPdfBtn").addEventListener("click", async () => {
   if (!isAdmin) return;
-  $("pdfPrintArea").innerHTML = buildFindingsPdfHtml();
+  const btn = $("downloadFindingsPdfBtn");
+  const originalLabel = btn.textContent;
+  btn.disabled = true; btn.textContent = "Preparing PDF…";
+  const area = $("pdfPrintArea");
+  area.innerHTML = buildFindingsPdfHtml();
+  await waitForImages(area, 8000);
   document.body.classList.add("printing-pdf");
   window.print();
+  btn.disabled = false; btn.textContent = originalLabel;
 });
 window.addEventListener("afterprint", () => {
   document.body.classList.remove("printing-pdf");
