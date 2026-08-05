@@ -244,6 +244,12 @@ document.querySelectorAll(".tab-btn").forEach(btn => {
   btn.addEventListener("click", () => activateTab(btn.dataset.tab));
 });
 
+// Data lives as a button beside Admin/Log out instead of a nav tab, so logging in as
+// admin doesn't add another tab and shift the nav bar's spacing every time — it isn't
+// a ".tab-btn" (that class also carries the bottom-nav mobile layout, which would make
+// it act like a stray 8th icon there instead of sitting quietly in the header).
+$("dataTabBtn").addEventListener("click", () => activateTab("data"));
+
 document.querySelectorAll(".subtab-btn").forEach(btn => {
   btn.addEventListener("click", () => {
     const container = btn.closest(".tab-panel");
