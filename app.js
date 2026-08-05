@@ -144,8 +144,23 @@ onAuthStateChanged(auth, (user) => {
   renderReports();
 });
 
+// Firebase re-checks whether you're still logged in on every page load, which takes a
+// brief moment (it's reading persisted session data, not instant) — until it resolves,
+// isAdmin is false and every admin-only element sits at its default hidden state. For a
+// returning admin, that means the nav's admin-only elements pop in abruptly right after
+// load instead of just being there from the start. A fade softens the pop into something
+// that reads as "still loading" rather than "glitching" — scoped to the header/nav
+// elements a returning admin actually notices popping in, not the whole admin surface.
+function setAdminVisible(id, display){
+  const el = $(id);
+  const wasHidden = el.style.display === "none" || el.style.display === "";
+  el.style.display = isAdmin ? display : "none";
+  if (isAdmin && wasHidden) el.classList.add("admin-fade-in");
+  else el.classList.remove("admin-fade-in");
+}
+
 function refreshAdminUI(){
-  $("adminArea").style.display = isAdmin ? "flex" : "none";
+  setAdminVisible("adminArea", "flex");
   $("addRuleRow").style.display = isAdmin ? "flex" : "none";
   $("addFindingRow").style.display = isAdmin ? "flex" : "none";
   $("downloadFindingsPdfBtn").style.display = isAdmin ? "inline-block" : "none";
@@ -169,9 +184,9 @@ function refreshAdminUI(){
   $("addConsumablePurchaseRow").style.display = isAdmin ? "flex" : "none";
   $("purchaseAreasToggleRow").style.display = isAdmin ? "block" : "none";
   $("purchaseDashboardBtn").style.display = isAdmin ? "inline-block" : "none";
-  $("reportsTabBtn").style.display = isAdmin ? "inline-block" : "none";
+  setAdminVisible("reportsTabBtn", "inline-block");
   $("addReportRow").style.display = isAdmin ? "flex" : "none";
-  $("dataTabBtn").style.display = isAdmin ? "inline-block" : "none";
+  setAdminVisible("dataTabBtn", "inline-block");
   if (!isAdmin){
     $("staffPanel").style.display = "none";
     $("plantTypesPanel").style.display = "none";
@@ -1244,38 +1259,42 @@ function captureLocation(cb){
 function formatLoc(loc){ return loc ? loc.lat.toFixed(5) + ", " + loc.lng.toFixed(5) : "location unavailable"; }
 
 async function performCheckAction(staffMember, mode){
-  const today = farmTodayKey();
-  const q = query(collection(db, "attendance"), where("date", "==", today), where("staffId", "==", staffMember.id));
-  const snap = await getDocs(q);
-  const recDoc = snap.docs[0];
-  const rec = recDoc ? { id: recDoc.id, ...recDoc.data() } : null;
+  try {
+    const today = farmTodayKey();
+    const q = query(collection(db, "attendance"), where("date", "==", today), where("staffId", "==", staffMember.id));
+    const snap = await getDocs(q);
+    const recDoc = snap.docs[0];
+    const rec = recDoc ? { id: recDoc.id, ...recDoc.data() } : null;
 
-  if (mode === "in"){
-    if (rec && rec.signIn){ showKioskMessage(staffMember.name + " is already checked in since " + rec.signIn + ".", true); return; }
-    const time = nowTimeStr();
-    let recId;
-    if (!rec){
-      const newDoc = await addDoc(collection(db, "attendance"), { date: today, staffId: staffMember.id, name: staffMember.name, signIn: time, signInLoc: null, signOut: "", signOutLoc: null });
-      recId = newDoc.id;
+    if (mode === "in"){
+      if (rec && rec.signIn){ showKioskMessage(staffMember.name + " is already checked in since " + rec.signIn + ".", true); return; }
+      const time = nowTimeStr();
+      let recId;
+      if (!rec){
+        const newDoc = await addDoc(collection(db, "attendance"), { date: today, staffId: staffMember.id, name: staffMember.name, signIn: time, signInLoc: null, signOut: "", signOutLoc: null });
+        recId = newDoc.id;
+      } else {
+        recId = rec.id;
+        await updateDoc(doc(db, "attendance", recId), { signIn: time });
+      }
+      showKioskMessage("Checked in: " + staffMember.name + " at " + time + ". Getting location…", false);
+      captureLocation(async (loc) => {
+        await updateDoc(doc(db, "attendance", recId), { signInLoc: loc });
+        showKioskMessage("Checked in: " + staffMember.name + " at " + time + " — " + formatLoc(loc), false);
+      });
     } else {
-      recId = rec.id;
-      await updateDoc(doc(db, "attendance", recId), { signIn: time });
+      if (!rec || !rec.signIn){ showKioskMessage(staffMember.name + " hasn't checked in yet today.", true); return; }
+      if (rec.signOut){ showKioskMessage(staffMember.name + " already checked out at " + rec.signOut + ".", true); return; }
+      const time = nowTimeStr();
+      await updateDoc(doc(db, "attendance", rec.id), { signOut: time });
+      showKioskMessage("Checked out: " + staffMember.name + " at " + time + ". Getting location…", false);
+      captureLocation(async (loc) => {
+        await updateDoc(doc(db, "attendance", rec.id), { signOutLoc: loc });
+        showKioskMessage("Checked out: " + staffMember.name + " at " + time + " — " + formatLoc(loc), false);
+      });
     }
-    showKioskMessage("Checked in: " + staffMember.name + " at " + time + ". Getting location…", false);
-    captureLocation(async (loc) => {
-      await updateDoc(doc(db, "attendance", recId), { signInLoc: loc });
-      showKioskMessage("Checked in: " + staffMember.name + " at " + time + " — " + formatLoc(loc), false);
-    });
-  } else {
-    if (!rec || !rec.signIn){ showKioskMessage(staffMember.name + " hasn't checked in yet today.", true); return; }
-    if (rec.signOut){ showKioskMessage(staffMember.name + " already checked out at " + rec.signOut + ".", true); return; }
-    const time = nowTimeStr();
-    await updateDoc(doc(db, "attendance", rec.id), { signOut: time });
-    showKioskMessage("Checked out: " + staffMember.name + " at " + time + ". Getting location…", false);
-    captureLocation(async (loc) => {
-      await updateDoc(doc(db, "attendance", rec.id), { signOutLoc: loc });
-      showKioskMessage("Checked out: " + staffMember.name + " at " + time + " — " + formatLoc(loc), false);
-    });
+  } catch (err){
+    showKioskMessage("Couldn't record this: " + err.message, true);
   }
 }
 

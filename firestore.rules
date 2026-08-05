@@ -28,6 +28,16 @@ service cloud.firestore {
       return request.auth != null;
     }
 
+    // The Check In / Check Out kiosk records a sign-in as a create (already allowed for
+    // anyone below), but signing back OUT edits that same existing record — an update,
+    // which used to require admin and silently failed for every kiosk user. This allows
+    // an unauthenticated punch to touch only the punch fields; renaming, changing the
+    // date, or deleting a record still requires admin.
+    function isKioskPunch() {
+      return request.resource.data.diff(resource.data).affectedKeys()
+        .hasOnly(['signIn', 'signOut', 'signInLoc', 'signOutLoc']);
+    }
+
     match /schedule/{date} {
       allow read: if true;
       allow write: if isAdmin();
@@ -96,7 +106,8 @@ service cloud.firestore {
     match /attendance/{id} {
       allow read: if true;
       allow create: if true;
-      allow update, delete: if isAdmin();
+      allow update: if isAdmin() || isKioskPunch();
+      allow delete: if isAdmin();
     }
 
     match /specialEvents/{id} {
