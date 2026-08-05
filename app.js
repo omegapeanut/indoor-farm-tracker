@@ -144,8 +144,23 @@ onAuthStateChanged(auth, (user) => {
   renderReports();
 });
 
+// Firebase re-checks whether you're still logged in on every page load, which takes a
+// brief moment (it's reading persisted session data, not instant) — until it resolves,
+// isAdmin is false and every admin-only element sits at its default hidden state. For a
+// returning admin, that means the nav's admin-only elements pop in abruptly right after
+// load instead of just being there from the start. A fade softens the pop into something
+// that reads as "still loading" rather than "glitching" — scoped to the header/nav
+// elements a returning admin actually notices popping in, not the whole admin surface.
+function setAdminVisible(id, display){
+  const el = $(id);
+  const wasHidden = el.style.display === "none" || el.style.display === "";
+  el.style.display = isAdmin ? display : "none";
+  if (isAdmin && wasHidden) el.classList.add("admin-fade-in");
+  else el.classList.remove("admin-fade-in");
+}
+
 function refreshAdminUI(){
-  $("adminArea").style.display = isAdmin ? "flex" : "none";
+  setAdminVisible("adminArea", "flex");
   $("addRuleRow").style.display = isAdmin ? "flex" : "none";
   $("addFindingRow").style.display = isAdmin ? "flex" : "none";
   $("downloadFindingsPdfBtn").style.display = isAdmin ? "inline-block" : "none";
@@ -169,9 +184,9 @@ function refreshAdminUI(){
   $("addConsumablePurchaseRow").style.display = isAdmin ? "flex" : "none";
   $("purchaseAreasToggleRow").style.display = isAdmin ? "block" : "none";
   $("purchaseDashboardBtn").style.display = isAdmin ? "inline-block" : "none";
-  $("reportsTabBtn").style.display = isAdmin ? "inline-block" : "none";
+  setAdminVisible("reportsTabBtn", "inline-block");
   $("addReportRow").style.display = isAdmin ? "flex" : "none";
-  $("dataTabBtn").style.display = isAdmin ? "inline-block" : "none";
+  setAdminVisible("dataTabBtn", "inline-block");
   if (!isAdmin){
     $("staffPanel").style.display = "none";
     $("plantTypesPanel").style.display = "none";

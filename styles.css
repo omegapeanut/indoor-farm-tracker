@@ -9,6 +9,12 @@ body {
 }
 .app { max-width: 1100px; margin: 0 auto; padding: 20px 20px 60px; }
 
+/* Softens the admin-only nav elements popping in once Firebase confirms a returning
+   admin's session (see setAdminVisible() in app.js) — a fade reads as "still loading"
+   instead of a glitch. */
+@keyframes adminFadeIn { from { opacity: 0; } to { opacity: 1; } }
+.admin-fade-in { animation: adminFadeIn 0.25s ease-out; }
+
 /* Prev/Next arrows: drawn with CSS borders (not a font glyph) so they render
    as identical mirrored triangles everywhere, regardless of device/browser
    font substitution — used consistently on Calendar, Daily Schedule, and
