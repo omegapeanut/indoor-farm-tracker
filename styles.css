@@ -32,6 +32,12 @@ header.top p { margin: 0; color: #666; font-size: 13px; }
 .admin-btn { border: 1px solid #d8d8d8; background: #fff; border-radius: 6px; padding: 6px 12px; cursor: pointer; font-size: 12px; }
 .admin-btn:hover { background: #f0f0f0; }
 
+.reorder-alert-banner {
+  background: #fdeceb; border: 1px solid #f0c4c0; color: #a5300a; border-radius: 8px;
+  padding: 10px 14px; margin: 0 0 14px; font-size: 13px; font-weight: 600; cursor: pointer;
+}
+.reorder-alert-banner:hover { background: #fbe0dd; }
+
 .sync-status { font-size: 11px; color: #999; display: flex; align-items: center; gap: 5px; }
 .sync-dot { width: 7px; height: 7px; border-radius: 50%; background: #ccc; display: inline-block; }
 .sync-dot.ok { background: #1e7e34; }

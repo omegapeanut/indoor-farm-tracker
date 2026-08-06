@@ -150,6 +150,7 @@ onAuthStateChanged(auth, (user) => {
   renderPurchasePlans();
   if (isPurchaseDashboardActive()) renderPurchaseDashboard();
   renderReports();
+  renderReorderAlertBanner();
   if (!navRestored){ navRestored = true; restoreNavState(); }
 });
 
@@ -182,6 +183,7 @@ function refreshAdminUI(){
   $("staffToggleRow").style.display = isAdmin ? "block" : "none";
   $("plantTypesToggleRow").style.display = isAdmin ? "block" : "none";
   $("destinationsToggleRow").style.display = isAdmin ? "block" : "none";
+  $("quickHarvestPhotoRow").style.display = isAdmin ? "flex" : "none";
   $("addHarvestsRow").style.display = isAdmin ? "flex" : "none";
   $("addTransplantsRow").style.display = isAdmin ? "flex" : "none";
   $("addGerminationsRow").style.display = isAdmin ? "flex" : "none";
@@ -2615,6 +2617,45 @@ function locOptLabel(key, opts){
   return found ? found[1] : (key || "—");
 }
 
+function logEditableSelect(label, value, options, onSave){
+  const field = document.createElement("div"); field.className = "field";
+  const lbl = document.createElement("label"); lbl.textContent = label;
+  field.appendChild(lbl);
+  const select = document.createElement("select");
+  select.disabled = !isAdmin;
+  options.forEach(([val, text]) => {
+    const opt = document.createElement("option"); opt.value = val; opt.textContent = text;
+    select.appendChild(opt);
+  });
+  select.value = value || "";
+  select.addEventListener("click", (e) => e.stopPropagation());
+  select.addEventListener("change", async () => {
+    try { await onSave(select.value || null); }
+    catch (err){ alert("Couldn't save: " + err.message); }
+  });
+  field.appendChild(select);
+  return field;
+}
+
+function logEditableNumber(label, value, onSave){
+  const field = document.createElement("div"); field.className = "field";
+  const lbl = document.createElement("label"); lbl.textContent = label;
+  field.appendChild(lbl);
+  const input = document.createElement("input");
+  input.type = "number"; input.min = "0"; input.disabled = !isAdmin;
+  if (value != null) input.value = value;
+  input.addEventListener("click", (e) => e.stopPropagation());
+  input.addEventListener("blur", async () => {
+    if (input.value === "" || input.value == null) return;
+    const num = Number(input.value);
+    if (isNaN(num) || num === value) return;
+    try { await onSave(num); }
+    catch (err){ alert("Couldn't save: " + err.message); }
+  });
+  field.appendChild(input);
+  return field;
+}
+
 function renderLogSection(col){
   const cfg = LOG_CONFIGS[col];
   const cache = LOG_CACHES[col]();
@@ -2646,6 +2687,13 @@ function renderLogSection(col){
     const dateEl = document.createElement("span");
     dateEl.className = "finding-date"; dateEl.textContent = r.date || "—";
     left.appendChild(chevron); left.appendChild(dateEl);
+
+    const needsDetails = !r.plantTypeId || r.quantity == null;
+    if (needsDetails){
+      const tag = document.createElement("span");
+      tag.className = "report-badge open"; tag.textContent = "Needs details";
+      left.appendChild(tag);
+    }
 
     const locLabel = locOptLabel(r[cfg.locationField.key], cfg.locationField.options);
     const secondLabel = cfg.secondLocationField ? (" → " + locOptLabel(r[cfg.secondLocationField.key], cfg.secondLocationField.options)) : "";
@@ -2684,6 +2732,24 @@ function renderLogSection(col){
       summary.style.fontWeight = "600";
       summary.textContent = summaryText;
       body.appendChild(summary);
+
+      if (isAdmin){
+        const row1 = document.createElement("div"); row1.className = "row2"; row1.style.marginTop = "8px";
+        const plantTypeOptions = [["", "— Select plant type —"], ...plantTypesCache.map(pt => [pt.id, pt.name])];
+        row1.appendChild(logEditableSelect("Plant type", r.plantTypeId, plantTypeOptions, (v) => updateDoc(doc(db, col, r.id), { plantTypeId: v })));
+        row1.appendChild(logEditableNumber("Quantity", r.quantity, (v) => updateDoc(doc(db, col, r.id), { quantity: v })));
+        body.appendChild(row1);
+
+        const row2 = document.createElement("div"); row2.className = "row2";
+        row2.appendChild(logEditableSelect(cfg.secondLocationField ? "From" : "Location", r[cfg.locationField.key], cfg.locationField.options, (v) => updateDoc(doc(db, col, r.id), { [cfg.locationField.key]: v })));
+        if (cfg.secondLocationField){
+          row2.appendChild(logEditableSelect("To", r[cfg.secondLocationField.key], cfg.secondLocationField.options, (v) => updateDoc(doc(db, col, r.id), { [cfg.secondLocationField.key]: v })));
+        } else if (cfg.destinationField){
+          const destOptions = [["", "— Select destination —"], ...harvestDestinationsCache.map(d => [d.id, d.name])];
+          row2.appendChild(logEditableSelect("Destination", r[cfg.destinationField.key], destOptions, (v) => updateDoc(doc(db, col, r.id), { [cfg.destinationField.key]: v })));
+        }
+        body.appendChild(row2);
+      }
 
       if (isAdmin || r.notes){
         const notes = document.createElement("div");
@@ -2789,6 +2855,30 @@ Object.keys(LOG_CONFIGS).forEach(wireLogAddForm);
   const el = $(col + "Date");
   const t = toKey(new Date());
   el.value = inRange(t) ? t : START_DATE;
+});
+
+// Quick-capture: at harvest time you often want to snap a photo of a full tray/crate
+// on the spot and count/log the details later at a desk, rather than typing plant
+// type and quantity first. Creates a minimal draft entry (flagged "Needs details"
+// wherever plant type or quantity is still missing) and jumps straight into the
+// camera/file picker for it.
+$("quickHarvestPhotoBtn").addEventListener("click", async () => {
+  if (!isAdmin) return;
+  const btn = $("quickHarvestPhotoBtn");
+  const original = btn.textContent;
+  btn.disabled = true; btn.textContent = "Creating…";
+  try {
+    const newDoc = await addDoc(collection(db, "harvests"), {
+      date: toKey(new Date()), plantTypeId: null, quantity: null,
+      location: "", destinationId: null, notes: "", photos: []
+    });
+    expandedHarvests[newDoc.id] = true;
+    openPhotoPicker("harvests", newDoc.id, null);
+  } catch (err){
+    alert("Couldn't start a quick harvest photo entry: " + err.message);
+  } finally {
+    btn.disabled = false; btn.textContent = original;
+  }
 });
 
 // ---- Environment Readings (Firestore: envReadings/{id}) ----
@@ -3331,6 +3421,7 @@ let consumablesCache = [];
 onSnapshot(collection(db, "inventoryConsumables"), (snap) => {
   consumablesCache = snap.docs.map(d => ({ id: d.id, ...d.data() }));
   renderConsumables();
+  renderReorderAlertBanner();
 }, () => setSyncStatus("err", "Connection error"));
 
 function needsReorder(c){ return (c.quantity ?? 0) <= (c.reorderThreshold ?? 0); }
@@ -3562,6 +3653,7 @@ onSnapshot(collection(db, "purchasePlans"), (snap) => {
   purchasePlansCache = snap.docs.map(d => ({ id: d.id, ...d.data() }));
   renderPurchasePlans();
   if (isPurchaseDashboardActive()) renderPurchaseDashboard();
+  renderReorderAlertBanner();
 }, () => setSyncStatus("err", "Connection error"));
 
 function renderPurchasePlans(){
@@ -3857,6 +3949,36 @@ function computeReorderPredictions(){
   });
   predictions.sort((a,b) => (a.nextDate || "9999-99-99").localeCompare(b.nextDate || "9999-99-99"));
   return predictions;
+}
+
+// A global, admin-only banner (visible on any tab, not just Inventory) combining the
+// two existing "you should reorder something" signals: consumables at/below their
+// stock threshold, and consumables whose purchase-history prediction says they're due
+// within a week — matching the weekly stock-take cadence the rest of Inventory assumes.
+function renderReorderAlertBanner(){
+  const banner = $("reorderAlertBanner");
+  if (!banner) return;
+  if (!isAdmin){ banner.style.display = "none"; return; }
+
+  const lowStock = consumablesCache.filter(needsReorder);
+  const soonCutoffDate = new Date();
+  soonCutoffDate.setDate(soonCutoffDate.getDate() + 7);
+  const soonCutoff = toKey(soonCutoffDate);
+  const duePredictions = computeReorderPredictions().filter(p => p.nextDate && p.nextDate <= soonCutoff);
+
+  if (lowStock.length === 0 && duePredictions.length === 0){ banner.style.display = "none"; return; }
+
+  const parts = [];
+  if (lowStock.length) parts.push(lowStock.length + " low on stock (" + lowStock.map(c => c.name).join(", ") + ")");
+  if (duePredictions.length) parts.push(duePredictions.length + " due to reorder soon (" + duePredictions.map(p => p.item).join(", ") + ")");
+  banner.textContent = "⚠ " + parts.join(" · ") + " — tap to view";
+  banner.style.display = "block";
+  banner.onclick = () => {
+    activateTab("inventory");
+    const subtabKey = lowStock.length > 0 ? "consumables" : "purchaseDashboard";
+    const btn = document.querySelector('#tab-inventory .subtab-btn[data-subtab="' + subtabKey + '"]');
+    if (btn) btn.click();
+  };
 }
 
 function renderReorderPredictions(){
