@@ -25,6 +25,8 @@
     </div>
   </header>
 
+  <div class="reorder-alert-banner" id="reorderAlertBanner" style="display:none;"></div>
+
   <div class="tabs">
     <button class="tab-btn active" data-tab="calgroup">
       <span class="tab-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4.5" width="18" height="16" rx="2"/><line x1="16" y1="2.5" x2="16" y2="6.5"/><line x1="8" y1="2.5" x2="8" y2="6.5"/><line x1="3" y1="9.5" x2="21" y2="9.5"/></svg></span>
@@ -379,6 +381,9 @@
           </div>
         </div>
 
+        <div class="add-row" id="quickHarvestPhotoRow" style="display:none; margin-bottom:10px;">
+          <button id="quickHarvestPhotoBtn">📷 Snap harvest photo (fill in details later)</button>
+        </div>
         <div class="finding-add" id="addHarvestsRow" style="display:none;">
           <div class="row2">
             <div class="field"><label>Date</label><input type="date" id="harvestsDate"></div>
