@@ -9,12 +9,19 @@ import {
 } from "https://www.gstatic.com/firebasejs/10.13.2/firebase-auth.js";
 import {
   getFirestore, collection, doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc,
-  addDoc, query, where, onSnapshot, writeBatch, serverTimestamp
+  addDoc, query, where, onSnapshot, writeBatch, serverTimestamp, enableIndexedDbPersistence
 } from "https://www.gstatic.com/firebasejs/10.13.2/firebase-firestore.js";
 
 const firebaseApp = initializeApp(window.FIREBASE_CONFIG);
 const auth = getAuth(firebaseApp);
 const db = getFirestore(firebaseApp);
+
+// Farm wifi is unreliable, and the kiosk in particular can't afford to just lose a
+// check-in/check-out because the connection blipped. This caches reads and queues
+// writes in IndexedDB so the app keeps working offline and syncs once back online.
+// Fails harmlessly if another tab already holds the persistence lock (failed-precondition)
+// or the browser doesn't support it (unimplemented) — the app just runs online-only then.
+enableIndexedDbPersistence(db).catch(() => {});
 
 const START_DATE = "2026-07-28";
 const HORIZON_DAYS = 120;
@@ -3089,10 +3096,37 @@ if (growlogTabBtn) growlogTabBtn.addEventListener("click", () => {
 });
 
 // ---- Cloudinary upload ----
+// Downscales an image blob before it ever reaches Cloudinary. A phone camera photo is
+// often 3000-4000px / several MB; nothing in this app displays a photo larger than a
+// full-width mobile screen, so shrinking to a 1600px long edge cuts upload time and
+// mobile-data usage substantially with no visible quality loss. Falls back to the
+// original blob on any failure (unreadable image, canvas error) so a compression
+// hiccup never blocks the upload itself — already-small images (e.g. the ~640px
+// annotated-photo canvases) pass through untouched.
+function compressImageForUpload(blob, maxDim = 1600, quality = 0.82){
+  return new Promise((resolve) => {
+    const url = URL.createObjectURL(blob);
+    const img = new Image();
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      const scale = Math.min(1, maxDim / Math.max(img.width, img.height));
+      if (scale >= 1){ resolve(blob); return; }
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.round(img.width * scale);
+      canvas.height = Math.round(img.height * scale);
+      canvas.getContext("2d").drawImage(img, 0, 0, canvas.width, canvas.height);
+      canvas.toBlob((resized) => resolve(resized || blob), "image/jpeg", quality);
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); resolve(blob); };
+    img.src = url;
+  });
+}
+
 async function uploadToCloudinary(blob){
+  const compressed = await compressImageForUpload(blob);
   const cfg = window.CLOUDINARY_CONFIG;
   const formData = new FormData();
-  formData.append("file", blob);
+  formData.append("file", compressed);
   formData.append("upload_preset", cfg.uploadPreset);
   const resp = await fetch(`https://api.cloudinary.com/v1_1/${cfg.cloudName}/image/upload`, { method: "POST", body: formData });
   if (!resp.ok) throw new Error("Cloudinary upload failed (" + resp.status + ")");
