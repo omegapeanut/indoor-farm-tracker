@@ -118,6 +118,7 @@ function markListenerReady(){
 // ADMIN AUTH (Firebase Authentication)
 // ============================================================================
 let isAdmin = false;
+let navRestored = false;
 
 onAuthStateChanged(auth, (user) => {
   isAdmin = !!user;
@@ -142,6 +143,7 @@ onAuthStateChanged(auth, (user) => {
   renderPurchasePlans();
   if (isPurchaseDashboardActive()) renderPurchaseDashboard();
   renderReports();
+  if (!navRestored){ navRestored = true; restoreNavState(); }
 });
 
 // Firebase re-checks whether you're still logged in on every page load, which takes a
@@ -254,6 +256,7 @@ function activateTab(name){
     groupPanel.querySelectorAll(".subtab-btn").forEach(b => b.classList.toggle("active", b.dataset.subtab === name));
     groupPanel.querySelectorAll(".subtab-panel").forEach(p => p.classList.toggle("active", p.dataset.subtab === name));
   }
+  saveNavState();
 }
 document.querySelectorAll(".tab-btn").forEach(btn => {
   btn.addEventListener("click", () => activateTab(btn.dataset.tab));
@@ -274,8 +277,36 @@ document.querySelectorAll(".subtab-btn").forEach(btn => {
     container.querySelectorAll(".subtab-panel").forEach(p => p.classList.toggle("active", p.dataset.subtab === key));
     if (container.id === "tab-growlog" && key === "dashboard") renderDashboard();
     if (container.id === "tab-inventory" && key === "purchaseDashboard") renderPurchaseDashboard();
+    saveNavState();
   });
 });
+
+// Remembers which tab/subtab you're on across a refresh, so reloading the page (or
+// coming back later) puts you back where you left off instead of resetting to Cal &
+// Events every time. Scoped to nav state only — not scroll position, filters, or
+// which cards are expanded, just "which page was I on."
+function saveNavState(){
+  const activePanel = document.querySelector(".tab-panel.active");
+  if (!activePanel) return;
+  const tabName = activePanel.id.slice(4);
+  localStorage.setItem("lastTab", tabName);
+  const activeSubtabBtn = activePanel.querySelector(".subtab-btn.active");
+  if (activeSubtabBtn) localStorage.setItem("lastSubtab:" + tabName, activeSubtabBtn.dataset.subtab);
+  else localStorage.removeItem("lastSubtab:" + tabName);
+}
+function restoreNavState(){
+  const tabName = localStorage.getItem("lastTab");
+  if (!tabName || !$("tab-" + tabName)) return;
+  // Reports/Data are admin-only tools; don't strand a logged-out visitor on one just
+  // because an admin was last there on this browser.
+  if ((tabName === "reports" || tabName === "data") && !isAdmin) return;
+  const subtab = localStorage.getItem("lastSubtab:" + tabName);
+  activateTab(subtab && TAB_GROUPS[subtab] ? subtab : tabName);
+  if (subtab && !TAB_GROUPS[subtab]){
+    const btn = document.querySelector('#tab-' + tabName + ' .subtab-btn[data-subtab="' + subtab + '"]');
+    if (btn) btn.click();
+  }
+}
 
 // ============================================================================
 // SCHEDULE DATA (Firestore: schedule/{date}, series/{id})
