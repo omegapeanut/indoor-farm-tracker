@@ -259,11 +259,12 @@ document.querySelectorAll(".tab-btn").forEach(btn => {
   btn.addEventListener("click", () => activateTab(btn.dataset.tab));
 });
 
-// Data lives as a button beside Admin/Log out instead of a nav tab, so logging in as
-// admin doesn't add another tab and shift the nav bar's spacing every time — it isn't
-// a ".tab-btn" (that class also carries the bottom-nav mobile layout, which would make
-// it act like a stray 8th icon there instead of sitting quietly in the header).
+// Data and Report both live as buttons beside Admin/Log out instead of nav tabs, so
+// logging in as admin doesn't add extra tabs and shift the nav bar's spacing every
+// time — neither is a ".tab-btn" (that class also carries the bottom-nav mobile layout,
+// which would make it act like a stray icon there instead of sitting quietly in the header).
 $("dataTabBtn").addEventListener("click", () => activateTab("data"));
+$("reportsTabBtn").addEventListener("click", () => activateTab("reports"));
 
 document.querySelectorAll(".subtab-btn").forEach(btn => {
   btn.addEventListener("click", () => {
