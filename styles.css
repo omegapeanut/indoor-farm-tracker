@@ -13,7 +13,7 @@ body {
    admin's session (see setAdminVisible() in app.js) — a fade reads as "still loading"
    instead of a glitch. */
 @keyframes adminFadeIn { from { opacity: 0; } to { opacity: 1; } }
-.admin-fade-in { animation: adminFadeIn 0.25s ease-out; }
+.admin-fade-in { animation: adminFadeIn 0.1s ease-out; }
 
 /* Prev/Next arrows: drawn with CSS borders (not a font glyph) so they render
    as identical mirrored triangles everywhere, regardless of device/browser
