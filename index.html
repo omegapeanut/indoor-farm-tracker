@@ -144,6 +144,7 @@
         <button class="subtab-btn active" data-subtab="rules">Rules</button>
         <button class="subtab-btn" data-subtab="findings">Findings</button>
         <button class="subtab-btn" data-subtab="planning">Planning</button>
+        <button class="subtab-btn" data-subtab="claims" id="claimsSubtabBtn" style="display:none;">Claims</button>
         <button class="subtab-btn" data-subtab="attendance">Attendance</button>
       </div>
 
@@ -202,6 +203,49 @@
           </div>
         </div>
         <div id="proposalsList" style="margin-top:10px;"></div>
+      </div>
+
+      <!-- CLAIMS (expense reimbursement) -->
+      <div class="subtab-panel" data-subtab="claims">
+        <p class="hint">Taxi, meals, purchases, and other expense claims — attach the receipt photo and track each one from pending through approved to paid.</p>
+        <div class="search-row">
+          <input type="text" id="claimsSearch" placeholder="Search claims by claimant, category, or notes…">
+          <button id="claimsSearchClear">Clear</button>
+        </div>
+        <div class="dash-location-row" id="claimsStatusRow">
+          <button class="dash-loc-btn active" data-status="">All</button>
+          <button class="dash-loc-btn" data-status="pending">Pending</button>
+          <button class="dash-loc-btn" data-status="approved">Approved</button>
+          <button class="dash-loc-btn" data-status="paid">Paid</button>
+        </div>
+        <p class="hint" id="claimsSummary" style="margin:-4px 0 10px;"></p>
+
+        <div class="add-row" id="quickClaimPhotoRow" style="display:none; margin-bottom:10px;">
+          <button id="quickClaimPhotoBtn">📷 Snap receipt photo (fill in details later)</button>
+        </div>
+        <div class="finding-add" id="addClaimRow" style="display:none;">
+          <div class="row2">
+            <div class="field"><label>Date</label><input type="date" id="newClaimDate"></div>
+            <div class="field"><label>Claimant</label><input type="text" id="newClaimClaimant" list="staffNamesList" placeholder="Who's claiming?"></div>
+          </div>
+          <div class="row2">
+            <div class="field"><label>Category</label>
+              <select id="newClaimCategory">
+                <option value="taxi">Taxi / Transport</option>
+                <option value="meals">Meals</option>
+                <option value="purchases">Purchases</option>
+                <option value="other">Other</option>
+              </select>
+            </div>
+            <div class="field"><label>Amount</label><input type="number" id="newClaimAmount" min="0" step="0.01" placeholder="0.00"></div>
+          </div>
+          <textarea id="newClaimNotes" rows="2" placeholder="What's this for?"></textarea>
+          <div class="finding-add-actions">
+            <span class="hint" style="margin:0;">Add the receipt photo after creating the entry</span>
+            <button id="addClaimBtn">Add</button>
+          </div>
+        </div>
+        <div id="claimsList" style="margin-top:10px;"></div>
       </div>
 
       <!-- ATTENDANCE -->

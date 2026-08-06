@@ -149,5 +149,13 @@ service cloud.firestore {
       allow read: if true;
       allow write: if isAdmin();
     }
+
+    // Claims (expense reimbursement + receipts) are the one collection kept off the
+    // "anyone can read" default above — amounts and receipt photos are more sensitive
+    // than farm operations notes, so this needs an admin login to even view.
+    match /claims/{id} {
+      allow read: if isAdmin();
+      allow write: if isAdmin();
+    }
   }
 }
