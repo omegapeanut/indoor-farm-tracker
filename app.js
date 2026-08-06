@@ -129,6 +129,10 @@ let navRestored = false;
 
 onAuthStateChanged(auth, (user) => {
   isAdmin = !!user;
+  // Restore nav position first and independently of every render call below — if any of
+  // them threw, this line would never run and every refresh would silently land back on
+  // the default tab instead of wherever the user actually was.
+  if (!navRestored){ navRestored = true; restoreNavState(); }
   refreshAdminUI();
   renderCalendar();
   renderDailySchedule();
@@ -151,7 +155,6 @@ onAuthStateChanged(auth, (user) => {
   if (isPurchaseDashboardActive()) renderPurchaseDashboard();
   renderReports();
   renderReorderAlertBanner();
-  if (!navRestored){ navRestored = true; restoreNavState(); }
 });
 
 // Firebase re-checks whether you're still logged in on every page load, which takes a
