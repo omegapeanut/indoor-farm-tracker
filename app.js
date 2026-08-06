@@ -2161,44 +2161,71 @@ function renderClaims(){
   });
 }
 
-// One consolidated table of every claim (not one page per claim — a table reads far
-// better for handing to whoever approves/pays these) plus a small receipts appendix
-// underneath so photos are still attached to the same document for reference.
+// Consolidated Expense Claim Form covering every claim — laid out like a standard
+// itemized-expense form (company/employee header fields, an itemized table, a
+// subtotal/paid/due summary, and signature lines) rather than a generic data table,
+// plus a small receipts appendix underneath so photos stay attached to the same
+// document. Description is built from what was keyed in when the claim was logged
+// (the notes field) since that's the only free-text record of what the receipt was for.
 function buildClaimsPdfHtml(){
-  const items = claimsCache.slice().sort((a,b) => (b.date || "").localeCompare(a.date || ""));
+  const items = claimsCache.slice().sort((a,b) => (a.date || "").localeCompare(b.date || ""));
   const generated = new Date().toLocaleString("default", { dateStyle: "medium", timeStyle: "short" });
-  let html = '<div class="pdf-doc pdf-claims"><h1>Expense Claims Report</h1>';
-  html += '<p class="pdf-meta">Indoor Farm — Takeover Tracker · Generated ' + escapeHtml(generated) + ' · ' + items.length + ' claim' + (items.length === 1 ? "" : "s") + '</p>';
+  let html = '<div class="pdf-doc pdf-claims"><h1>Expense Claim Form</h1>';
 
   if (items.length === 0){
+    html += '<p class="pdf-meta">Indoor Farm — Takeover Tracker · Generated ' + escapeHtml(generated) + '</p>';
     html += "<p>No claims logged yet.</p></div>";
     return html;
   }
 
-  const totals = { pending: 0, approved: 0, paid: 0 };
-  items.forEach(c => { const s = c.status || "pending"; totals[s] = (totals[s] || 0) + (Number(c.amount) || 0); });
-  const grandTotal = totals.pending + totals.approved + totals.paid;
+  const claimants = [...new Set(items.map(c => (c.claimant || "").trim()).filter(Boolean))];
+  const dates = items.map(c => c.date).filter(Boolean).sort();
+  const expensePeriod = dates.length ? (dates[0] === dates[dates.length - 1] ? dates[0] : dates[0] + " – " + dates[dates.length - 1]) : "—";
 
+  html += '<div class="pdf-claims-header">';
+  html += '<div class="pdf-claims-header-row"><span class="pdf-claims-label">Company Name:</span><span class="pdf-claims-value pdf-claims-value-wide">Indoor Farm — Takeover Tracker</span></div>';
+  html += '<div class="pdf-claims-header-row two">';
+  html += '<span><span class="pdf-claims-label">Employee Name:</span><span class="pdf-claims-value">' + (claimants.length ? escapeHtml(claimants.join(", ")) : "&nbsp;") + '</span></span>';
+  html += '<span><span class="pdf-claims-label">Employee ID:</span><span class="pdf-claims-value">&nbsp;</span></span>';
+  html += '</div>';
+  html += '<div class="pdf-claims-header-row two">';
+  html += '<span><span class="pdf-claims-label">Department:</span><span class="pdf-claims-value">&nbsp;</span></span>';
+  html += '<span><span class="pdf-claims-label">Expense Period:</span><span class="pdf-claims-value">' + escapeHtml(expensePeriod) + '</span></span>';
+  html += '</div>';
+  html += '</div>';
+
+  html += '<h2>Itemized Expenses</h2>';
   html += '<table class="pdf-claims-table"><thead><tr>';
-  html += '<th>Date</th><th>Claimant</th><th>Category</th><th>Notes</th><th class="pdf-claims-amt">Amount</th><th>Status</th>';
+  html += '<th>Date</th><th>Description</th><th>Category</th><th>Status</th><th class="pdf-claims-amt">Amount Paid</th>';
   html += '</tr></thead><tbody>';
+  const totals = { pending: 0, approved: 0, paid: 0 };
   items.forEach(c => {
+    const status = c.status || "pending";
+    totals[status] = (totals[status] || 0) + (Number(c.amount) || 0);
+    let description = c.notes || (CLAIM_CATEGORY_LABELS[c.category] || "Expense");
+    if (c.claimant) description += " (" + c.claimant + ")";
     html += '<tr>';
     html += '<td>' + escapeHtml(c.date || "—") + '</td>';
-    html += '<td>' + escapeHtml(c.claimant || "—") + '</td>';
+    html += '<td>' + escapeHtml(description) + '</td>';
     html += '<td>' + escapeHtml(CLAIM_CATEGORY_LABELS[c.category] || "—") + '</td>';
-    html += '<td>' + escapeHtml(c.notes || "") + '</td>';
+    html += '<td>' + escapeHtml(CLAIM_STATUS_LABELS[status] || "Pending") + '</td>';
     html += '<td class="pdf-claims-amt">' + (c.amount != null ? "$" + Number(c.amount).toFixed(2) : "—") + '</td>';
-    html += '<td>' + escapeHtml(CLAIM_STATUS_LABELS[c.status] || "Pending") + '</td>';
     html += '</tr>';
   });
   html += '</tbody></table>';
 
-  html += '<div class="pdf-claims-totals">';
-  html += '<div>Pending: $' + totals.pending.toFixed(2) + '</div>';
-  html += '<div>Approved: $' + totals.approved.toFixed(2) + '</div>';
-  html += '<div>Paid: $' + totals.paid.toFixed(2) + '</div>';
-  html += '<div class="pdf-claims-grand">Total: $' + grandTotal.toFixed(2) + '</div>';
+  const subtotal = totals.pending + totals.approved + totals.paid;
+  const alreadyPaid = totals.paid;
+  const due = subtotal - alreadyPaid;
+  html += '<div class="pdf-claims-summary">';
+  html += '<div><span>Subtotal:</span><span>$' + subtotal.toFixed(2) + '</span></div>';
+  html += '<div><span>Already Paid:</span><span>$' + alreadyPaid.toFixed(2) + '</span></div>';
+  html += '<div class="pdf-claims-grand"><span>Total Reimbursement Due:</span><span>$' + due.toFixed(2) + '</span></div>';
+  html += '</div>';
+
+  html += '<div class="pdf-claims-sign-row">';
+  html += '<div class="pdf-claims-sign-block"><div class="pdf-claims-sign-line"></div><span>Employee Signature</span></div>';
+  html += '<div class="pdf-claims-sign-block"><div class="pdf-claims-sign-line"></div><span>Date</span></div>';
   html += '</div>';
 
   const withPhotos = items.filter(c => (c.photos || []).length);
@@ -2213,6 +2240,7 @@ function buildClaimsPdfHtml(){
     html += '</div>';
   }
 
+  html += '<p class="pdf-meta pdf-claims-footer-meta">Generated ' + escapeHtml(generated) + ' · ' + items.length + ' claim' + (items.length === 1 ? "" : "s") + '</p>';
   html += '</div>';
   return html;
 }
