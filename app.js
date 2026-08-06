@@ -127,8 +127,28 @@ function markListenerReady(){
 let isAdmin = false;
 let navRestored = false;
 
+// Covers the page from first paint until the right tab is picked, so a refresh never
+// flashes the default Cal & Events view before jumping to the last tab you were on.
+// The timeout is a safety net only — if auth somehow never resolves, don't leave
+// visitors staring at a spinner forever.
+function hideAppLoadingOverlay(){
+  const el = $("appLoadingOverlay");
+  if (!el) return;
+  el.classList.add("hidden");
+  setTimeout(() => el.remove(), 200);
+}
+setTimeout(hideAppLoadingOverlay, 5000);
+
 onAuthStateChanged(auth, (user) => {
   isAdmin = !!user;
+  // Restore nav position first and independently of every render call below — if any of
+  // them threw, this line would never run and every refresh would silently land back on
+  // the default tab instead of wherever the user actually was.
+  try {
+    if (!navRestored){ navRestored = true; restoreNavState(); }
+  } finally {
+    hideAppLoadingOverlay();
+  }
   refreshAdminUI();
   renderCalendar();
   renderDailySchedule();
@@ -151,7 +171,6 @@ onAuthStateChanged(auth, (user) => {
   if (isPurchaseDashboardActive()) renderPurchaseDashboard();
   renderReports();
   renderReorderAlertBanner();
-  if (!navRestored){ navRestored = true; restoreNavState(); }
 });
 
 // Firebase re-checks whether you're still logged in on every page load, which takes a
