@@ -170,6 +170,7 @@ onAuthStateChanged(auth, (user) => {
   renderPurchasePlans();
   if (isPurchaseDashboardActive()) renderPurchaseDashboard();
   renderReports();
+  renderClaims();
   renderReorderAlertBanner();
 });
 
@@ -217,6 +218,12 @@ function refreshAdminUI(){
   setAdminVisible("reportsTabBtn", "inline-block");
   $("addReportRow").style.display = isAdmin ? "flex" : "none";
   setAdminVisible("dataTabBtn", "inline-block");
+  // Claims are admin-only to even view (firestore.rules gates reads, not just writes),
+  // so the subtab button itself is hidden rather than just its add-row.
+  $("claimsSubtabBtn").style.display = isAdmin ? "" : "none";
+  $("addClaimRow").style.display = isAdmin ? "flex" : "none";
+  $("quickClaimPhotoRow").style.display = isAdmin ? "flex" : "none";
+  if (isAdmin) subscribeClaims();
   if (!isAdmin){
     $("staffPanel").style.display = "none";
     $("plantTypesPanel").style.display = "none";
@@ -224,6 +231,9 @@ function refreshAdminUI(){
     $("purchaseAreasPanel").style.display = "none";
     if (document.querySelector('#tab-inventory .subtab-panel[data-subtab="purchaseDashboard"]').classList.contains("active")){
       document.querySelector('#tab-inventory .subtab-btn[data-subtab="assets"]').click();
+    }
+    if (document.querySelector('#tab-opslog .subtab-panel[data-subtab="claims"]').classList.contains("active")){
+      document.querySelector('#tab-opslog .subtab-btn[data-subtab="rules"]').click();
     }
     if ($("tab-data").classList.contains("active") || $("tab-reports").classList.contains("active")) activateTab("calendar");
   }
@@ -1887,6 +1897,356 @@ $("addProposalBtn").addEventListener("click", async () => {
   }
 });
 (() => { const t = toKey(new Date()); $("newProposalDate").value = inRange(t) ? t : START_DATE; })();
+
+// ============================================================================
+// CLAIMS (Firestore: claims/{id}) — expense reimbursement: taxi, meals,
+// purchases, etc. Same collapsible-card/photo-strip pattern as Proposals,
+// with a status that moves pending -> approved -> paid and a per-claim
+// "Generate Claim Form" PDF. Admin-only end to end (see firestore.rules) —
+// amounts and receipts are more sensitive than the rest of the app's data,
+// so unlike every other collection here reads require a login too.
+// ============================================================================
+const CLAIM_STATUS_LABELS = { pending: "Pending", approved: "Approved", paid: "Paid" };
+const CLAIM_CATEGORY_LABELS = { taxi: "Taxi / Transport", meals: "Meals", purchases: "Purchases", other: "Other" };
+let claimsCache = [];
+let claimsSearchTerm = "";
+let claimsStatusFilter = "";
+const expandedClaims = {};
+
+// Reads are admin-only in firestore.rules, so subscribing before login would fail with
+// permission-denied and permanently kill the listener (Firestore doesn't auto-retry a
+// denied listener once auth changes). Only ever subscribe once we know we're admin.
+let claimsUnsub = null;
+function subscribeClaims(){
+  if (claimsUnsub) return;
+  claimsUnsub = onSnapshot(collection(db, "claims"), (snap) => {
+    claimsCache = snap.docs.map(d => ({ id: d.id, photos: [], ...d.data() }));
+    renderClaims();
+  }, () => {});
+}
+
+$("claimsSearch").addEventListener("input", (e) => { claimsSearchTerm = e.target.value.trim().toLowerCase(); renderClaims(); });
+$("claimsSearchClear").addEventListener("click", () => { $("claimsSearch").value = ""; claimsSearchTerm = ""; renderClaims(); });
+document.querySelectorAll("#claimsStatusRow .dash-loc-btn").forEach(btn => {
+  btn.addEventListener("click", () => {
+    claimsStatusFilter = btn.dataset.status;
+    document.querySelectorAll("#claimsStatusRow .dash-loc-btn").forEach(b => b.classList.toggle("active", b === btn));
+    renderClaims();
+  });
+});
+
+function renderClaims(){
+  const list = $("claimsList");
+  list.innerHTML = "";
+
+  let items = claimsCache.slice().sort((a,b) => (b.date || "").localeCompare(a.date || ""));
+  if (claimsStatusFilter) items = items.filter(c => (c.status || "pending") === claimsStatusFilter);
+  if (claimsSearchTerm){
+    items = items.filter(c =>
+      (c.claimant || "").toLowerCase().includes(claimsSearchTerm) ||
+      (CLAIM_CATEGORY_LABELS[c.category] || "").toLowerCase().includes(claimsSearchTerm) ||
+      (c.notes || "").toLowerCase().includes(claimsSearchTerm)
+    );
+  }
+
+  const summaryEl = $("claimsSummary");
+  const totals = { pending: 0, approved: 0, paid: 0 };
+  const counts = { pending: 0, approved: 0, paid: 0 };
+  claimsCache.forEach(c => {
+    const s = c.status || "pending";
+    totals[s] = (totals[s] || 0) + (Number(c.amount) || 0);
+    counts[s] = (counts[s] || 0) + 1;
+  });
+  summaryEl.textContent = claimsCache.length === 0 ? "" : Object.keys(CLAIM_STATUS_LABELS)
+    .map(s => counts[s] + " " + CLAIM_STATUS_LABELS[s].toLowerCase() + " ($" + totals[s].toFixed(2) + ")").join(" · ");
+
+  if (items.length === 0){
+    const empty = document.createElement("div");
+    empty.className = "empty-state";
+    empty.textContent = (claimsSearchTerm || claimsStatusFilter) ? "No claims match." : "No claims logged yet.";
+    list.appendChild(empty);
+    return;
+  }
+
+  items.forEach(c => {
+    const isOpen = claimsSearchTerm ? true : !!expandedClaims[c.id];
+    const card = document.createElement("div");
+    card.className = "finding-card" + (isOpen ? " expanded" : "");
+
+    const header = document.createElement("div");
+    header.className = "finding-header";
+    const left = document.createElement("div");
+    left.className = "finding-header-left";
+    const chevron = document.createElement("span");
+    chevron.className = "finding-chevron"; chevron.textContent = "▶";
+    const dateEl = document.createElement("span");
+    dateEl.className = "finding-date"; dateEl.textContent = c.date || "";
+    left.appendChild(chevron); left.appendChild(dateEl);
+    const badge = document.createElement("span");
+    badge.className = "claim-badge " + (c.status || "pending");
+    badge.textContent = CLAIM_STATUS_LABELS[c.status] || "Pending";
+    left.appendChild(badge);
+    const catTag = document.createElement("span");
+    catTag.className = "finding-preview"; catTag.style.fontWeight = "600"; catTag.style.color = "#333";
+    catTag.textContent = (CLAIM_CATEGORY_LABELS[c.category] || "Other") + (c.claimant ? " — " + c.claimant : "");
+    left.appendChild(catTag);
+    if (c.amount != null){
+      const amountTag = document.createElement("span");
+      amountTag.className = "finding-preview";
+      amountTag.textContent = "$" + Number(c.amount).toFixed(2);
+      left.appendChild(amountTag);
+    }
+    if (!isOpen && c.notes){
+      const preview = document.createElement("span");
+      preview.className = "finding-preview";
+      preview.textContent = c.notes;
+      left.appendChild(preview);
+    }
+    header.appendChild(left);
+
+    if (isAdmin){
+      const del = document.createElement("button");
+      del.className = "icon-btn"; del.textContent = "✕"; del.title = "Delete claim";
+      del.addEventListener("click", async (e) => {
+        e.stopPropagation();
+        if (!confirm("Delete this claim and its receipt photos?")) return;
+        try { await deleteDoc(doc(db, "claims", c.id)); }
+        catch (err){ alert("Couldn't delete this claim: " + err.message); }
+      });
+      header.appendChild(del);
+    }
+    header.addEventListener("click", () => {
+      if (expandedClaims[c.id]) delete expandedClaims[c.id]; else expandedClaims[c.id] = true;
+      renderClaims();
+    });
+    card.appendChild(header);
+
+    const body = document.createElement("div");
+    body.className = "finding-body";
+    if (isOpen){
+      const row1 = document.createElement("div"); row1.className = "row2";
+      const dateField = document.createElement("div"); dateField.className = "field";
+      dateField.innerHTML = "<label>Date</label>";
+      const dateInput = document.createElement("input");
+      dateInput.type = "date"; dateInput.value = c.date || ""; dateInput.disabled = !isAdmin;
+      dateInput.addEventListener("change", async () => {
+        try { await updateDoc(doc(db, "claims", c.id), { date: dateInput.value }); }
+        catch (err){ alert("Couldn't save the date: " + err.message); }
+      });
+      dateField.appendChild(dateInput);
+      const claimantField = document.createElement("div"); claimantField.className = "field";
+      claimantField.innerHTML = "<label>Claimant</label>";
+      const claimantInput = document.createElement("input");
+      claimantInput.type = "text"; claimantInput.value = c.claimant || ""; claimantInput.disabled = !isAdmin;
+      claimantInput.setAttribute("list", "staffNamesList");
+      claimantInput.addEventListener("change", async () => {
+        try { await updateDoc(doc(db, "claims", c.id), { claimant: claimantInput.value.trim() }); }
+        catch (err){ alert("Couldn't save the claimant: " + err.message); }
+      });
+      claimantField.appendChild(claimantInput);
+      row1.appendChild(dateField); row1.appendChild(claimantField);
+      body.appendChild(row1);
+
+      const row2 = document.createElement("div"); row2.className = "row2";
+      const catField = document.createElement("div"); catField.className = "field";
+      catField.innerHTML = "<label>Category</label>";
+      const catSelect = document.createElement("select");
+      catSelect.disabled = !isAdmin;
+      Object.entries(CLAIM_CATEGORY_LABELS).forEach(([val, label]) => {
+        const opt = document.createElement("option");
+        opt.value = val; opt.textContent = label;
+        catSelect.appendChild(opt);
+      });
+      catSelect.value = c.category || "other";
+      catSelect.addEventListener("change", async () => {
+        try { await updateDoc(doc(db, "claims", c.id), { category: catSelect.value }); }
+        catch (err){ alert("Couldn't save the category: " + err.message); }
+      });
+      catField.appendChild(catSelect);
+      const amountField = document.createElement("div"); amountField.className = "field";
+      amountField.innerHTML = "<label>Amount</label>";
+      const amountInput = document.createElement("input");
+      amountInput.type = "number"; amountInput.min = "0"; amountInput.step = "0.01";
+      amountInput.value = c.amount != null ? c.amount : ""; amountInput.disabled = !isAdmin;
+      amountInput.addEventListener("change", async () => {
+        const val = amountInput.value === "" ? null : Number(amountInput.value);
+        try { await updateDoc(doc(db, "claims", c.id), { amount: val }); }
+        catch (err){ alert("Couldn't save the amount: " + err.message); }
+      });
+      amountField.appendChild(amountInput);
+      row2.appendChild(catField); row2.appendChild(amountField);
+      body.appendChild(row2);
+
+      if (isAdmin){
+        const statusRow = document.createElement("div");
+        statusRow.style.margin = "10px 0";
+        const statusLabel = document.createElement("label");
+        statusLabel.textContent = "Status: ";
+        statusLabel.style.fontSize = "12px"; statusLabel.style.color = "#666";
+        const statusSelect = document.createElement("select");
+        statusSelect.className = "proposal-status-select";
+        Object.entries(CLAIM_STATUS_LABELS).forEach(([val, label]) => {
+          const opt = document.createElement("option");
+          opt.value = val; opt.textContent = label;
+          statusSelect.appendChild(opt);
+        });
+        statusSelect.value = c.status || "pending";
+        statusSelect.addEventListener("change", async () => {
+          try { await updateDoc(doc(db, "claims", c.id), { status: statusSelect.value }); }
+          catch (err){ alert("Couldn't save the status: " + err.message); }
+        });
+        statusRow.appendChild(statusLabel);
+        statusRow.appendChild(statusSelect);
+        body.appendChild(statusRow);
+      }
+
+      const notes = document.createElement("div");
+      notes.className = "finding-text";
+      notes.contentEditable = isAdmin ? "true" : "false";
+      notes.textContent = c.notes || "";
+      if (isAdmin) notes.dataset.placeholder = "What's this for?…";
+      notes.addEventListener("click", (e) => e.stopPropagation());
+      notes.addEventListener("blur", async () => {
+        if (!isAdmin) return;
+        const val = notes.innerText.trim();
+        if (val === (c.notes || "")) return;
+        try { await updateDoc(doc(db, "claims", c.id), { notes: val }); }
+        catch (err){ alert("Couldn't save notes: " + err.message); notes.textContent = c.notes || ""; }
+      });
+      body.appendChild(notes);
+
+      const strip = document.createElement("div");
+      strip.className = "photo-strip";
+      c.photos.forEach(photo => {
+        const item = document.createElement("div");
+        item.className = "photo-item";
+        const wrap = document.createElement("div");
+        wrap.className = "photo-thumb-wrap";
+        const img = document.createElement("img");
+        img.className = "photo-thumb"; img.src = photo.url; img.loading = "lazy";
+        img.addEventListener("click", (e) => { e.stopPropagation(); openLightbox(photo.url); });
+        wrap.appendChild(img);
+        if (isAdmin){
+          const rem = document.createElement("button");
+          rem.className = "photo-remove"; rem.textContent = "✕"; rem.title = "Delete photo";
+          rem.addEventListener("click", async (e) => {
+            e.stopPropagation();
+            if (!confirm("Delete this receipt photo?")) return;
+            const newPhotos = c.photos.filter(ph => ph.id !== photo.id);
+            try { await updateDoc(doc(db, "claims", c.id), { photos: newPhotos }); }
+            catch (err){ alert("Couldn't delete this photo: " + err.message); }
+          });
+          wrap.appendChild(rem);
+        }
+        item.appendChild(wrap);
+        if (isAdmin){
+          const ann = document.createElement("button");
+          ann.className = "annotate-btn"; ann.textContent = "✎ Annotate";
+          ann.addEventListener("click", (e) => { e.stopPropagation(); openAnnotateModal("claims", c.id, photo.id); });
+          item.appendChild(ann);
+        }
+        strip.appendChild(item);
+      });
+      if (isAdmin){
+        const addBtn = document.createElement("div");
+        addBtn.className = "add-photo-btn"; addBtn.textContent = "+ Add receipt photo";
+        addBtn.addEventListener("click", (e) => { e.stopPropagation(); openPhotoPicker("claims", c.id, addBtn); });
+        strip.appendChild(addBtn);
+      }
+      body.appendChild(strip);
+
+      if (isAdmin){
+        const pdfRow = document.createElement("div");
+        pdfRow.style.marginTop = "12px";
+        const pdfBtn = document.createElement("button");
+        pdfBtn.textContent = "⬇ Generate Claim Form";
+        pdfBtn.addEventListener("click", async (e) => {
+          e.stopPropagation();
+          const original = pdfBtn.textContent;
+          pdfBtn.disabled = true; pdfBtn.textContent = "Preparing…";
+          const area = $("pdfPrintArea");
+          area.innerHTML = buildClaimPdfHtml(c);
+          await waitForImages(area, 8000);
+          document.body.classList.add("printing-pdf");
+          window.print();
+          pdfBtn.disabled = false; pdfBtn.textContent = original;
+        });
+        pdfRow.appendChild(pdfBtn);
+        body.appendChild(pdfRow);
+      }
+    }
+    card.appendChild(body);
+    list.appendChild(card);
+  });
+}
+
+function buildClaimPdfHtml(c){
+  const generated = new Date().toLocaleString("default", { dateStyle: "medium", timeStyle: "short" });
+  let html = '<div class="pdf-doc pdf-claim"><h1>Expense Claim Form</h1>';
+  html += '<p class="pdf-meta">Indoor Farm — Takeover Tracker · Generated ' + escapeHtml(generated) + '</p>';
+  html += '<div class="pdf-claim-meta">';
+  html += '<div><strong>Date:</strong> ' + escapeHtml(c.date || "—") + '</div>';
+  html += '<div><strong>Claimant:</strong> ' + escapeHtml(c.claimant || "—") + '</div>';
+  html += '<div><strong>Category:</strong> ' + escapeHtml(CLAIM_CATEGORY_LABELS[c.category] || "—") + '</div>';
+  html += '<div><strong>Amount:</strong> ' + (c.amount != null ? "$" + Number(c.amount).toFixed(2) : "—") + '</div>';
+  html += '<div><strong>Status:</strong> ' + escapeHtml(CLAIM_STATUS_LABELS[c.status] || "Pending") + '</div>';
+  html += '</div>';
+  if (c.notes) html += '<p class="pdf-claim-notes">' + escapeHtml(c.notes).replace(/\n/g, "<br>") + '</p>';
+  if ((c.photos || []).length){
+    html += '<h2>Receipt' + (c.photos.length > 1 ? "s" : "") + '</h2><div class="pdf-claim-photo-grid">';
+    c.photos.forEach(p => { html += '<img class="pdf-claim-photo" src="' + escapeHtml(cloudinaryThumb(p.url, 1000)) + '">'; });
+    html += '</div>';
+  } else {
+    html += '<p>No receipt photo attached.</p>';
+  }
+  html += '<div class="pdf-claim-footer"><p>This form is system-generated by Indoor Farm — Takeover Tracker.</p></div>';
+  html += '</div>';
+  return html;
+}
+
+$("addClaimBtn").addEventListener("click", async () => {
+  if (!isAdmin) return;
+  const dateInput = $("newClaimDate");
+  const claimantInput = $("newClaimClaimant");
+  const categoryInput = $("newClaimCategory");
+  const amountInput = $("newClaimAmount");
+  const notesInput = $("newClaimNotes");
+  const date = dateInput.value || toKey(new Date());
+  const claimant = claimantInput.value.trim();
+  const category = categoryInput.value || "other";
+  const amount = amountInput.value === "" ? null : Number(amountInput.value);
+  const notes = notesInput.value.trim();
+  const btn = $("addClaimBtn");
+  btn.disabled = true; btn.textContent = "Adding…";
+  try {
+    const newDoc = await addDoc(collection(db, "claims"), { date, claimant, category, amount, notes, status: "pending", photos: [] });
+    expandedClaims[newDoc.id] = true;
+    claimantInput.value = ""; amountInput.value = ""; notesInput.value = ""; categoryInput.value = "taxi";
+  } catch (err){
+    alert("Couldn't save this claim: " + err.message + "\n\nIf this says \"permission denied\", the claims rule in firestore.rules needs to be published in the Firebase console (Firestore Database → Rules).");
+  } finally {
+    btn.disabled = false; btn.textContent = "Add";
+  }
+});
+(() => { const t = toKey(new Date()); $("newClaimDate").value = inRange(t) ? t : START_DATE; })();
+
+$("quickClaimPhotoBtn").addEventListener("click", async () => {
+  if (!isAdmin) return;
+  const btn = $("quickClaimPhotoBtn");
+  const original = btn.textContent;
+  btn.disabled = true; btn.textContent = "Creating…";
+  try {
+    const newDoc = await addDoc(collection(db, "claims"), {
+      date: toKey(new Date()), claimant: "", category: "other", amount: null, notes: "", status: "pending", photos: []
+    });
+    expandedClaims[newDoc.id] = true;
+    openPhotoPicker("claims", newDoc.id, null);
+  } catch (err){
+    alert("Couldn't start this claim: " + err.message);
+  } finally {
+    btn.disabled = false; btn.textContent = original;
+  }
+});
 
 // ============================================================================
 // PLANT GUIDE (Firestore: plantGuide/{id}) — reference infographics + notes,
@@ -4518,6 +4878,7 @@ const GALLERY_REGISTRY = {
   germinations: { cache: () => germinationsCache, expanded: () => expandedGerminations },
   losses: { cache: () => lossesCache, expanded: () => expandedLosses },
   reportTasks: { cache: () => reportTasksCache, expanded: () => expandedReportTasks },
+  claims: { cache: () => claimsCache, expanded: () => expandedClaims },
 };
 function galleryCache(col){ return GALLERY_REGISTRY[col].cache(); }
 function galleryExpanded(col){ return GALLERY_REGISTRY[col].expanded(); }
@@ -4677,7 +5038,7 @@ $("annotateSave").addEventListener("click", async () => {
 $("exportDataBtn").addEventListener("click", async () => {
   $("dataStatus").textContent = "Gathering data…";
   try {
-    const [scheduleSnap, seriesSnap, houseRulesSnap, findingsSnap, proposalsSnap, plantGuideSnap, specialEventsSnap, plantTypesSnap, harvestDestinationsSnap, harvestsSnap, transplantsSnap, germinationsSnap, lossesSnap, envReadingsSnap, staffSnap, attendanceSnap, inventoryAssetsSnap, inventoryConsumablesSnap, purchaseAreasSnap, purchasePlansSnap, reportsSnap, reportTasksSnap] = await Promise.all([
+    const [scheduleSnap, seriesSnap, houseRulesSnap, findingsSnap, proposalsSnap, plantGuideSnap, specialEventsSnap, plantTypesSnap, harvestDestinationsSnap, harvestsSnap, transplantsSnap, germinationsSnap, lossesSnap, envReadingsSnap, staffSnap, attendanceSnap, inventoryAssetsSnap, inventoryConsumablesSnap, purchaseAreasSnap, purchasePlansSnap, reportsSnap, reportTasksSnap, claimsSnap] = await Promise.all([
       getDocs(collection(db, "schedule")),
       getDocs(collection(db, "series")),
       getDoc(doc(db, "meta", "houseRules")),
@@ -4699,7 +5060,8 @@ $("exportDataBtn").addEventListener("click", async () => {
       getDocs(collection(db, "purchaseAreas")),
       getDocs(collection(db, "purchasePlans")),
       getDocs(collection(db, "reports")),
-      getDocs(collection(db, "reportTasks"))
+      getDocs(collection(db, "reportTasks")),
+      getDocs(collection(db, "claims"))
     ]);
     const dump = {
       exportedAt: new Date().toISOString(),
@@ -4724,7 +5086,8 @@ $("exportDataBtn").addEventListener("click", async () => {
       purchaseAreas: Object.fromEntries(purchaseAreasSnap.docs.map(d => [d.id, d.data()])),
       purchasePlans: Object.fromEntries(purchasePlansSnap.docs.map(d => [d.id, d.data()])),
       reports: Object.fromEntries(reportsSnap.docs.map(d => [d.id, d.data()])),
-      reportTasks: Object.fromEntries(reportTasksSnap.docs.map(d => [d.id, d.data()]))
+      reportTasks: Object.fromEntries(reportTasksSnap.docs.map(d => [d.id, d.data()])),
+      claims: Object.fromEntries(claimsSnap.docs.map(d => [d.id, d.data()]))
     };
     const blob = new Blob([JSON.stringify(dump, null, 2)], { type: "application/json" });
     const a = document.createElement("a");
@@ -4771,6 +5134,7 @@ $("importFileInput").addEventListener("change", async () => {
     Object.entries(dump.purchasePlans || {}).forEach(([id, data]) => ops.push(["purchasePlans", id, data]));
     Object.entries(dump.reports || {}).forEach(([id, data]) => ops.push(["reports", id, data]));
     Object.entries(dump.reportTasks || {}).forEach(([id, data]) => ops.push(["reportTasks", id, data]));
+    Object.entries(dump.claims || {}).forEach(([id, data]) => ops.push(["claims", id, data]));
 
     // Firestore batches cap at 500 operations — chunk to be safe.
     for (let i = 0; i < ops.length; i += 400){
