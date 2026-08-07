@@ -1638,7 +1638,7 @@ function buildFindingsPdfHtml(){
       html += '<div class="pdf-entry-text">' + escapeHtml(f.text || "").replace(/\n/g, "<br>") + '</div>';
       if (f.photos && f.photos.length){
         html += '<div class="pdf-photo-grid">';
-        f.photos.forEach(p => { html += '<img class="pdf-photo" src="' + escapeHtml(cloudinaryThumb(p.url, 220)) + '">'; });
+        f.photos.forEach(p => { html += '<img class="pdf-photo" src="' + escapeHtml(cloudinaryThumb(p.url, 1000)) + '">'; });
         html += '</div>';
       }
       html += '</div>';
