@@ -2972,6 +2972,7 @@ const LOG_CONFIGS = {
     locationField: { key: "sourceRoom", options: [["germOnSite","On Site"],["germOffSite","Off Site"]] },
     secondLocationField: { key: "destLevel", options: [["level1","Level 1"],["level3","Level 3"]] },
     ageAtTransferField: true,
+    rackPositionField: true,
   },
   losses: {
     locationField: { key: "location", options: Object.entries(LOCATIONS) },
@@ -3156,6 +3157,24 @@ function logEditableNumber(label, value, onSave){
   return field;
 }
 
+function logEditableText(label, value, onSave){
+  const field = document.createElement("div"); field.className = "field";
+  const lbl = document.createElement("label"); lbl.textContent = label;
+  field.appendChild(lbl);
+  const input = document.createElement("input");
+  input.type = "text"; input.disabled = !isAdmin;
+  if (value != null) input.value = value;
+  input.addEventListener("click", (e) => e.stopPropagation());
+  input.addEventListener("blur", async () => {
+    const val = input.value.trim();
+    if (val === (value || "")) return;
+    try { await onSave(val || null); }
+    catch (err){ alert("Couldn't save: " + err.message); input.value = value || ""; }
+  });
+  field.appendChild(input);
+  return field;
+}
+
 function renderLogSection(col){
   const cfg = LOG_CONFIGS[col];
   const cache = LOG_CACHES[col]();
@@ -3201,7 +3220,8 @@ function renderLogSection(col){
     let batchLabelText = "";
     if (cfg.ageAtTransferField){
       const remaining = computeBatchRemaining(r.id);
-      batchLabelText = " · " + batchAgeDays(r, farmTodayKey()) + "d old · " + remaining + " of " + (r.quantity != null ? r.quantity : "?") + " left";
+      const rackLabel = (r.rackSide || r.rackTier != null) ? (" · " + [r.rackSide ? "Side " + r.rackSide : null, r.rackTier != null ? "Tier " + r.rackTier : null].filter(Boolean).join(" ")) : "";
+      batchLabelText = rackLabel + " · " + batchAgeDays(r, farmTodayKey()) + "d old · " + remaining + " of " + (r.quantity != null ? r.quantity : "?") + " left";
     } else if (cfg.batchField && r.batchId){
       const srcBatch = transplantsCache.find(t => t.id === r.batchId);
       batchLabelText = srcBatch ? (" · from batch " + (srcBatch.date || "?") + " (" + batchAgeDays(srcBatch, r.date || farmTodayKey()) + "d old)") : "";
@@ -3262,7 +3282,14 @@ function renderLogSection(col){
           const row3 = document.createElement("div"); row3.className = "row2";
           row3.appendChild(logEditableNumber("Age at transfer (days)", r.ageAtTransfer, (v) => updateDoc(doc(db, col, r.id), { ageAtTransfer: v })));
           body.appendChild(row3);
-        } else if (cfg.batchField){
+        }
+        if (cfg.rackPositionField){
+          const row4 = document.createElement("div"); row4.className = "row2";
+          row4.appendChild(logEditableText("Rack side", r.rackSide, (v) => updateDoc(doc(db, col, r.id), { rackSide: v })));
+          row4.appendChild(logEditableNumber("Rack tier", r.rackTier, (v) => updateDoc(doc(db, col, r.id), { rackTier: v })));
+          body.appendChild(row4);
+        }
+        if (cfg.batchField){
           const row3 = document.createElement("div"); row3.className = "row2";
           const openBatches = openBatchesFor(r.plantTypeId, r[cfg.locationField.key]);
           const batchOptions = [["", "— No specific batch —"], ...openBatches.map(({ batch, remaining }) => [batch.id, batchLabel(batch, remaining)])];
@@ -3352,6 +3379,8 @@ function wireLogAddForm(col){
     const destSelect = cfg.destinationField ? $(col + "Destination") : null;
     const ageInput = cfg.ageAtTransferField ? $(col + "AgeAtTransfer") : null;
     const batchSelect = cfg.batchField ? $(col + "Batch") : null;
+    const rackSideInput = cfg.rackPositionField ? $(col + "RackSide") : null;
+    const rackTierInput = cfg.rackPositionField ? $(col + "RackTier") : null;
 
     const plantTypeId = plantTypeSelect.value;
     if (!plantTypeId){ alert("Add a plant type first, using the ⚙ Manage Plant Types button above."); return; }
@@ -3365,6 +3394,10 @@ function wireLogAddForm(col){
     if (cfg.destinationField) payload[cfg.destinationField.key] = destSelect.value;
     if (cfg.ageAtTransferField) payload.ageAtTransfer = ageInput.value === "" ? (plantTypeGermDays(plantTypeId) || 0) : Number(ageInput.value);
     if (cfg.batchField) payload.batchId = (batchSelect && batchSelect.value) || null;
+    if (cfg.rackPositionField){
+      payload.rackSide = rackSideInput.value.trim() || null;
+      payload.rackTier = rackTierInput.value === "" ? null : Number(rackTierInput.value);
+    }
 
     btn.disabled = true; btn.textContent = "Adding…";
     try {
@@ -3387,11 +3420,19 @@ Object.keys(LOG_CONFIGS).forEach(wireLogAddForm);
 });
 
 // Pre-fills the new-batch starting age from the plant type's configured germination
-// days as soon as one is picked — still freely editable, just saves re-typing the
-// common case every time.
+// days, and the rack side/tier from whichever transplant of this same plant type was
+// logged most recently — for a daily-succession setup (a new tray of the same crop in
+// the same rack slot every day) this means picking the plant type is usually the only
+// thing that needs typing at all.
 $("transplantsPlantType").addEventListener("change", () => {
-  const days = plantTypeGermDays($("transplantsPlantType").value);
+  const plantTypeId = $("transplantsPlantType").value;
+  const days = plantTypeGermDays(plantTypeId);
   if (days != null) $("transplantsAgeAtTransfer").value = days;
+  const recent = transplantsCache.filter(t => t.plantTypeId === plantTypeId).sort((a,b) => (b.date || "").localeCompare(a.date || ""))[0];
+  if (recent){
+    $("transplantsRackSide").value = recent.rackSide || "";
+    $("transplantsRackTier").value = recent.rackTier != null ? recent.rackTier : "";
+  }
 });
 
 // The "From batch" dropdowns on Harvest/Losses are optional and always show an open
@@ -3741,19 +3782,40 @@ function renderGrowingStock(){
     let hasAny = false;
 
     if (isBatchLoc){
-      const byType = {};
+      // Grouped by (rack side, rack tier, plant type) rather than just plant type — a
+      // plant type can occupy more than one physical rack row (e.g. the same crop grown
+      // on two tiers at once), and each occupies its own dot cluster with its own tier
+      // label. Batches with no rack side/tier set just fall back to grouping by plant
+      // type alone, sorted alphabetically, same as before this feature existed.
+      const groups = {};
       transplantsCache.filter(t => t.destLevel === loc).forEach(t => {
         const remaining = computeBatchRemaining(t.id);
         if (remaining <= 0) return;
-        (byType[t.plantTypeId] = byType[t.plantTypeId] || []).push({ batch: t, remaining });
+        const key = (t.rackSide || "") + "|" + (t.rackTier != null ? t.rackTier : "") + "|" + t.plantTypeId;
+        if (!groups[key]) groups[key] = { plantTypeId: t.plantTypeId, rackSide: t.rackSide || "", rackTier: t.rackTier != null ? t.rackTier : null, batches: [] };
+        groups[key].batches.push({ batch: t, remaining });
       });
-      Object.keys(byType).sort((a,b) => plantTypeName(a).localeCompare(plantTypeName(b))).forEach(plantTypeId => {
+      const groupList = Object.values(groups).sort((a,b) => {
+        if (a.rackSide !== b.rackSide) return a.rackSide.localeCompare(b.rackSide);
+        if (a.rackTier != null && b.rackTier != null && a.rackTier !== b.rackTier) return b.rackTier - a.rackTier;
+        if (a.rackTier != null && b.rackTier == null) return -1;
+        if (a.rackTier == null && b.rackTier != null) return 1;
+        return plantTypeName(a.plantTypeId).localeCompare(plantTypeName(b.plantTypeId));
+      });
+      let currentSide = null;
+      groupList.forEach(g => {
         hasAny = true;
-        const batches = byType[plantTypeId].slice().sort((a,b) => (a.batch.date||"").localeCompare(b.batch.date||""));
-        const avg = computeAvgDaysToHarvest(plantTypeId);
+        if (g.rackSide && g.rackSide !== currentSide){
+          const sideHeading = document.createElement("div"); sideHeading.className = "stock-side-heading";
+          sideHeading.textContent = "Side " + g.rackSide;
+          group.appendChild(sideHeading);
+        }
+        currentSide = g.rackSide || null;
+        const batches = g.batches.slice().sort((a,b) => (a.batch.date||"").localeCompare(b.batch.date||""));
+        const avg = computeAvgDaysToHarvest(g.plantTypeId);
         const row = document.createElement("div"); row.className = "stock-type-row";
         const nameEl = document.createElement("div"); nameEl.className = "stock-type-name";
-        nameEl.textContent = plantTypeName(plantTypeId);
+        nameEl.textContent = (g.rackTier != null ? "Tier " + g.rackTier + " · " : "") + plantTypeName(g.plantTypeId);
         if (avg != null){
           const avgTag = document.createElement("span"); avgTag.className = "stock-type-avg";
           avgTag.textContent = "avg " + Math.round(avg) + "d to harvest";
@@ -5436,6 +5498,63 @@ $("importFileInput").addEventListener("change", async () => {
     $("dataStatus").textContent = "Import failed: " + err.message;
   }
   $("importFileInput").value = "";
+});
+
+// Wipes every record in one collection — meant for right before an Import, so a
+// corrected re-import doesn't leave the previous attempt's records sitting alongside
+// the new ones under different IDs. Irreversible, so it confirms twice: once with the
+// exact record count, then again by typing DELETE, before anything is actually removed.
+const CLEARABLE_COLLECTIONS = {
+  schedule: "Schedule", series: "Recurring Series", findings: "Findings",
+  proposals: "Planning / Proposals", plantGuide: "Plant Guide", specialEvents: "Special Events",
+  plantTypes: "Plant Types", harvestDestinations: "Harvest Destinations",
+  harvests: "Harvests", transplants: "Transfers (batches)", germinations: "Germinations", losses: "Losses",
+  envReadings: "Environment Readings", staff: "Staff", attendance: "Attendance",
+  inventoryAssets: "Inventory Assets", inventoryConsumables: "Inventory Consumables",
+  purchaseAreas: "Purchase Areas", purchasePlans: "Purchase Plans",
+  reports: "Reports", reportTasks: "Report Tasks", claims: "Claims"
+};
+(() => {
+  const sel = $("clearCollectionSelect");
+  Object.entries(CLEARABLE_COLLECTIONS).forEach(([col, label]) => {
+    const opt = document.createElement("option");
+    opt.value = col; opt.textContent = label;
+    sel.appendChild(opt);
+  });
+})();
+
+$("clearCollectionBtn").addEventListener("click", async () => {
+  if (!isAdmin) return;
+  const col = $("clearCollectionSelect").value;
+  if (!col){ alert("Pick a collection first."); return; }
+  const label = CLEARABLE_COLLECTIONS[col];
+  const btn = $("clearCollectionBtn");
+  const original = btn.textContent;
+  btn.disabled = true; btn.textContent = "Checking…";
+  $("clearCollectionStatus").textContent = "";
+  try {
+    const snap = await getDocs(collection(db, col));
+    if (snap.empty){
+      $("clearCollectionStatus").textContent = label + " is already empty.";
+      return;
+    }
+    const count = snap.size;
+    if (!confirm("Delete all " + count + " record" + (count === 1 ? "" : "s") + " in \"" + label + "\"? This cannot be undone.")) return;
+    const typed = prompt("Type DELETE to confirm wiping " + count + " record" + (count === 1 ? "" : "s") + " from \"" + label + "\".");
+    if (typed !== "DELETE"){ $("clearCollectionStatus").textContent = "Cancelled — nothing deleted."; return; }
+    btn.textContent = "Deleting…";
+    const docsToDelete = snap.docs;
+    for (let i = 0; i < docsToDelete.length; i += 400){
+      const batch = writeBatch(db);
+      docsToDelete.slice(i, i + 400).forEach(d => batch.delete(d.ref));
+      await batch.commit();
+    }
+    $("clearCollectionStatus").textContent = "Deleted " + count + " record" + (count === 1 ? "" : "s") + " from \"" + label + "\".";
+  } catch (err){
+    $("clearCollectionStatus").textContent = "Failed: " + err.message;
+  } finally {
+    btn.disabled = false; btn.textContent = original;
+  }
 });
 
 // ============================================================================

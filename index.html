@@ -481,7 +481,11 @@
             <div class="field"><label>Quantity</label><input type="number" id="transplantsQuantity" min="0" step="1"></div>
             <div class="field"><label>Age at transfer (days)</label><input type="number" id="transplantsAgeAtTransfer" min="0" step="1" placeholder="e.g. 14"></div>
           </div>
-          <p class="hint" style="margin:-4px 0 8px;">This becomes a trackable batch — starting age defaults from the plant type's germination days (⚙ above) but adjust it if this one's different.</p>
+          <div class="row2">
+            <div class="field"><label>Rack side (optional)</label><input type="text" id="transplantsRackSide" placeholder="e.g. A"></div>
+            <div class="field"><label>Rack tier (optional)</label><input type="number" id="transplantsRackTier" min="1" step="1" placeholder="e.g. 6"></div>
+          </div>
+          <p class="hint" style="margin:-4px 0 8px;">This becomes a trackable batch — starting age defaults from the plant type's germination days (⚙ above) but adjust it if this one's different. Rack side/tier are just for finding this batch in a physical rack — both pre-fill from whatever you used last time for this plant type.</p>
           <textarea id="transplantsNotes" rows="2" placeholder="Optional notes…"></textarea>
           <div class="finding-add-actions">
             <span class="hint" style="margin:0;">Add photos after creating the entry</span>
@@ -784,6 +788,18 @@
         <input type="file" id="importFileInput" accept="application/json" style="display:none;">
       </div>
       <div class="sub" id="dataStatus" style="margin-top:10px;"></div>
+    </div>
+
+    <div class="section" style="margin-top:16px;">
+      <h2>Clear a collection</h2>
+      <p class="hint">Deletes every record in one collection — meant for right before importing a corrected file, so the old and new records don't end up mixed together. This cannot be undone, so it asks you to confirm twice.</p>
+      <div class="data-actions">
+        <select id="clearCollectionSelect">
+          <option value="">— Select a collection —</option>
+        </select>
+        <button class="btn danger" id="clearCollectionBtn">🗑 Delete all in this collection</button>
+      </div>
+      <div class="sub" id="clearCollectionStatus" style="margin-top:10px;"></div>
     </div>
   </div>
 
