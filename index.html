@@ -789,6 +789,18 @@
       </div>
       <div class="sub" id="dataStatus" style="margin-top:10px;"></div>
     </div>
+
+    <div class="section" style="margin-top:16px;">
+      <h2>Clear a collection</h2>
+      <p class="hint">Deletes every record in one collection — meant for right before importing a corrected file, so the old and new records don't end up mixed together. This cannot be undone, so it asks you to confirm twice.</p>
+      <div class="data-actions">
+        <select id="clearCollectionSelect">
+          <option value="">— Select a collection —</option>
+        </select>
+        <button class="btn danger" id="clearCollectionBtn">🗑 Delete all in this collection</button>
+      </div>
+      <div class="sub" id="clearCollectionStatus" style="margin-top:10px;"></div>
+    </div>
   </div>
 
 </div>

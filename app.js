@@ -5500,6 +5500,63 @@ $("importFileInput").addEventListener("change", async () => {
   $("importFileInput").value = "";
 });
 
+// Wipes every record in one collection — meant for right before an Import, so a
+// corrected re-import doesn't leave the previous attempt's records sitting alongside
+// the new ones under different IDs. Irreversible, so it confirms twice: once with the
+// exact record count, then again by typing DELETE, before anything is actually removed.
+const CLEARABLE_COLLECTIONS = {
+  schedule: "Schedule", series: "Recurring Series", findings: "Findings",
+  proposals: "Planning / Proposals", plantGuide: "Plant Guide", specialEvents: "Special Events",
+  plantTypes: "Plant Types", harvestDestinations: "Harvest Destinations",
+  harvests: "Harvests", transplants: "Transfers (batches)", germinations: "Germinations", losses: "Losses",
+  envReadings: "Environment Readings", staff: "Staff", attendance: "Attendance",
+  inventoryAssets: "Inventory Assets", inventoryConsumables: "Inventory Consumables",
+  purchaseAreas: "Purchase Areas", purchasePlans: "Purchase Plans",
+  reports: "Reports", reportTasks: "Report Tasks", claims: "Claims"
+};
+(() => {
+  const sel = $("clearCollectionSelect");
+  Object.entries(CLEARABLE_COLLECTIONS).forEach(([col, label]) => {
+    const opt = document.createElement("option");
+    opt.value = col; opt.textContent = label;
+    sel.appendChild(opt);
+  });
+})();
+
+$("clearCollectionBtn").addEventListener("click", async () => {
+  if (!isAdmin) return;
+  const col = $("clearCollectionSelect").value;
+  if (!col){ alert("Pick a collection first."); return; }
+  const label = CLEARABLE_COLLECTIONS[col];
+  const btn = $("clearCollectionBtn");
+  const original = btn.textContent;
+  btn.disabled = true; btn.textContent = "Checking…";
+  $("clearCollectionStatus").textContent = "";
+  try {
+    const snap = await getDocs(collection(db, col));
+    if (snap.empty){
+      $("clearCollectionStatus").textContent = label + " is already empty.";
+      return;
+    }
+    const count = snap.size;
+    if (!confirm("Delete all " + count + " record" + (count === 1 ? "" : "s") + " in \"" + label + "\"? This cannot be undone.")) return;
+    const typed = prompt("Type DELETE to confirm wiping " + count + " record" + (count === 1 ? "" : "s") + " from \"" + label + "\".");
+    if (typed !== "DELETE"){ $("clearCollectionStatus").textContent = "Cancelled — nothing deleted."; return; }
+    btn.textContent = "Deleting…";
+    const docsToDelete = snap.docs;
+    for (let i = 0; i < docsToDelete.length; i += 400){
+      const batch = writeBatch(db);
+      docsToDelete.slice(i, i + 400).forEach(d => batch.delete(d.ref));
+      await batch.commit();
+    }
+    $("clearCollectionStatus").textContent = "Deleted " + count + " record" + (count === 1 ? "" : "s") + " from \"" + label + "\".";
+  } catch (err){
+    $("clearCollectionStatus").textContent = "Failed: " + err.message;
+  } finally {
+    btn.disabled = false; btn.textContent = original;
+  }
+});
+
 // ============================================================================
 // INIT
 // ============================================================================
