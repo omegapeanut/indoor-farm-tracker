@@ -945,7 +945,7 @@ $("deleteSeriesBtn").addEventListener("click", async () => {
   const entry = viewDay(editingDate);
   const ev = entry.events.find(e => e.id === editingEventId);
   if (!ev || !ev.seriesId) return;
-  if (!confirm("Delete this entire recurring series? This removes it from every day it was scheduled on.")) return;
+  if (!confirm("Delete this entire recurring series? This removes it from every day it was scheduled on and can't be undone from Trash — unlike other deletes in this app, a recurring series touches too many days at once to safely restore as one unit.")) return;
   const seriesId = ev.seriesId;
 
   const batch = writeBatch(db);
@@ -1029,7 +1029,7 @@ function renderStaffList(){
     del.title = "Remove staff";
     del.addEventListener("click", async () => {
       if (!confirm("Remove " + s.name + " from the staff roster? Their past attendance records are kept.")) return;
-      await deleteDoc(doc(db, "staff", s.id));
+      await moveToTrash("staff", s.id, s);
     });
 
     row.appendChild(name); row.appendChild(pin); row.appendChild(pinErr); row.appendChild(del);
@@ -1162,7 +1162,7 @@ function renderAttendance(){
       del.title = "Remove from list";
       del.addEventListener("click", async () => {
         if (!confirm("Remove " + rec.name + "'s attendance entry for this day?")) return;
-        await deleteDoc(doc(db, "attendance", rec.id));
+        await moveToTrash("attendance", rec.id, rec);
       });
       row.appendChild(del);
     }
@@ -1520,7 +1520,7 @@ function renderFindings(){
       del.addEventListener("click", async (e) => {
         e.stopPropagation();
         if (!confirm("Delete this finding entry and its photos?")) return;
-        await deleteDoc(doc(db, "findings", f.id));
+        await moveToTrash("findings", f.id, f);
       });
       header.appendChild(del);
     }
@@ -1754,7 +1754,7 @@ function renderProposals(){
       del.addEventListener("click", async (e) => {
         e.stopPropagation();
         if (!confirm("Delete this proposal and its photos?")) return;
-        try { await deleteDoc(doc(db, "proposals", p.id)); }
+        try { await moveToTrash("proposals", p.id, p); }
         catch (err){ alert("Couldn't delete this proposal: " + err.message); }
       });
       header.appendChild(del);
@@ -2011,7 +2011,7 @@ function renderClaims(){
       del.addEventListener("click", async (e) => {
         e.stopPropagation();
         if (!confirm("Delete this claim and its receipt photos?")) return;
-        try { await deleteDoc(doc(db, "claims", c.id)); }
+        try { await moveToTrash("claims", c.id, c); }
         catch (err){ alert("Couldn't delete this claim: " + err.message); }
       });
       header.appendChild(del);
@@ -2364,7 +2364,7 @@ function renderPlantGuide(){
         e.stopPropagation();
         if (!confirm("Delete this plant guide entry and its photos?")) return;
         try {
-          await deleteDoc(doc(db, "plantGuide", p.id));
+          await moveToTrash("plantGuide", p.id, p);
         } catch (err){
           alert("Couldn't delete this entry: " + err.message);
         }
@@ -2562,7 +2562,7 @@ function renderSpecialEvents(){
       del.addEventListener("click", async (e) => {
         e.stopPropagation();
         if (!confirm("Delete this special event and its photos?")) return;
-        try { await deleteDoc(doc(db, "specialEvents", ev.id)); }
+        try { await moveToTrash("specialEvents", ev.id, ev); }
         catch (err){ alert("Couldn't delete this event: " + err.message); }
       });
       header.appendChild(del);
@@ -2800,7 +2800,7 @@ function renderPlantTypes(){
     del.className = "icon-btn"; del.textContent = "✕"; del.title = "Remove plant type";
     del.addEventListener("click", async () => {
       if (!confirm("Remove \"" + pt.name + "\" from plant types? Past log entries keep their recorded name.")) return;
-      try { await deleteDoc(doc(db, "plantTypes", pt.id)); }
+      try { await moveToTrash("plantTypes", pt.id, pt); }
       catch (err){ alert("Couldn't delete this plant type: " + err.message); }
     });
 
@@ -2909,7 +2909,7 @@ function renderHarvestDestinations(){
     del.className = "icon-btn"; del.textContent = "✕"; del.title = "Remove destination";
     del.addEventListener("click", async () => {
       if (!confirm("Remove \"" + dest.name + "\" from destinations? Past harvest entries keep their recorded destination.")) return;
-      try { await deleteDoc(doc(db, "harvestDestinations", dest.id)); }
+      try { await moveToTrash("harvestDestinations", dest.id, dest); }
       catch (err){ alert("Couldn't delete this destination: " + err.message); }
     });
 
@@ -3241,7 +3241,7 @@ function renderLogSection(col){
       del.addEventListener("click", async (e) => {
         e.stopPropagation();
         if (!confirm("Delete this entry and its photos?")) return;
-        try { await deleteDoc(doc(db, col, r.id)); }
+        try { await moveToTrash(col, r.id, r); }
         catch (err){ alert("Couldn't delete this entry: " + err.message); }
       });
       header.appendChild(del);
@@ -3541,7 +3541,7 @@ function renderEnvReadings(){
       del.className = "icon-btn"; del.textContent = "✕"; del.title = "Delete reading";
       del.addEventListener("click", async () => {
         if (!confirm("Delete this reading?")) return;
-        try { await deleteDoc(doc(db, "envReadings", r.id)); }
+        try { await moveToTrash("envReadings", r.id, r); }
         catch (err){ alert("Couldn't delete this reading: " + err.message); }
       });
       row.appendChild(del);
@@ -4010,7 +4010,7 @@ function renderAssets(){
       del.addEventListener("click", async (e) => {
         e.stopPropagation();
         if (!confirm("Delete this asset and its photos?")) return;
-        try { await deleteDoc(doc(db, "inventoryAssets", a.id)); }
+        try { await moveToTrash("inventoryAssets", a.id, a); }
         catch (err){ alert("Couldn't delete this asset: " + err.message); }
       });
       header.appendChild(del);
@@ -4228,7 +4228,7 @@ function renderConsumables(){
       del.className = "icon-btn"; del.textContent = "✕"; del.title = "Delete item";
       del.addEventListener("click", async () => {
         if (!confirm("Delete this consumable item?")) return;
-        try { await deleteDoc(doc(db, "inventoryConsumables", c.id)); }
+        try { await moveToTrash("inventoryConsumables", c.id, c); }
         catch (err){ alert("Couldn't delete this item: " + err.message); }
       });
       delCell.appendChild(del);
@@ -4316,7 +4316,7 @@ function renderPurchaseAreas(){
     del.className = "icon-btn"; del.textContent = "✕"; del.title = "Remove area";
     del.addEventListener("click", async () => {
       if (!confirm("Remove \"" + area.name + "\" from areas? Past purchase entries keep their recorded area.")) return;
-      try { await deleteDoc(doc(db, "purchaseAreas", area.id)); }
+      try { await moveToTrash("purchaseAreas", area.id, area); }
       catch (err){ alert("Couldn't delete this area: " + err.message); }
     });
 
@@ -4475,7 +4475,7 @@ function buildPurchaseCard(p){
     del.addEventListener("click", async (e) => {
       e.stopPropagation();
       if (!confirm("Delete \"" + (p.item || "this item") + "\" from the purchase plan?")) return;
-      try { await deleteDoc(doc(db, "purchasePlans", p.id)); }
+      try { await moveToTrash("purchasePlans", p.id, p); }
       catch (err){ alert("Couldn't delete this item: " + err.message); }
     });
     header.appendChild(del);
@@ -4851,8 +4851,8 @@ function buildReportCard(r){
       e.stopPropagation();
       if (!confirm("Delete this report and all of its issues?")) return;
       try {
-        await Promise.all(tasksForReport(r.id).map(t => deleteDoc(doc(db, "reportTasks", t.id))));
-        await deleteDoc(doc(db, "reports", r.id));
+        await Promise.all(tasksForReport(r.id).map(t => moveToTrash("reportTasks", t.id, t)));
+        await moveToTrash("reports", r.id, r);
       } catch (err){ alert("Couldn't delete this report: " + err.message); }
     });
     header.appendChild(del);
@@ -5064,7 +5064,7 @@ function buildTaskCard(t, index){
     del.addEventListener("click", async (e) => {
       e.stopPropagation();
       if (!confirm("Delete this issue?")) return;
-      try { await deleteDoc(doc(db, "reportTasks", t.id)); }
+      try { await moveToTrash("reportTasks", t.id, t); }
       catch (err){ alert("Couldn't delete this issue: " + err.message); }
     });
     header.appendChild(del);
@@ -5500,10 +5500,115 @@ $("importFileInput").addEventListener("change", async () => {
   $("importFileInput").value = "";
 });
 
+// ============================================================================
+// TRASH (Firestore: trash/{id}) — every delete button in the app (and the bulk
+// "Clear a collection" tool below) routes through moveToTrash() instead of a hard
+// Firestore delete, so a wrong delete has an undo. Kept for 365 days, but this is a
+// static client-side app with no server-side cron — sweepExpiredTrash() only runs
+// when an admin's browser loads the trash list, so "365 days" means "purged the
+// next time someone with admin access opens the app after that date," not a
+// guaranteed-to-the-second background job.
+// ============================================================================
+let trashCache = [];
+const TRASH_RETENTION_DAYS = 365;
+
+function describeTrashItem(col, data){
+  if (data.plantTypeId) return plantTypeName(data.plantTypeId) + (data.quantity != null ? " — " + data.quantity : "") + (data.date ? " (" + data.date + ")" : "");
+  if (data.name) return data.name;
+  if (data.title) return data.title;
+  if (data.text) return data.text.slice(0, 60);
+  if (data.item) return data.item;
+  if (data.notes) return data.notes.slice(0, 60);
+  if (data.date) return data.date;
+  return "record";
+}
+
+async function moveToTrash(col, id, data){
+  const clean = { ...data };
+  delete clean.id;
+  const deletedAt = new Date();
+  const purgeAt = new Date(deletedAt);
+  purgeAt.setDate(purgeAt.getDate() + TRASH_RETENTION_DAYS);
+  await addDoc(collection(db, "trash"), {
+    collection: col,
+    docId: id,
+    data: clean,
+    label: describeTrashItem(col, clean),
+    deletedAt: deletedAt.toISOString(),
+    purgeAt: purgeAt.toISOString()
+  });
+  await deleteDoc(doc(db, col, id));
+}
+
+async function sweepExpiredTrash(){
+  const now = new Date().toISOString();
+  const expired = trashCache.filter(t => t.purgeAt && t.purgeAt <= now);
+  for (const item of expired){
+    try { await deleteDoc(doc(db, "trash", item.id)); } catch {}
+  }
+}
+
+onSnapshot(collection(db, "trash"), (snap) => {
+  trashCache = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  sweepExpiredTrash();
+  renderTrash();
+}, () => {});
+
+async function restoreFromTrash(trashId){
+  const item = trashCache.find(t => t.id === trashId);
+  if (!item) return;
+  await setDoc(doc(db, item.collection, item.docId), item.data);
+  await deleteDoc(doc(db, "trash", trashId));
+}
+
+function renderTrash(){
+  const list = $("trashList");
+  const countEl = $("trashCount");
+  if (!list || !countEl) return;
+  list.innerHTML = "";
+  if (!isAdmin) return;
+  const items = trashCache.slice().sort((a,b) => (b.deletedAt || "").localeCompare(a.deletedAt || ""));
+  countEl.textContent = items.length ? (items.length + " item" + (items.length === 1 ? "" : "s") + " in trash") : "Trash is empty.";
+  items.forEach(item => {
+    const row = document.createElement("div");
+    row.className = "trash-row";
+
+    const info = document.createElement("div");
+    info.className = "trash-info";
+    const daysLeft = Math.max(0, Math.ceil((new Date(item.purgeAt) - new Date()) / 86400000));
+    const collLabel = (typeof CLEARABLE_COLLECTIONS !== "undefined" && CLEARABLE_COLLECTIONS[item.collection]) || item.collection;
+    info.innerHTML =
+      '<div class="trash-label">' + escapeHtml(collLabel) + ' — ' + escapeHtml(item.label || "record") + '</div>' +
+      '<div class="trash-meta">Deleted ' + escapeHtml((item.deletedAt || "").slice(0,10)) + ' · purges in ' + daysLeft + ' day' + (daysLeft === 1 ? "" : "s") + '</div>';
+    row.appendChild(info);
+
+    const actions = document.createElement("div");
+    actions.className = "trash-actions";
+    const restoreBtn = document.createElement("button");
+    restoreBtn.className = "btn primary"; restoreBtn.textContent = "↺ Restore";
+    restoreBtn.addEventListener("click", async () => {
+      restoreBtn.disabled = true; restoreBtn.textContent = "Restoring…";
+      try { await restoreFromTrash(item.id); }
+      catch (err){ alert("Couldn't restore: " + err.message); restoreBtn.disabled = false; restoreBtn.textContent = "↺ Restore"; }
+    });
+    const purgeBtn = document.createElement("button");
+    purgeBtn.className = "btn danger"; purgeBtn.textContent = "Delete forever";
+    purgeBtn.addEventListener("click", async () => {
+      if (!confirm("Permanently delete this — it can't be restored after this?")) return;
+      try { await deleteDoc(doc(db, "trash", item.id)); }
+      catch (err){ alert("Couldn't delete: " + err.message); }
+    });
+    actions.appendChild(restoreBtn); actions.appendChild(purgeBtn);
+    row.appendChild(actions);
+
+    list.appendChild(row);
+  });
+}
+
 // Wipes every record in one collection — meant for right before an Import, so a
 // corrected re-import doesn't leave the previous attempt's records sitting alongside
-// the new ones under different IDs. Irreversible, so it confirms twice: once with the
-// exact record count, then again by typing DELETE, before anything is actually removed.
+// the new ones under different IDs. Each deleted record still lands in Trash first
+// (see moveToTrash() above), so this needs only one confirmation, not two.
 const CLEARABLE_COLLECTIONS = {
   schedule: "Schedule", series: "Recurring Series", findings: "Findings",
   proposals: "Planning / Proposals", plantGuide: "Plant Guide", specialEvents: "Special Events",
@@ -5539,17 +5644,27 @@ $("clearCollectionBtn").addEventListener("click", async () => {
       return;
     }
     const count = snap.size;
-    if (!confirm("Delete all " + count + " record" + (count === 1 ? "" : "s") + " in \"" + label + "\"? This cannot be undone.")) return;
-    const typed = prompt("Type DELETE to confirm wiping " + count + " record" + (count === 1 ? "" : "s") + " from \"" + label + "\".");
-    if (typed !== "DELETE"){ $("clearCollectionStatus").textContent = "Cancelled — nothing deleted."; return; }
-    btn.textContent = "Deleting…";
+    if (!confirm("Move all " + count + " record" + (count === 1 ? "" : "s") + " in \"" + label + "\" to Trash? You'll be able to restore them individually from there for the next " + TRASH_RETENTION_DAYS + " days.")) return;
+    btn.textContent = "Moving to trash…";
     const docsToDelete = snap.docs;
-    for (let i = 0; i < docsToDelete.length; i += 400){
+    const deletedAt = new Date();
+    const purgeAt = new Date(deletedAt);
+    purgeAt.setDate(purgeAt.getDate() + TRASH_RETENTION_DAYS);
+    for (let i = 0; i < docsToDelete.length; i += 200){
+      const chunk = docsToDelete.slice(i, i + 200);
       const batch = writeBatch(db);
-      docsToDelete.slice(i, i + 400).forEach(d => batch.delete(d.ref));
+      chunk.forEach(d => {
+        const data = d.data();
+        batch.set(doc(collection(db, "trash")), {
+          collection: col, docId: d.id, data,
+          label: describeTrashItem(col, data),
+          deletedAt: deletedAt.toISOString(), purgeAt: purgeAt.toISOString()
+        });
+        batch.delete(d.ref);
+      });
       await batch.commit();
     }
-    $("clearCollectionStatus").textContent = "Deleted " + count + " record" + (count === 1 ? "" : "s") + " from \"" + label + "\".";
+    $("clearCollectionStatus").textContent = "Moved " + count + " record" + (count === 1 ? "" : "s") + " from \"" + label + "\" to Trash.";
   } catch (err){
     $("clearCollectionStatus").textContent = "Failed: " + err.message;
   } finally {

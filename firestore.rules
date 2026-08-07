@@ -157,5 +157,13 @@ service cloud.firestore {
       allow read: if isAdmin();
       allow write: if isAdmin();
     }
+
+    // Deleted records land here before being permanently removed (see moveToTrash()
+    // in app.js) — admin-only in both directions since it can contain a copy of
+    // anything from any other collection, including claims.
+    match /trash/{id} {
+      allow read: if isAdmin();
+      allow write: if isAdmin();
+    }
   }
 }
