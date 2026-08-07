@@ -447,6 +447,8 @@ header.top p { margin: 0; color: #666; font-size: 13px; }
 .stock-loc-group { margin-bottom: 18px; }
 .stock-loc-group:last-child { margin-bottom: 0; }
 .stock-loc-title { font-size: 12.5px; font-weight: 700; margin: 0 0 10px; color: #444; text-transform: uppercase; letter-spacing: 0.03em; }
+.stock-side-heading { font-size: 10.5px; font-weight: 700; margin: 12px 0 6px; color: #888; text-transform: uppercase; letter-spacing: 0.04em; }
+.stock-side-heading:first-of-type { margin-top: 0; }
 .stock-type-row { margin-bottom: 14px; }
 .stock-type-row:last-child { margin-bottom: 0; }
 .stock-type-name { font-size: 13px; font-weight: 600; margin-bottom: 6px; }
