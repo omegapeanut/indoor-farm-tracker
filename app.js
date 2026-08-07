@@ -2746,11 +2746,16 @@ onSnapshot(collection(db, "plantTypes"), (snap) => {
   renderPlantTypes();
   populatePlantTypeSelects();
   renderStandingStock();
+  populateAllBatchSelects();
 }, () => setSyncStatus("err", "Connection error"));
 
 function plantTypeName(id){
   const pt = plantTypesCache.find(p => p.id === id);
   return pt ? pt.name : "(unknown plant)";
+}
+function plantTypeGermDays(id){
+  const pt = plantTypesCache.find(p => p.id === id);
+  return (pt && pt.germinationDays != null) ? pt.germinationDays : null;
 }
 
 function renderPlantTypes(){
@@ -2780,6 +2785,17 @@ function renderPlantTypes(){
     });
     name.addEventListener("keydown", (e) => { if (e.key === "Enter"){ e.preventDefault(); name.blur(); } });
 
+    const germDays = document.createElement("input");
+    germDays.type = "number"; germDays.min = "0"; germDays.step = "1";
+    germDays.className = "staff-pin-input"; germDays.title = "Germination days";
+    germDays.placeholder = "days";
+    if (pt.germinationDays != null) germDays.value = pt.germinationDays;
+    germDays.addEventListener("change", async () => {
+      const val = germDays.value === "" ? null : Number(germDays.value);
+      try { await updateDoc(doc(db, "plantTypes", pt.id), { germinationDays: val }); }
+      catch (err){ alert("Couldn't save germination days: " + err.message); germDays.value = pt.germinationDays != null ? pt.germinationDays : ""; }
+    });
+
     const del = document.createElement("button");
     del.className = "icon-btn"; del.textContent = "✕"; del.title = "Remove plant type";
     del.addEventListener("click", async () => {
@@ -2788,7 +2804,7 @@ function renderPlantTypes(){
       catch (err){ alert("Couldn't delete this plant type: " + err.message); }
     });
 
-    row.appendChild(name); row.appendChild(del);
+    row.appendChild(name); row.appendChild(germDays); row.appendChild(del);
     list.appendChild(row);
   });
 }
@@ -2801,11 +2817,13 @@ $("togglePlantTypesBtn").addEventListener("click", () => {
 $("addPlantTypeBtn").addEventListener("click", async () => {
   if (!isAdmin) return;
   const input = $("newPlantTypeName");
+  const germDaysInput = $("newPlantTypeGermDays");
   const name = requireValue(input, "a plant type name");
   if (!name) return;
+  const germinationDays = germDaysInput.value === "" ? null : Number(germDaysInput.value);
   try {
-    await addDoc(collection(db, "plantTypes"), { name });
-    input.value = "";
+    await addDoc(collection(db, "plantTypes"), { name, germinationDays });
+    input.value = ""; germDaysInput.value = "";
   } catch (err){
     alert("Couldn't add this plant type: " + err.message);
   }
@@ -2945,6 +2963,7 @@ const LOG_CONFIGS = {
   harvests: {
     locationField: { key: "location", options: [["level1","Level 1"],["level3","Level 3"]] },
     destinationField: { key: "destinationId" },
+    batchField: true,
   },
   germinations: {
     locationField: { key: "room", options: [["germOnSite","On Site"],["germOffSite","Off Site"]] },
@@ -2952,9 +2971,11 @@ const LOG_CONFIGS = {
   transplants: {
     locationField: { key: "sourceRoom", options: [["germOnSite","On Site"],["germOffSite","Off Site"]] },
     secondLocationField: { key: "destLevel", options: [["level1","Level 1"],["level3","Level 3"]] },
+    ageAtTransferField: true,
   },
   losses: {
     locationField: { key: "location", options: Object.entries(LOCATIONS) },
+    batchField: true,
   },
 };
 
@@ -2969,12 +2990,58 @@ const LOG_SETTERS = {
   losses: (v) => lossesCache = v,
 };
 
+// ---- Batches (a "batch" is simply a transplants entry — the moment seedlings move
+// into a growing level is when a trackable cohort starts). Remaining quantity and age
+// are always computed live from the transplant + whatever harvests/losses reference it
+// by batchId, the same "derived, not stored" approach as computeStandingStock() — so
+// there's nothing to keep in sync if a harvest or loss is later edited or deleted.
+function computeBatchRemaining(batchId){
+  const batch = transplantsCache.find(t => t.id === batchId);
+  if (!batch) return 0;
+  const used = harvestsCache.filter(h => h.batchId === batchId).reduce((s,h) => s + (Number(h.quantity) || 0), 0)
+             + lossesCache.filter(l => l.batchId === batchId).reduce((s,l) => s + (Number(l.quantity) || 0), 0);
+  return Math.max(0, (Number(batch.quantity) || 0) - used);
+}
+// Total age since germination started: the age it already was at transfer, plus
+// however many days have passed since the transfer date.
+function batchAgeDays(batch, asOfKey){
+  const base = Number(batch.ageAtTransfer) || 0;
+  const elapsed = Math.round((toDate(asOfKey) - toDate(batch.date)) / 86400000);
+  return base + Math.max(0, elapsed);
+}
+function openBatchesFor(plantTypeId, location){
+  if (!plantTypeId || !location) return [];
+  return transplantsCache
+    .filter(t => t.plantTypeId === plantTypeId && t.destLevel === location)
+    .map(t => ({ batch: t, remaining: computeBatchRemaining(t.id) }))
+    .filter(x => x.remaining > 0)
+    .sort((a,b) => (a.batch.date || "").localeCompare(b.batch.date || ""));
+}
+function batchLabel(t, remaining){
+  return "Transferred " + (t.date || "?") + " — " + batchAgeDays(t, farmTodayKey()) + "d old — " + remaining + " left";
+}
+// Learns a typical "days from germination to first harvest" per plant type by looking
+// at every batch that's actually been harvested from and averaging how old each one was
+// on its earliest harvest date — used to color the Growing Stock dot grid so it reads as
+// "getting close" / "overdue" relative to this crop's own observed history, not a guess.
+function computeAvgDaysToHarvest(plantTypeId){
+  const durations = [];
+  transplantsCache.filter(t => t.plantTypeId === plantTypeId).forEach(b => {
+    const harvestDates = harvestsCache.filter(h => h.batchId === b.id && h.date).map(h => h.date).sort();
+    if (!harvestDates.length) return;
+    durations.push(batchAgeDays(b, harvestDates[0]));
+  });
+  if (!durations.length) return null;
+  return durations.reduce((a,b) => a + b, 0) / durations.length;
+}
+
 Object.keys(LOG_CONFIGS).forEach(col => {
   onSnapshot(collection(db, col), (snap) => {
     LOG_SETTERS[col](snap.docs.map(d => ({ id: d.id, photos: [], ...d.data() })));
     renderLogSection(col);
     if (isDashboardActive()) renderDashboard();
     renderStandingStock();
+    populateAllBatchSelects();
   }, () => setSyncStatus("err", "Connection error"));
 });
 
@@ -3131,7 +3198,15 @@ function renderLogSection(col){
     const locLabel = locOptLabel(r[cfg.locationField.key], cfg.locationField.options);
     const secondLabel = cfg.secondLocationField ? (" → " + locOptLabel(r[cfg.secondLocationField.key], cfg.secondLocationField.options)) : "";
     const destLabel = cfg.destinationField ? (" · for " + (harvestDestinationName(r[cfg.destinationField.key]) || "—")) : "";
-    const summaryText = plantTypeName(r.plantTypeId) + " — " + (r.quantity != null ? r.quantity : "?") + " · " + locLabel + secondLabel + destLabel;
+    let batchLabelText = "";
+    if (cfg.ageAtTransferField){
+      const remaining = computeBatchRemaining(r.id);
+      batchLabelText = " · " + batchAgeDays(r, farmTodayKey()) + "d old · " + remaining + " of " + (r.quantity != null ? r.quantity : "?") + " left";
+    } else if (cfg.batchField && r.batchId){
+      const srcBatch = transplantsCache.find(t => t.id === r.batchId);
+      batchLabelText = srcBatch ? (" · from batch " + (srcBatch.date || "?") + " (" + batchAgeDays(srcBatch, r.date || farmTodayKey()) + "d old)") : "";
+    }
+    const summaryText = plantTypeName(r.plantTypeId) + " — " + (r.quantity != null ? r.quantity : "?") + " · " + locLabel + secondLabel + destLabel + batchLabelText;
     if (!isOpen){
       const preview = document.createElement("span");
       preview.className = "finding-preview";
@@ -3182,6 +3257,22 @@ function renderLogSection(col){
           row2.appendChild(logEditableSelect("Destination", r[cfg.destinationField.key], destOptions, (v) => updateDoc(doc(db, col, r.id), { [cfg.destinationField.key]: v })));
         }
         body.appendChild(row2);
+
+        if (cfg.ageAtTransferField){
+          const row3 = document.createElement("div"); row3.className = "row2";
+          row3.appendChild(logEditableNumber("Age at transfer (days)", r.ageAtTransfer, (v) => updateDoc(doc(db, col, r.id), { ageAtTransfer: v })));
+          body.appendChild(row3);
+        } else if (cfg.batchField){
+          const row3 = document.createElement("div"); row3.className = "row2";
+          const openBatches = openBatchesFor(r.plantTypeId, r[cfg.locationField.key]);
+          const batchOptions = [["", "— No specific batch —"], ...openBatches.map(({ batch, remaining }) => [batch.id, batchLabel(batch, remaining)])];
+          if (r.batchId && !openBatches.some(({ batch }) => batch.id === r.batchId)){
+            const srcBatch = transplantsCache.find(t => t.id === r.batchId);
+            if (srcBatch) batchOptions.push([srcBatch.id, batchLabel(srcBatch, computeBatchRemaining(srcBatch.id)) + " (already used)"]);
+          }
+          row3.appendChild(logEditableSelect("Batch", r.batchId, batchOptions, (v) => updateDoc(doc(db, col, r.id), { batchId: v })));
+          body.appendChild(row3);
+        }
       }
 
       if (isAdmin || r.notes){
@@ -3259,6 +3350,8 @@ function wireLogAddForm(col){
     const locSelect = $(col + "Location");
     const loc2Select = cfg.secondLocationField ? $(col + "Location2") : null;
     const destSelect = cfg.destinationField ? $(col + "Destination") : null;
+    const ageInput = cfg.ageAtTransferField ? $(col + "AgeAtTransfer") : null;
+    const batchSelect = cfg.batchField ? $(col + "Batch") : null;
 
     const plantTypeId = plantTypeSelect.value;
     if (!plantTypeId){ alert("Add a plant type first, using the ⚙ Manage Plant Types button above."); return; }
@@ -3270,12 +3363,15 @@ function wireLogAddForm(col){
     payload[cfg.locationField.key] = locSelect.value;
     if (cfg.secondLocationField) payload[cfg.secondLocationField.key] = loc2Select.value;
     if (cfg.destinationField) payload[cfg.destinationField.key] = destSelect.value;
+    if (cfg.ageAtTransferField) payload.ageAtTransfer = ageInput.value === "" ? (plantTypeGermDays(plantTypeId) || 0) : Number(ageInput.value);
+    if (cfg.batchField) payload.batchId = (batchSelect && batchSelect.value) || null;
 
     btn.disabled = true; btn.textContent = "Adding…";
     try {
       const newDoc = await addDoc(collection(db, col), payload);
       LOG_EXPANDED[col][newDoc.id] = true;
       qtyInput.value = ""; notesInput.value = "";
+      if (ageInput) ageInput.value = "";
     } catch (err){
       alert("Couldn't save this entry: " + err.message + "\n\nIf this says \"permission denied\", the " + col + " rule in firestore.rules needs to be published in the Firebase console.");
     } finally {
@@ -3288,6 +3384,45 @@ Object.keys(LOG_CONFIGS).forEach(wireLogAddForm);
   const el = $(col + "Date");
   const t = toKey(new Date());
   el.value = inRange(t) ? t : START_DATE;
+});
+
+// Pre-fills the new-batch starting age from the plant type's configured germination
+// days as soon as one is picked — still freely editable, just saves re-typing the
+// common case every time.
+$("transplantsPlantType").addEventListener("change", () => {
+  const days = plantTypeGermDays($("transplantsPlantType").value);
+  if (days != null) $("transplantsAgeAtTransfer").value = days;
+});
+
+// The "From batch" dropdowns on Harvest/Losses are optional and always show an open
+// batch (a transplants entry with quantity left) matching whatever plant type + level
+// is currently selected in that same add-row — repopulated live as either changes, or
+// as any relevant log updates change what's still open.
+function populateBatchSelect(col){
+  const cfg = LOG_CONFIGS[col];
+  if (!cfg || !cfg.batchField) return;
+  const sel = $(col + "Batch");
+  if (!sel) return;
+  const plantTypeId = $(col + "PlantType").value;
+  const location = $(col + "Location").value;
+  const prev = sel.value;
+  sel.innerHTML = "";
+  const noneOpt = document.createElement("option");
+  noneOpt.value = ""; noneOpt.textContent = "— No specific batch —";
+  sel.appendChild(noneOpt);
+  openBatchesFor(plantTypeId, location).forEach(({ batch, remaining }) => {
+    const opt = document.createElement("option");
+    opt.value = batch.id; opt.textContent = batchLabel(batch, remaining);
+    sel.appendChild(opt);
+  });
+  if (prev && Array.from(sel.options).some(o => o.value === prev)) sel.value = prev;
+}
+function populateAllBatchSelects(){
+  Object.keys(LOG_CONFIGS).filter(col => LOG_CONFIGS[col].batchField).forEach(populateBatchSelect);
+}
+["harvests", "losses"].forEach(col => {
+  $(col + "PlantType").addEventListener("change", () => populateBatchSelect(col));
+  $(col + "Location").addEventListener("change", () => populateBatchSelect(col));
 });
 
 // Quick-capture: at harvest time you often want to snap a photo of a full tray/crate
@@ -3567,8 +3702,105 @@ $("dashLocationRow").addEventListener("click", (e) => {
   renderDashboard();
 });
 
+// One dot per 10 plants, grouped by level then plant type. Level 1/3 group into a
+// cluster per open batch (a transplants entry that still has quantity left), shaded by
+// how old that batch is relative to this crop's own observed average time-to-first-
+// harvest (computeAvgDaysToHarvest) — green while young, amber approaching that average,
+// red at/past it. Germination rooms have no batch concept in this model (germination is
+// tracked as a pooled quantity, not an aged cohort), so they just get one plain cluster
+// per plant type with no age shading.
+function renderGrowingStock(){
+  const grid = $("growingStockGrid");
+  if (!grid) return;
+  grid.innerHTML = "";
+
+  const locs = dashboardScopeLoc ? [dashboardScopeLoc] : Object.keys(LOCATIONS);
+  const stock = computeStandingStock();
+  let anyRendered = false;
+
+  const buildCluster = (dotCount, colorClass, captionText) => {
+    const cluster = document.createElement("div"); cluster.className = "stock-batch-cluster";
+    const dots = document.createElement("div"); dots.className = "stock-dots";
+    for (let i = 0; i < dotCount; i++){
+      const dot = document.createElement("span"); dot.className = "stock-dot " + colorClass;
+      dots.appendChild(dot);
+    }
+    cluster.appendChild(dots);
+    const caption = document.createElement("div"); caption.className = "stock-batch-caption";
+    caption.textContent = captionText;
+    cluster.appendChild(caption);
+    return cluster;
+  };
+
+  locs.forEach(loc => {
+    const isBatchLoc = loc === "level1" || loc === "level3";
+    const group = document.createElement("div"); group.className = "stock-loc-group";
+    const title = document.createElement("div"); title.className = "stock-loc-title";
+    title.textContent = LOCATIONS[loc];
+    group.appendChild(title);
+    let hasAny = false;
+
+    if (isBatchLoc){
+      const byType = {};
+      transplantsCache.filter(t => t.destLevel === loc).forEach(t => {
+        const remaining = computeBatchRemaining(t.id);
+        if (remaining <= 0) return;
+        (byType[t.plantTypeId] = byType[t.plantTypeId] || []).push({ batch: t, remaining });
+      });
+      Object.keys(byType).sort((a,b) => plantTypeName(a).localeCompare(plantTypeName(b))).forEach(plantTypeId => {
+        hasAny = true;
+        const batches = byType[plantTypeId].slice().sort((a,b) => (a.batch.date||"").localeCompare(b.batch.date||""));
+        const avg = computeAvgDaysToHarvest(plantTypeId);
+        const row = document.createElement("div"); row.className = "stock-type-row";
+        const nameEl = document.createElement("div"); nameEl.className = "stock-type-name";
+        nameEl.textContent = plantTypeName(plantTypeId);
+        if (avg != null){
+          const avgTag = document.createElement("span"); avgTag.className = "stock-type-avg";
+          avgTag.textContent = "avg " + Math.round(avg) + "d to harvest";
+          nameEl.appendChild(avgTag);
+        }
+        row.appendChild(nameEl);
+        const batchesWrap = document.createElement("div"); batchesWrap.className = "stock-batches";
+        batches.forEach(({ batch, remaining }) => {
+          const age = batchAgeDays(batch, farmTodayKey());
+          let colorClass = "neutral";
+          if (avg != null) colorClass = age >= avg ? "ready" : (age >= avg * 0.7 ? "close" : "fresh");
+          batchesWrap.appendChild(buildCluster(Math.ceil(remaining / 10), colorClass, batch.date + " · " + age + "d · " + remaining));
+        });
+        row.appendChild(batchesWrap);
+        group.appendChild(row);
+      });
+    } else {
+      Object.entries(stock[loc] || {})
+        .filter(([, qty]) => qty > 0)
+        .sort((a,b) => plantTypeName(a[0]).localeCompare(plantTypeName(b[0])))
+        .forEach(([plantTypeId, qty]) => {
+          hasAny = true;
+          const row = document.createElement("div"); row.className = "stock-type-row";
+          const nameEl = document.createElement("div"); nameEl.className = "stock-type-name";
+          nameEl.textContent = plantTypeName(plantTypeId);
+          row.appendChild(nameEl);
+          const batchesWrap = document.createElement("div"); batchesWrap.className = "stock-batches";
+          batchesWrap.appendChild(buildCluster(Math.ceil(qty / 10), "neutral", qty + " total"));
+          row.appendChild(batchesWrap);
+          group.appendChild(row);
+        });
+    }
+
+    if (hasAny){ grid.appendChild(group); anyRendered = true; }
+  });
+
+  if (!anyRendered){
+    const empty = document.createElement("div");
+    empty.className = "empty-state";
+    empty.textContent = "Nothing currently growing yet — log germinations, transfers, harvests, and losses to see it here.";
+    grid.appendChild(empty);
+  }
+}
+
 function renderDashboard(){
   renderDashboardKPIs();
+  renderGrowingStock();
 
   const byType = computeHarvestByPlantType(dashboardScopeLoc);
   renderDoughnutChart("harvestByTypeChart", "harvestByTypeEmpty", byType.labels, byType.data);
