@@ -40,6 +40,14 @@ const DAY_TYPE_TAG_LABELS = { visitor: "Visitors", maintenance: "No visitors", h
 function uid(){ return Date.now().toString(36) + Math.random().toString(36).slice(2,8); }
 function toDate(s){ const p = s.split("-"); return new Date(parseInt(p[0]), parseInt(p[1]) - 1, parseInt(p[2])); }
 function toKey(d){ return d.getFullYear() + "-" + String(d.getMonth()+1).padStart(2,"0") + "-" + String(d.getDate()).padStart(2,"0"); }
+const SHORT_MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+// Day-then-month ("25 Jul") regardless of viewer locale — toLocaleDateString would
+// otherwise flip to month-first on some devices.
+function fmtFriendlyDate(key){
+  if (!key) return "?";
+  const d = toDate(key);
+  return d.getDate() + " " + SHORT_MONTHS[d.getMonth()];
+}
 function inRange(key){ return key >= START_DATE; }
 // Night shift runs 19:00-07:00, crossing midnight. Before 07:00 the farm day still
 // in progress is yesterday's, so "today" for schedule/attendance purposes needs this
@@ -3773,6 +3781,36 @@ function renderGrowingStock(){
     return cluster;
   };
 
+  // Split-card layout for aged batches — a full-height colored panel carries just the
+  // day count, since that's the number that says "ready to harvest" and it needs to
+  // read at a glance down a whole rack; date and quantity sit in the panel beside it.
+  const buildBatchCard = (dotCount, colorClass, ageDays, dateKey, remaining) => {
+    const card = document.createElement("div"); card.className = "stock-batch-card";
+    const ageZone = document.createElement("div"); ageZone.className = "stock-age-zone " + colorClass;
+    const num = document.createElement("span"); num.className = "stock-age-num";
+    num.textContent = ageDays;
+    const unit = document.createElement("span"); unit.className = "stock-age-unit";
+    unit.textContent = "DAYS";
+    ageZone.appendChild(num); ageZone.appendChild(unit);
+    card.appendChild(ageZone);
+
+    const info = document.createElement("div"); info.className = "stock-info-zone";
+    const dateTag = document.createElement("div"); dateTag.className = "stock-date-tag";
+    dateTag.textContent = fmtFriendlyDate(dateKey);
+    info.appendChild(dateTag);
+    const dots = document.createElement("div"); dots.className = "stock-dots";
+    for (let i = 0; i < dotCount; i++){
+      const dot = document.createElement("span"); dot.className = "stock-dot " + colorClass;
+      dots.appendChild(dot);
+    }
+    info.appendChild(dots);
+    const qtyTag = document.createElement("div"); qtyTag.className = "stock-qty-tag";
+    qtyTag.textContent = remaining + " left";
+    info.appendChild(qtyTag);
+    card.appendChild(info);
+    return card;
+  };
+
   locs.forEach(loc => {
     const isBatchLoc = loc === "level1" || loc === "level3";
     const group = document.createElement("div"); group.className = "stock-loc-group";
@@ -3827,7 +3865,7 @@ function renderGrowingStock(){
           const age = batchAgeDays(batch, farmTodayKey());
           let colorClass = "neutral";
           if (avg != null) colorClass = age >= avg ? "ready" : (age >= avg * 0.7 ? "close" : "fresh");
-          batchesWrap.appendChild(buildCluster(Math.ceil(remaining / 10), colorClass, batch.date + " · " + age + "d · " + remaining));
+          batchesWrap.appendChild(buildBatchCard(Math.ceil(remaining / 10), colorClass, age, batch.date, remaining));
         });
         row.appendChild(batchesWrap);
         group.appendChild(row);
