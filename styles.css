@@ -472,6 +472,28 @@ header.top p { margin: 0; color: #666; font-size: 13px; }
 .stock-dot.neutral, .stock-legend-dot.neutral { background: #9db8d8; }
 .stock-batch-caption { font-size: 10px; color: #888; margin-top: 5px; line-height: 1.3; }
 
+/* Split-card layout for aged batches (Level 1/3) — a full-height colored panel on the
+   left carries nothing but the day count, since that's the number that tells you a
+   tray is ready to harvest and it needs to read at a glance down a whole rack. */
+.stock-batch-card {
+  display: grid; grid-template-columns: 46px 1fr; border: 1px solid #eaeaea; border-radius: 8px;
+  overflow: hidden; background: #fff; min-width: 150px;
+}
+.stock-age-zone { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 6px 2px; gap: 1px; }
+.stock-age-zone.fresh { background: #e8f6ea; }
+.stock-age-zone.close { background: #fdf1dd; }
+.stock-age-zone.ready { background: #fbe7e5; }
+.stock-age-zone.neutral { background: #eaf0f8; }
+.stock-age-num { font-size: 20px; font-weight: 800; line-height: 1; font-variant-numeric: tabular-nums; }
+.stock-age-unit { font-size: 9px; font-weight: 700; letter-spacing: 0.04em; opacity: 0.75; }
+.stock-age-zone.fresh .stock-age-num, .stock-age-zone.fresh .stock-age-unit { color: #2c6b3c; }
+.stock-age-zone.close .stock-age-num, .stock-age-zone.close .stock-age-unit { color: #96590a; }
+.stock-age-zone.ready .stock-age-num, .stock-age-zone.ready .stock-age-unit { color: #a3312a; }
+.stock-age-zone.neutral .stock-age-num, .stock-age-zone.neutral .stock-age-unit { color: #3f5a78; }
+.stock-info-zone { padding: 7px 9px; display: flex; flex-direction: column; gap: 5px; justify-content: center; }
+.stock-date-tag { font-size: 12px; font-weight: 700; color: #333; }
+.stock-qty-tag { font-size: 10.5px; color: #888; }
+
 .chart-wrap { position: relative; height: 220px; margin-bottom: 14px; }
 .dash-table { width: 100%; border-collapse: collapse; font-size: 12.5px; margin-top: 10px; }
 .dash-table th, .dash-table td { text-align: left; padding: 6px 8px; border-bottom: 1px solid #eee; }
