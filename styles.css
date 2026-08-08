@@ -494,6 +494,23 @@ header.top p { margin: 0; color: #666; font-size: 13px; }
 .stock-date-tag { font-size: 12px; font-weight: 700; color: #333; }
 .stock-qty-tag { font-size: 10.5px; color: #888; }
 
+/* On phones, a whole rack of one-card-per-row batch cards makes the Dashboard scroll
+   forever — force exactly 3 per row and shrink each card's internals to fit. */
+@media (max-width: 640px) {
+  .stock-batches { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; }
+  .stock-batch-card { min-width: 0; grid-template-columns: 32px 1fr; }
+  .stock-age-zone { padding: 4px 1px; }
+  .stock-age-num { font-size: 14px; }
+  .stock-age-unit { font-size: 6.5px; }
+  .stock-info-zone { padding: 4px 5px; gap: 2px; }
+  .stock-date-tag { font-size: 9.5px; }
+  .stock-qty-tag { font-size: 8px; }
+  .stock-dots { grid-template-columns: repeat(4, 5px); gap: 2px; }
+  .stock-dot { width: 5px; height: 5px; }
+  .stock-batch-cluster { min-width: 0; padding: 5px 6px; }
+  .stock-batch-caption { font-size: 8.5px; }
+}
+
 .chart-wrap { position: relative; height: 220px; margin-bottom: 14px; }
 .dash-table { width: 100%; border-collapse: collapse; font-size: 12.5px; margin-top: 10px; }
 .dash-table th, .dash-table td { text-align: left; padding: 6px 8px; border-bottom: 1px solid #eee; }
