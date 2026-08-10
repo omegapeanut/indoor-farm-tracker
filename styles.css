@@ -493,6 +493,8 @@ header.top p { margin: 0; color: #666; font-size: 13px; }
 .stock-info-zone { padding: 7px 9px; display: flex; flex-direction: column; gap: 5px; justify-content: center; }
 .stock-date-tag { font-size: 12px; font-weight: 700; color: #333; }
 .stock-qty-tag { font-size: 10.5px; color: #888; }
+.stock-batch-card.editable { cursor: pointer; }
+.stock-batch-card.editable:hover { box-shadow: 0 1px 5px rgba(0,0,0,0.1); }
 
 /* On phones, a whole rack of one-card-per-row batch cards makes the Dashboard scroll
    forever — force exactly 3 per row and shrink each card's internals to fit. */

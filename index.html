@@ -875,6 +875,29 @@
   </div>
 </div>
 
+<!-- TRAY EDIT MODAL -->
+<div class="overlay" id="trayEditOverlay">
+  <div class="modal" style="width:320px;">
+    <h3>Edit Tray</h3>
+    <div class="sub" id="trayEditSub"></div>
+    <div class="field">
+      <label>Transfer date</label>
+      <input type="date" id="trayEditDate">
+    </div>
+    <div class="field">
+      <label>Quantity</label>
+      <input type="number" min="0" id="trayEditQty">
+    </div>
+    <div class="modal-actions">
+      <div></div>
+      <div style="display:flex; gap:8px;">
+        <button class="btn" id="trayEditCancel">Cancel</button>
+        <button class="btn primary" id="trayEditSave">Save</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- ADMIN LOGIN MODAL -->
 <div class="overlay" id="loginOverlay">
   <div class="modal" style="width:300px;">

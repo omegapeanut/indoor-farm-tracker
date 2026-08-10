@@ -767,6 +767,42 @@ function closeEventModal(){ overlay.classList.remove("active"); editingDate = nu
 $("cancelBtn").addEventListener("click", closeEventModal);
 overlay.addEventListener("click", (e) => { if (e.target === overlay) closeEventModal(); });
 
+// ============================================================================
+// TRAY EDIT MODAL — quick date/quantity correction from a Growing Stock card,
+// without having to go find the same batch in the Transfer log.
+// ============================================================================
+const trayEditOverlay = $("trayEditOverlay");
+let trayEditBatchId = null;
+function openTrayEditModal(batchId){
+  if (!isAdmin) return;
+  const batch = transplantsCache.find(t => t.id === batchId);
+  if (!batch) return;
+  trayEditBatchId = batchId;
+  const posLabel = [batch.rackSide ? "Side " + batch.rackSide : null, batch.rackTier != null ? "Tier " + batch.rackTier : null].filter(Boolean).join(" ");
+  $("trayEditSub").textContent = plantTypeName(batch.plantTypeId) + (posLabel ? " · " + posLabel : "");
+  $("trayEditDate").value = batch.date || "";
+  $("trayEditQty").value = batch.quantity != null ? batch.quantity : "";
+  trayEditOverlay.classList.add("active");
+}
+function closeTrayEditModal(){ trayEditOverlay.classList.remove("active"); trayEditBatchId = null; }
+$("trayEditCancel").addEventListener("click", closeTrayEditModal);
+trayEditOverlay.addEventListener("click", (e) => { if (e.target === trayEditOverlay) closeTrayEditModal(); });
+$("trayEditSave").addEventListener("click", async () => {
+  if (!trayEditBatchId) return;
+  const dateVal = $("trayEditDate").value;
+  const qtyVal = Number($("trayEditQty").value);
+  if (!dateVal || $("trayEditQty").value === "" || isNaN(qtyVal) || qtyVal < 0){
+    alert("Enter a valid date and quantity.");
+    return;
+  }
+  try {
+    await updateDoc(doc(db, "transplants", trayEditBatchId), { date: dateVal, quantity: qtyVal });
+    closeTrayEditModal();
+  } catch (err){
+    alert("Couldn't save: " + err.message);
+  }
+});
+
 // ---- recurring series ----
 // Whether `dateKey` is a valid occurrence of a series anchored on `anchorKey` at the given
 // frequency. Daily repeats every day; weekly/biweekly repeat on the same weekday every 1/2
@@ -3784,8 +3820,13 @@ function renderGrowingStock(){
   // Split-card layout for aged batches — a full-height colored panel carries just the
   // day count, since that's the number that says "ready to harvest" and it needs to
   // read at a glance down a whole rack; date and quantity sit in the panel beside it.
-  const buildBatchCard = (dotCount, colorClass, ageDays, dateKey, remaining) => {
+  const buildBatchCard = (dotCount, colorClass, ageDays, dateKey, remaining, batchId) => {
     const card = document.createElement("div"); card.className = "stock-batch-card";
+    if (isAdmin){
+      card.classList.add("editable");
+      card.title = "Click to edit transfer date / quantity";
+      card.addEventListener("click", () => openTrayEditModal(batchId));
+    }
     const ageZone = document.createElement("div"); ageZone.className = "stock-age-zone " + colorClass;
     const num = document.createElement("span"); num.className = "stock-age-num";
     num.textContent = ageDays;
@@ -3865,7 +3906,7 @@ function renderGrowingStock(){
           const age = batchAgeDays(batch, farmTodayKey());
           let colorClass = "neutral";
           if (avg != null) colorClass = age >= avg ? "ready" : (age >= avg * 0.7 ? "close" : "fresh");
-          batchesWrap.appendChild(buildBatchCard(Math.ceil(remaining / 10), colorClass, age, batch.date, remaining));
+          batchesWrap.appendChild(buildBatchCard(Math.ceil(remaining / 10), colorClass, age, batch.date, remaining, batch.id));
         });
         row.appendChild(batchesWrap);
         group.appendChild(row);
