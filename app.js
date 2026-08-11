@@ -773,19 +773,30 @@ overlay.addEventListener("click", (e) => { if (e.target === overlay) closeEventM
 // ============================================================================
 const trayEditOverlay = $("trayEditOverlay");
 let trayEditBatchId = null;
-function openTrayEditModal(batchId){
+let trayEditKind = "transplants";
+// kind is "transplants" (a growing-rack tray, with Harvest half/full) or
+// "germinations" (a germination tray, which is only ever used wholesale by an Add
+// Tray transfer on the destination side, so it just gets date/quantity editing).
+function openTrayEditModal(batchId, kind){
   if (!isAdmin) return;
-  const batch = transplantsCache.find(t => t.id === batchId);
+  kind = kind || "transplants";
+  const isGerm = kind === "germinations";
+  const batch = isGerm ? germinationsCache.find(g => g.id === batchId) : transplantsCache.find(t => t.id === batchId);
   if (!batch) return;
   trayEditBatchId = batchId;
+  trayEditKind = kind;
   const posLabel = [batch.rackSide ? "Side " + batch.rackSide : null, batch.rackTier != null ? "Tier " + batch.rackTier : null].filter(Boolean).join(" ");
-  $("trayEditSub").textContent = plantTypeName(batch.plantTypeId) + (posLabel ? " · " + posLabel : "");
+  $("trayEditSub").textContent = plantTypeName(batch.plantTypeId) + (posLabel ? " · " + posLabel : (isGerm ? " · " + LOCATIONS[batch.room] : ""));
+  $("trayEditDateLabel").textContent = isGerm ? "Sown date" : "Transfer date";
   $("trayEditDate").value = batch.date || "";
   $("trayEditQty").value = batch.quantity != null ? batch.quantity : "";
-  const remaining = computeBatchRemaining(batchId);
-  $("trayHarvestSub").textContent = remaining + " left to harvest from this tray.";
-  $("trayHarvestHalfBtn").disabled = remaining <= 0;
-  $("trayHarvestFullBtn").disabled = remaining <= 0;
+  $("trayHarvestSection").style.display = isGerm ? "none" : "block";
+  if (!isGerm){
+    const remaining = computeBatchRemaining(batchId);
+    $("trayHarvestSub").textContent = remaining + " left to harvest from this tray.";
+    $("trayHarvestHalfBtn").disabled = remaining <= 0;
+    $("trayHarvestFullBtn").disabled = remaining <= 0;
+  }
   trayEditOverlay.classList.add("active");
 }
 function closeTrayEditModal(){ trayEditOverlay.classList.remove("active"); trayEditBatchId = null; }
@@ -800,7 +811,7 @@ $("trayEditSave").addEventListener("click", async () => {
     return;
   }
   try {
-    await updateDoc(doc(db, "transplants", trayEditBatchId), { date: dateVal, quantity: qtyVal });
+    await updateDoc(doc(db, trayEditKind, trayEditBatchId), { date: dateVal, quantity: qtyVal });
     closeTrayEditModal();
   } catch (err){
     alert("Couldn't save: " + err.message);
@@ -871,9 +882,20 @@ $("addTraySave").addEventListener("click", async () => {
   const btn = $("addTraySave");
   btn.disabled = true;
   try {
+    const sourceRoom = $("addTraySource").value;
+    // Draw from the oldest germination tray of this plant type that still has
+    // seedlings left (FIFO — "use 1 tray" always means the longest-growing one),
+    // so that specific tray's card counts this transfer against it instead of
+    // just the room's pooled total. Rooms with no per-tray germination records
+    // (e.g. Off Site) simply fall back to the pool-only accounting from before.
+    const oldest = germinationsCache
+      .filter(g => g.room === sourceRoom && g.plantTypeId === addTrayContext.plantTypeId)
+      .map(g => ({ germ: g, remaining: computeGermRemaining(g.id) }))
+      .filter(x => x.remaining > 0)
+      .sort((a, b) => (a.germ.date || "").localeCompare(b.germ.date || ""))[0];
     await addDoc(collection(db, "transplants"), {
       date: dateVal, plantTypeId: addTrayContext.plantTypeId, destLevel: addTrayContext.destLevel,
-      quantity: qty, sourceRoom: $("addTraySource").value,
+      quantity: qty, sourceRoom, sourceGermId: oldest ? oldest.germ.id : null,
       ageAtTransfer: plantTypeGermDays(addTrayContext.plantTypeId) || 0,
       rackSide: addTrayContext.rackSide || null, rackTier: addTrayContext.rackTier != null ? addTrayContext.rackTier : null,
       notes: "", photos: []
@@ -2912,6 +2934,9 @@ const GERM_ROOMS = ["germOnSite", "germLevel3", "germOffSite"];
 // succession, Side B (lettuce + ice plant) rows run 11. Rows with no rack side set
 // (or on Level 1, which isn't tiered this way) have no cap.
 const TRAY_MAX_BY_SIDE = { A: 13, B: 11 };
+// Level 1 Germ runs a 14-tray daily succession (100 seedlings each) per plant type —
+// other germination rooms have no known physical cap yet.
+const GERM_TRAY_MAX = { germOnSite: 14 };
 function capitalize(s){ return s.charAt(0).toUpperCase() + s.slice(1); }
 
 // ---- Plant Types (Firestore: plantTypes/{id}) ----
@@ -3184,6 +3209,20 @@ function batchAgeDays(batch, asOfKey){
   const base = Number(batch.ageAtTransfer) || 0;
   const elapsed = Math.round((toDate(asOfKey) - toDate(batch.date)) / 86400000);
   return base + Math.max(0, elapsed);
+}
+// A germination entry is a dated tray too, same as a transplant is — remaining is
+// whatever hasn't been drawn out yet by a transplant that named this specific tray
+// as its sourceGermId (see openAddTrayModal). Transplants with no sourceGermId (an
+// older record, or drawn from a room with no per-tray tracking like Off Site) simply
+// don't count against any one tray, same as before this existed.
+function computeGermRemaining(germId){
+  const g = germinationsCache.find(x => x.id === germId);
+  if (!g) return 0;
+  const used = transplantsCache.filter(t => t.sourceGermId === germId).reduce((s,t) => s + (Number(t.quantity) || 0), 0);
+  return Math.max(0, (Number(g.quantity) || 0) - used);
+}
+function germAgeDays(germ, asOfKey){
+  return Math.max(0, Math.round((toDate(asOfKey) - toDate(germ.date)) / 86400000));
 }
 function openBatchesFor(plantTypeId, location){
   if (!plantTypeId || !location) return [];
@@ -3931,32 +3970,17 @@ function renderGrowingStock(){
   grid.innerHTML = "";
 
   const locs = dashboardScopeLoc ? [dashboardScopeLoc] : Object.keys(LOCATIONS);
-  const stock = computeStandingStock();
   let anyRendered = false;
-
-  const buildCluster = (dotCount, colorClass, captionText) => {
-    const cluster = document.createElement("div"); cluster.className = "stock-batch-cluster";
-    const dots = document.createElement("div"); dots.className = "stock-dots";
-    for (let i = 0; i < dotCount; i++){
-      const dot = document.createElement("span"); dot.className = "stock-dot " + colorClass;
-      dots.appendChild(dot);
-    }
-    cluster.appendChild(dots);
-    const caption = document.createElement("div"); caption.className = "stock-batch-caption";
-    caption.textContent = captionText;
-    cluster.appendChild(caption);
-    return cluster;
-  };
 
   // Split-card layout for aged batches — a full-height colored panel carries just the
   // day count, since that's the number that says "ready to harvest" and it needs to
   // read at a glance down a whole rack; date and quantity sit in the panel beside it.
-  const buildBatchCard = (dotCount, colorClass, ageDays, dateKey, remaining, batchId) => {
+  const buildBatchCard = (dotCount, colorClass, ageDays, dateKey, remaining, batchId, kind) => {
     const card = document.createElement("div"); card.className = "stock-batch-card";
     if (isAdmin){
       card.classList.add("editable");
-      card.title = "Click to edit transfer date / quantity";
-      card.addEventListener("click", () => openTrayEditModal(batchId));
+      card.title = "Click to edit date / quantity";
+      card.addEventListener("click", () => openTrayEditModal(batchId, kind));
     }
     const ageZone = document.createElement("div"); ageZone.className = "stock-age-zone " + colorClass;
     const num = document.createElement("span"); num.className = "stock-age-num";
@@ -4050,7 +4074,7 @@ function renderGrowingStock(){
           const age = batchAgeDays(batch, farmTodayKey());
           let colorClass = "neutral";
           if (avg != null) colorClass = age >= avg ? "ready" : (age >= avg * 0.7 ? "close" : "fresh");
-          batchesWrap.appendChild(buildBatchCard(Math.ceil(remaining / 10), colorClass, age, batch.date, remaining, batch.id));
+          batchesWrap.appendChild(buildBatchCard(Math.ceil(remaining / 10), colorClass, age, batch.date, remaining, batch.id, "transplants"));
         });
         // Each row is a physical rack row with a fixed number of tray slots — Side A
         // (herbs) rows hold 13 daily-succession trays, Side B (lettuce + ice plant)
@@ -4064,25 +4088,37 @@ function renderGrowingStock(){
         group.appendChild(row);
       });
     } else {
-      // Plant types stay listed here (at 0, if that's where they are) as long as this
-      // room has ever germinated them — otherwise the row, and the "Add Seedlings"
-      // action that tops it back up, would disappear the moment the pool hits zero.
-      const relevantTypes = new Set(Object.keys(stock[loc] || {}));
-      germinationsCache.filter(g => g.room === loc).forEach(g => relevantTypes.add(g.plantTypeId));
-      Array.from(relevantTypes)
-        .filter(Boolean)
-        .sort((a,b) => plantTypeName(a).localeCompare(plantTypeName(b)))
-        .forEach(plantTypeId => {
-          const qty = (stock[loc] || {})[plantTypeId] || 0;
+      // Germination rooms are dated trays too, same idea as the growing racks above —
+      // each germinations doc is one tray, grouped by plant type only (no rack side/
+      // tier here). A plant type stays listed (even with 0 open trays) as long as this
+      // room has ever germinated it, so the "Add Seedlings" action that tops it back
+      // up doesn't disappear right when it's needed.
+      const groups = {};
+      germinationsCache.filter(g => g.room === loc).forEach(g => {
+        if (!groups[g.plantTypeId]) groups[g.plantTypeId] = { plantTypeId: g.plantTypeId, batches: [] };
+        const remaining = computeGermRemaining(g.id);
+        if (remaining > 0) groups[g.plantTypeId].batches.push({ germ: g, remaining });
+      });
+      Object.values(groups)
+        .sort((a,b) => plantTypeName(a.plantTypeId).localeCompare(plantTypeName(b.plantTypeId)))
+        .forEach(g => {
           hasAny = true;
+          const batches = g.batches.slice().sort((a,b) => (a.germ.date||"").localeCompare(b.germ.date||""));
+          const germDays = plantTypeGermDays(g.plantTypeId);
           const row = document.createElement("div"); row.className = "stock-type-row";
           const nameEl = document.createElement("div"); nameEl.className = "stock-type-name";
-          nameEl.textContent = plantTypeName(plantTypeId);
+          nameEl.textContent = plantTypeName(g.plantTypeId);
           row.appendChild(nameEl);
           const batchesWrap = document.createElement("div"); batchesWrap.className = "stock-batches";
-          if (qty > 0) batchesWrap.appendChild(buildCluster(Math.ceil(qty / 10), "neutral", qty + " total"));
-          if (isAdmin){
-            batchesWrap.appendChild(buildAddCard("Add Seedlings", () => openAddGermModal(plantTypeId, loc)));
+          batches.forEach(({ germ, remaining }) => {
+            const age = germAgeDays(germ, farmTodayKey());
+            let colorClass = "neutral";
+            if (germDays != null) colorClass = age >= germDays ? "ready" : (age >= germDays * 0.7 ? "close" : "fresh");
+            batchesWrap.appendChild(buildBatchCard(Math.ceil(remaining / 10), colorClass, age, germ.date, remaining, germ.id, "germinations"));
+          });
+          const maxTrays = GERM_TRAY_MAX[loc] || null;
+          if (isAdmin && (maxTrays == null || batches.length < maxTrays)){
+            batchesWrap.appendChild(buildAddCard("Add Seedlings", () => openAddGermModal(g.plantTypeId, loc)));
           }
           row.appendChild(batchesWrap);
           group.appendChild(row);

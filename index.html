@@ -886,17 +886,19 @@
     <h3>Edit Tray</h3>
     <div class="sub" id="trayEditSub"></div>
     <div class="field">
-      <label>Transfer date</label>
+      <label id="trayEditDateLabel">Transfer date</label>
       <input type="date" id="trayEditDate">
     </div>
     <div class="field">
       <label>Quantity</label>
       <input type="number" min="0" id="trayEditQty">
     </div>
-    <div class="sub" id="trayHarvestSub" style="margin-top:-2px;"></div>
-    <div style="display:flex; gap:8px; margin-top:10px;">
-      <button class="btn" id="trayHarvestHalfBtn" style="flex:1;">Harvest half</button>
-      <button class="btn" id="trayHarvestFullBtn" style="flex:1;">Harvest full</button>
+    <div id="trayHarvestSection">
+      <div class="sub" id="trayHarvestSub" style="margin-top:-2px;"></div>
+      <div style="display:flex; gap:8px; margin-top:10px;">
+        <button class="btn" id="trayHarvestHalfBtn" style="flex:1;">Harvest half</button>
+        <button class="btn" id="trayHarvestFullBtn" style="flex:1;">Harvest full</button>
+      </div>
     </div>
     <div class="modal-actions">
       <div></div>
