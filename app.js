@@ -782,6 +782,10 @@ function openTrayEditModal(batchId){
   $("trayEditSub").textContent = plantTypeName(batch.plantTypeId) + (posLabel ? " · " + posLabel : "");
   $("trayEditDate").value = batch.date || "";
   $("trayEditQty").value = batch.quantity != null ? batch.quantity : "";
+  const remaining = computeBatchRemaining(batchId);
+  $("trayHarvestSub").textContent = remaining + " left to harvest from this tray.";
+  $("trayHarvestHalfBtn").disabled = remaining <= 0;
+  $("trayHarvestFullBtn").disabled = remaining <= 0;
   trayEditOverlay.classList.add("active");
 }
 function closeTrayEditModal(){ trayEditOverlay.classList.remove("active"); trayEditBatchId = null; }
@@ -800,6 +804,121 @@ $("trayEditSave").addEventListener("click", async () => {
     closeTrayEditModal();
   } catch (err){
     alert("Couldn't save: " + err.message);
+  }
+});
+
+async function harvestFromTray(fraction){
+  if (!trayEditBatchId) return;
+  const batch = transplantsCache.find(t => t.id === trayEditBatchId);
+  if (!batch) return;
+  const remaining = computeBatchRemaining(trayEditBatchId);
+  if (remaining <= 0) return;
+  const quantity = fraction === "half" ? Math.round(remaining / 2) : remaining;
+  if (!quantity || quantity <= 0) return;
+  if (!confirm("Log a harvest of " + quantity + " " + plantTypeName(batch.plantTypeId) + " from this tray?")) return;
+  const btn = fraction === "half" ? $("trayHarvestHalfBtn") : $("trayHarvestFullBtn");
+  btn.disabled = true;
+  try {
+    await addDoc(collection(db, "harvests"), {
+      date: farmTodayKey(), plantTypeId: batch.plantTypeId, quantity,
+      location: batch.destLevel, batchId: batch.id, destinationId: null, notes: "", photos: []
+    });
+    closeTrayEditModal();
+  } catch (err){
+    alert("Couldn't log this harvest: " + err.message);
+    btn.disabled = false;
+  }
+}
+$("trayHarvestHalfBtn").addEventListener("click", () => harvestFromTray("half"));
+$("trayHarvestFullBtn").addEventListener("click", () => harvestFromTray("full"));
+
+// ============================================================================
+// ADD TRAY MODAL — transfer new seedlings in from germination straight into a
+// specific rack slot on the Growing Stock dashboard, instead of the Transfer log.
+// ============================================================================
+const addTrayOverlay = $("addTrayOverlay");
+let addTrayContext = null;
+function openAddTrayModal(plantTypeId, destLevel, rackSide, rackTier){
+  if (!isAdmin) return;
+  addTrayContext = { plantTypeId, destLevel, rackSide, rackTier };
+  const posLabel = [rackSide ? "Side " + rackSide : null, rackTier != null ? "Tier " + rackTier : null].filter(Boolean).join(" ");
+  $("addTraySub").textContent = plantTypeName(plantTypeId) + (posLabel ? " · " + posLabel : "") + " → " + LOCATIONS[destLevel];
+  const sourceSelect = $("addTraySource");
+  sourceSelect.innerHTML = "";
+  GERM_ROOMS.forEach(room => {
+    const opt = document.createElement("option"); opt.value = room; opt.textContent = LOCATIONS[room];
+    sourceSelect.appendChild(opt);
+  });
+  $("addTrayQty").value = "";
+  $("addTrayDate").value = farmTodayKey();
+  addTrayOverlay.classList.add("active");
+}
+function closeAddTrayModal(){ addTrayOverlay.classList.remove("active"); addTrayContext = null; }
+$("addTrayCancel").addEventListener("click", closeAddTrayModal);
+addTrayOverlay.addEventListener("click", (e) => { if (e.target === addTrayOverlay) closeAddTrayModal(); });
+$("addTraySave").addEventListener("click", async () => {
+  if (!addTrayContext) return;
+  const qty = Number($("addTrayQty").value);
+  const dateVal = $("addTrayDate").value;
+  if (!dateVal || $("addTrayQty").value === "" || isNaN(qty) || qty <= 0){
+    alert("Enter a valid date and a quantity greater than 0.");
+    return;
+  }
+  const btn = $("addTraySave");
+  btn.disabled = true;
+  try {
+    await addDoc(collection(db, "transplants"), {
+      date: dateVal, plantTypeId: addTrayContext.plantTypeId, destLevel: addTrayContext.destLevel,
+      quantity: qty, sourceRoom: $("addTraySource").value,
+      ageAtTransfer: plantTypeGermDays(addTrayContext.plantTypeId) || 0,
+      rackSide: addTrayContext.rackSide || null, rackTier: addTrayContext.rackTier != null ? addTrayContext.rackTier : null,
+      notes: "", photos: []
+    });
+    closeAddTrayModal();
+  } catch (err){
+    alert("Couldn't add this tray: " + err.message);
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+// ============================================================================
+// ADD TO GERMINATION MODAL — top up a germination room's pooled stock for one
+// plant type, straight from the Growing Stock dashboard.
+// ============================================================================
+const addGermOverlay = $("addGermOverlay");
+let addGermContext = null;
+function openAddGermModal(plantTypeId, room){
+  if (!isAdmin) return;
+  addGermContext = { plantTypeId, room };
+  $("addGermSub").textContent = plantTypeName(plantTypeId) + " · " + LOCATIONS[room];
+  $("addGermQty").value = "";
+  $("addGermDate").value = farmTodayKey();
+  addGermOverlay.classList.add("active");
+}
+function closeAddGermModal(){ addGermOverlay.classList.remove("active"); addGermContext = null; }
+$("addGermCancel").addEventListener("click", closeAddGermModal);
+addGermOverlay.addEventListener("click", (e) => { if (e.target === addGermOverlay) closeAddGermModal(); });
+$("addGermSave").addEventListener("click", async () => {
+  if (!addGermContext) return;
+  const qty = Number($("addGermQty").value);
+  const dateVal = $("addGermDate").value;
+  if (!dateVal || $("addGermQty").value === "" || isNaN(qty) || qty <= 0){
+    alert("Enter a valid date and a quantity greater than 0.");
+    return;
+  }
+  const btn = $("addGermSave");
+  btn.disabled = true;
+  try {
+    await addDoc(collection(db, "germinations"), {
+      date: dateVal, plantTypeId: addGermContext.plantTypeId, room: addGermContext.room,
+      quantity: qty, notes: "", photos: []
+    });
+    closeAddGermModal();
+  } catch (err){
+    alert("Couldn't add this germination entry: " + err.message);
+  } finally {
+    btn.disabled = false;
   }
 });
 
@@ -2780,7 +2899,15 @@ $("addSpecialEventBtn").addEventListener("click", async () => {
 // GROW LOG — plant types, harvests, transplants, germinations, losses,
 // environment readings, and the trends dashboard
 // ============================================================================
-const LOCATIONS = { level1: "Level 1", level3: "Level 3", germOnSite: "Germination Room (On Site)", germOffSite: "Germination Room (Off Site)" };
+// germOnSite historically only ever fed Level 1, so it's relabeled "Level 1 Germ"
+// rather than migrated to a new key — every existing germination/transplant record
+// keeps working unchanged. germLevel3 is the newly split-out room for Level 3.
+const LOCATIONS = { level1: "Level 1", level3: "Level 3", germOnSite: "Level 1 Germ", germLevel3: "Level 3 Germ", germOffSite: "Off Site" };
+const GERM_ROOMS = ["germOnSite", "germLevel3", "germOffSite"];
+// Physical tray capacity per Level 3 rack row: Side A (herbs) rows run a 13-day
+// succession, Side B (lettuce + ice plant) rows run 11. Rows with no rack side set
+// (or on Level 1, which isn't tiered this way) have no cap.
+const TRAY_MAX_BY_SIDE = { A: 13, B: 11 };
 function capitalize(s){ return s.charAt(0).toUpperCase() + s.slice(1); }
 
 // ---- Plant Types (Firestore: plantTypes/{id}) ----
@@ -3010,10 +3137,10 @@ const LOG_CONFIGS = {
     batchField: true,
   },
   germinations: {
-    locationField: { key: "room", options: [["germOnSite","On Site"],["germOffSite","Off Site"]] },
+    locationField: { key: "room", options: [["germOnSite","Level 1 Germ"],["germLevel3","Level 3 Germ"],["germOffSite","Off Site"]] },
   },
   transplants: {
-    locationField: { key: "sourceRoom", options: [["germOnSite","On Site"],["germOffSite","Off Site"]] },
+    locationField: { key: "sourceRoom", options: [["germOnSite","Level 1 Germ"],["germLevel3","Level 3 Germ"],["germOffSite","Off Site"]] },
     secondLocationField: { key: "destLevel", options: [["level1","Level 1"],["level3","Level 3"]] },
     ageAtTransferField: true,
     rackPositionField: true,
@@ -3641,7 +3768,7 @@ function computeDeathRateSeries(scopeLoc){
   });
 
   const isGrowLevel = scopeLoc === "level1" || scopeLoc === "level3";
-  const isGermRoom = scopeLoc === "germOnSite" || scopeLoc === "germOffSite";
+  const isGermRoom = GERM_ROOMS.includes(scopeLoc);
 
   if (!scopeLoc || isGermRoom){
     germinationsCache.forEach(r => {
@@ -3852,6 +3979,17 @@ function renderGrowingStock(){
     return card;
   };
 
+  // A dashed "+" tile at the end of a row of cards — same footprint as the cards next
+  // to it (including the 3-per-row phone grid), just a click target instead of data.
+  const buildAddCard = (label, onClick) => {
+    const card = document.createElement("div"); card.className = "stock-add-card";
+    const icon = document.createElement("span"); icon.className = "stock-add-icon"; icon.textContent = "+";
+    const text = document.createElement("span"); text.className = "stock-add-label"; text.textContent = label;
+    card.appendChild(icon); card.appendChild(text);
+    card.addEventListener("click", onClick);
+    return card;
+  };
+
   locs.forEach(loc => {
     const isBatchLoc = loc === "level1" || loc === "level3";
     const group = document.createElement("div"); group.className = "stock-loc-group";
@@ -3866,13 +4004,15 @@ function renderGrowingStock(){
       // on two tiers at once), and each occupies its own dot cluster with its own tier
       // label. Batches with no rack side/tier set just fall back to grouping by plant
       // type alone, sorted alphabetically, same as before this feature existed.
+      // A group (one physical rack slot) is kept even once every tray in it has been
+      // fully harvested — otherwise the row, and the "Add Tray" action on it, would
+      // vanish right when it's needed most: to refill that slot with a new tray.
       const groups = {};
       transplantsCache.filter(t => t.destLevel === loc).forEach(t => {
-        const remaining = computeBatchRemaining(t.id);
-        if (remaining <= 0) return;
         const key = (t.rackSide || "") + "|" + (t.rackTier != null ? t.rackTier : "") + "|" + t.plantTypeId;
         if (!groups[key]) groups[key] = { plantTypeId: t.plantTypeId, rackSide: t.rackSide || "", rackTier: t.rackTier != null ? t.rackTier : null, batches: [] };
-        groups[key].batches.push({ batch: t, remaining });
+        const remaining = computeBatchRemaining(t.id);
+        if (remaining > 0) groups[key].batches.push({ batch: t, remaining });
       });
       const groupList = Object.values(groups).sort((a,b) => {
         if (a.rackSide !== b.rackSide) return a.rackSide.localeCompare(b.rackSide);
@@ -3908,21 +4048,38 @@ function renderGrowingStock(){
           if (avg != null) colorClass = age >= avg ? "ready" : (age >= avg * 0.7 ? "close" : "fresh");
           batchesWrap.appendChild(buildBatchCard(Math.ceil(remaining / 10), colorClass, age, batch.date, remaining, batch.id));
         });
+        // Each row is a physical rack row with a fixed number of tray slots — Side A
+        // (herbs) rows hold 13 daily-succession trays, Side B (lettuce + ice plant)
+        // rows hold 11. Once every slot is occupied by an open (remaining > 0) tray
+        // there's nowhere to put a new one until one gets fully harvested.
+        const maxTrays = TRAY_MAX_BY_SIDE[g.rackSide] || null;
+        if (isAdmin && (maxTrays == null || batches.length < maxTrays)){
+          batchesWrap.appendChild(buildAddCard("Add Tray", () => openAddTrayModal(g.plantTypeId, loc, g.rackSide, g.rackTier)));
+        }
         row.appendChild(batchesWrap);
         group.appendChild(row);
       });
     } else {
-      Object.entries(stock[loc] || {})
-        .filter(([, qty]) => qty > 0)
-        .sort((a,b) => plantTypeName(a[0]).localeCompare(plantTypeName(b[0])))
-        .forEach(([plantTypeId, qty]) => {
+      // Plant types stay listed here (at 0, if that's where they are) as long as this
+      // room has ever germinated them — otherwise the row, and the "Add Seedlings"
+      // action that tops it back up, would disappear the moment the pool hits zero.
+      const relevantTypes = new Set(Object.keys(stock[loc] || {}));
+      germinationsCache.filter(g => g.room === loc).forEach(g => relevantTypes.add(g.plantTypeId));
+      Array.from(relevantTypes)
+        .filter(Boolean)
+        .sort((a,b) => plantTypeName(a).localeCompare(plantTypeName(b)))
+        .forEach(plantTypeId => {
+          const qty = (stock[loc] || {})[plantTypeId] || 0;
           hasAny = true;
           const row = document.createElement("div"); row.className = "stock-type-row";
           const nameEl = document.createElement("div"); nameEl.className = "stock-type-name";
           nameEl.textContent = plantTypeName(plantTypeId);
           row.appendChild(nameEl);
           const batchesWrap = document.createElement("div"); batchesWrap.className = "stock-batches";
-          batchesWrap.appendChild(buildCluster(Math.ceil(qty / 10), "neutral", qty + " total"));
+          if (qty > 0) batchesWrap.appendChild(buildCluster(Math.ceil(qty / 10), "neutral", qty + " total"));
+          if (isAdmin){
+            batchesWrap.appendChild(buildAddCard("Add Seedlings", () => openAddGermModal(plantTypeId, loc)));
+          }
           row.appendChild(batchesWrap);
           group.appendChild(row);
         });
