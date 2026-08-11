@@ -815,9 +815,13 @@ async function harvestFromTray(fraction){
   if (remaining <= 0) return;
   const quantity = fraction === "half" ? Math.round(remaining / 2) : remaining;
   if (!quantity || quantity <= 0) return;
-  if (!confirm("Log a harvest of " + quantity + " " + plantTypeName(batch.plantTypeId) + " from this tray?")) return;
-  const btn = fraction === "half" ? $("trayHarvestHalfBtn") : $("trayHarvestFullBtn");
-  btn.disabled = true;
+  // No confirm() prompt here — some mobile browsers silently swallow it (returns
+  // false with no visible dialog) if an earlier one on the page was dismissed with
+  // "don't ask again", which made this button look like it did nothing at all.
+  // The button's own label is the confirmation; the harvest can be corrected or
+  // deleted afterward from the Harvest log (and recovered from Trash) either way.
+  const halfBtn = $("trayHarvestHalfBtn"), fullBtn = $("trayHarvestFullBtn");
+  halfBtn.disabled = true; fullBtn.disabled = true;
   try {
     await addDoc(collection(db, "harvests"), {
       date: farmTodayKey(), plantTypeId: batch.plantTypeId, quantity,
@@ -826,7 +830,7 @@ async function harvestFromTray(fraction){
     closeTrayEditModal();
   } catch (err){
     alert("Couldn't log this harvest: " + err.message);
-    btn.disabled = false;
+    halfBtn.disabled = false; fullBtn.disabled = false;
   }
 }
 $("trayHarvestHalfBtn").addEventListener("click", () => harvestFromTray("half"));
