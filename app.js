@@ -897,6 +897,9 @@ let addTrayContext = null;
 function openAddTrayModal(plantTypeId, destLevel, rackSide, rackTier){
   if (!isAdmin) return;
   addTrayContext = { plantTypeId, destLevel, rackSide, rackTier };
+  const isTower = destLevel === "level1";
+  $("addTrayTitle").textContent = isTower ? "Add Tower" : "Add Tray";
+  $("addTraySave").textContent = isTower ? "Add tower" : "Add tray";
   const posLabel = [rackSide ? "Side " + rackSide : null, rackTier != null ? "Tier " + rackTier : null].filter(Boolean).join(" ");
   $("addTraySub").textContent = plantTypeName(plantTypeId) + (posLabel ? " · " + posLabel : "") + " → " + LOCATIONS[destLevel];
   const sourceSelect = $("addTraySource");
@@ -4148,7 +4151,7 @@ function renderGrowingStock(){
           atCapacity = maxTrays != null && batches.length >= maxTrays;
         }
         if (isAdmin && !atCapacity){
-          batchesWrap.appendChild(buildAddCard("Add Tray", () => openAddTrayModal(g.plantTypeId, loc, g.rackSide, g.rackTier)));
+          batchesWrap.appendChild(buildAddCard(loc === "level1" ? "Add Tower" : "Add Tray", () => openAddTrayModal(g.plantTypeId, loc, g.rackSide, g.rackTier)));
         }
         row.appendChild(batchesWrap);
         group.appendChild(row);
