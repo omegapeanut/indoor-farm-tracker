@@ -2972,7 +2972,7 @@ $("addSpecialEventBtn").addEventListener("click", async () => {
 // germOnSite historically only ever fed Level 1, so it's relabeled "Level 1 Germ"
 // rather than migrated to a new key — every existing germination/transplant record
 // keeps working unchanged. germLevel3 is the newly split-out room for Level 3.
-const LOCATIONS = { level1: "Level 1", level3: "Level 3", germOnSite: "Level 1 Germ", germLevel3: "Level 3 Germ", germOffSite: "Off Site" };
+const LOCATIONS = { germOnSite: "Level 1 Germ", level1: "Level 1", level3: "Level 3", germLevel3: "Level 3 Germ", germOffSite: "Off Site" };
 const GERM_ROOMS = ["germOnSite", "germLevel3", "germOffSite"];
 // Physical tray capacity per Level 3 rack row: Side A (herbs) rows run a 13-day
 // succession, Side B (lettuce + ice plant) rows run 11. Rows with no rack side set
