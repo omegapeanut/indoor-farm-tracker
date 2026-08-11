@@ -496,6 +496,17 @@ header.top p { margin: 0; color: #666; font-size: 13px; }
 .stock-batch-card.editable { cursor: pointer; }
 .stock-batch-card.editable:hover { box-shadow: 0 1px 5px rgba(0,0,0,0.1); }
 
+/* "+" quick-action tile — refill a rack slot from germination, or top up a
+   germination room — sitting at the end of the row of cards it acts on. */
+.stock-add-card {
+  min-width: 92px; min-height: 46px; border: 1.5px dashed #cbcbcb; border-radius: 8px;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 2px; cursor: pointer; color: #999; padding: 6px;
+}
+.stock-add-card:hover { border-color: #999; color: #666; background: #fafafa; }
+.stock-add-icon { font-size: 18px; font-weight: 700; line-height: 1; }
+.stock-add-label { font-size: 9.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.03em; }
+
 /* On phones, a whole rack of one-card-per-row batch cards makes the Dashboard scroll
    forever — force exactly 3 per row and shrink each card's internals to fit. */
 @media (max-width: 640px) {
@@ -511,6 +522,9 @@ header.top p { margin: 0; color: #666; font-size: 13px; }
   .stock-dot { width: 5px; height: 5px; }
   .stock-batch-cluster { min-width: 0; padding: 5px 6px; }
   .stock-batch-caption { font-size: 8.5px; }
+  .stock-add-card { min-width: 0; min-height: 40px; }
+  .stock-add-icon { font-size: 15px; }
+  .stock-add-label { font-size: 7.5px; }
 }
 
 .chart-wrap { position: relative; height: 220px; margin-bottom: 14px; }

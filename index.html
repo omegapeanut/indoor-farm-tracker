@@ -354,8 +354,9 @@
           <button class="dash-loc-btn active" data-loc="">All</button>
           <button class="dash-loc-btn" data-loc="level1">Level 1</button>
           <button class="dash-loc-btn" data-loc="level3">Level 3</button>
-          <button class="dash-loc-btn" data-loc="germOnSite">Germ. On Site</button>
-          <button class="dash-loc-btn" data-loc="germOffSite">Germ. Off Site</button>
+          <button class="dash-loc-btn" data-loc="germOnSite">Level 1 Germ</button>
+          <button class="dash-loc-btn" data-loc="germLevel3">Level 3 Germ</button>
+          <button class="dash-loc-btn" data-loc="germOffSite">Off Site</button>
         </div>
 
         <div class="kpi-row" id="dashKpiRow">
@@ -471,7 +472,7 @@
           </div>
           <div class="row2">
             <div class="field"><label>From (germination room)</label>
-              <select id="transplantsLocation"><option value="germOnSite">On Site</option><option value="germOffSite">Off Site</option></select>
+              <select id="transplantsLocation"><option value="germOnSite">Level 1 Germ</option><option value="germLevel3">Level 3 Germ</option><option value="germOffSite">Off Site</option></select>
             </div>
             <div class="field"><label>To (growing level)</label>
               <select id="transplantsLocation2"><option value="level1">Level 1</option><option value="level3">Level 3</option></select>
@@ -504,7 +505,7 @@
           </div>
           <div class="row2">
             <div class="field"><label>Germination room</label>
-              <select id="germinationsLocation"><option value="germOnSite">On Site</option><option value="germOffSite">Off Site</option></select>
+              <select id="germinationsLocation"><option value="germOnSite">Level 1 Germ</option><option value="germLevel3">Level 3 Germ</option><option value="germOffSite">Off Site</option></select>
             </div>
             <div class="field"><label>Quantity seeded</label><input type="number" id="germinationsQuantity" min="0" step="1"></div>
           </div>
@@ -529,8 +530,9 @@
               <select id="lossesLocation">
                 <option value="level1">Level 1</option>
                 <option value="level3">Level 3</option>
-                <option value="germOnSite">Germination Room (On Site)</option>
-                <option value="germOffSite">Germination Room (Off Site)</option>
+                <option value="germOnSite">Level 1 Germ</option>
+                <option value="germLevel3">Level 3 Germ</option>
+                <option value="germOffSite">Off Site</option>
               </select>
             </div>
             <div class="field"><label>Quantity lost</label><input type="number" id="lossesQuantity" min="0" step="1"></div>
@@ -553,8 +555,9 @@
           <button class="dash-loc-btn active" data-loc="">All</button>
           <button class="dash-loc-btn" data-loc="level1">Level 1</button>
           <button class="dash-loc-btn" data-loc="level3">Level 3</button>
-          <button class="dash-loc-btn" data-loc="germOnSite">Germ. On Site</button>
-          <button class="dash-loc-btn" data-loc="germOffSite">Germ. Off Site</button>
+          <button class="dash-loc-btn" data-loc="germOnSite">Level 1 Germ</button>
+          <button class="dash-loc-btn" data-loc="germLevel3">Level 3 Germ</button>
+          <button class="dash-loc-btn" data-loc="germOffSite">Off Site</button>
         </div>
         <div class="standing-table-head">
           <span>Location</span><span>Plant type</span><span>Quantity</span>
@@ -571,8 +574,9 @@
               <select id="envReadingsLocation">
                 <option value="level1">Level 1</option>
                 <option value="level3">Level 3</option>
-                <option value="germOnSite">Germination Room (On Site)</option>
-                <option value="germOffSite">Germination Room (Off Site)</option>
+                <option value="germOnSite">Level 1 Germ</option>
+                <option value="germLevel3">Level 3 Germ</option>
+                <option value="germOffSite">Off Site</option>
               </select>
             </div>
           </div>
@@ -596,8 +600,9 @@
             <option value="">All locations</option>
             <option value="level1">Level 1</option>
             <option value="level3">Level 3</option>
-            <option value="germOnSite">Germination Room (On Site)</option>
-            <option value="germOffSite">Germination Room (Off Site)</option>
+            <option value="germOnSite">Level 1 Germ</option>
+            <option value="germLevel3">Level 3 Germ</option>
+            <option value="germOffSite">Off Site</option>
           </select>
         </div>
         <div class="env-table-head" id="envReadingsTableHead">
@@ -888,11 +893,65 @@
       <label>Quantity</label>
       <input type="number" min="0" id="trayEditQty">
     </div>
+    <div class="sub" id="trayHarvestSub" style="margin-top:-2px;"></div>
     <div class="modal-actions">
-      <div></div>
+      <div style="display:flex; gap:6px;">
+        <button class="btn" id="trayHarvestHalfBtn">Harvest half</button>
+        <button class="btn" id="trayHarvestFullBtn">Harvest full</button>
+      </div>
       <div style="display:flex; gap:8px;">
         <button class="btn" id="trayEditCancel">Cancel</button>
         <button class="btn primary" id="trayEditSave">Save</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ADD TRAY MODAL (transfer in from germination) -->
+<div class="overlay" id="addTrayOverlay">
+  <div class="modal" style="width:320px;">
+    <h3>Add Tray</h3>
+    <div class="sub" id="addTraySub"></div>
+    <div class="field">
+      <label>From (germination room)</label>
+      <select id="addTraySource"></select>
+    </div>
+    <div class="field">
+      <label>Quantity</label>
+      <input type="number" min="0" id="addTrayQty">
+    </div>
+    <div class="field">
+      <label>Transfer date</label>
+      <input type="date" id="addTrayDate">
+    </div>
+    <div class="modal-actions">
+      <div></div>
+      <div style="display:flex; gap:8px;">
+        <button class="btn" id="addTrayCancel">Cancel</button>
+        <button class="btn primary" id="addTraySave">Add tray</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ADD TO GERMINATION MODAL -->
+<div class="overlay" id="addGermOverlay">
+  <div class="modal" style="width:320px;">
+    <h3>Add to Germination</h3>
+    <div class="sub" id="addGermSub"></div>
+    <div class="field">
+      <label>Quantity seeded</label>
+      <input type="number" min="0" id="addGermQty">
+    </div>
+    <div class="field">
+      <label>Date</label>
+      <input type="date" id="addGermDate">
+    </div>
+    <div class="modal-actions">
+      <div></div>
+      <div style="display:flex; gap:8px;">
+        <button class="btn" id="addGermCancel">Cancel</button>
+        <button class="btn primary" id="addGermSave">Add</button>
       </div>
     </div>
   </div>
