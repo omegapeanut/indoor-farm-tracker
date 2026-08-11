@@ -2978,6 +2978,15 @@ const TRAY_MAX_BY_SIDE = { A: 13, B: 11 };
 // Level 1 Germ runs a 14-tray daily succession (100 seedlings each) per plant type —
 // other germination rooms have no known physical cap yet.
 const GERM_TRAY_MAX = { germOnSite: 14 };
+// Level 1 is one carousel per plant type with a fixed 142 towers — capacity there is
+// a plant-count cap (towers x that plant type's plantsPerTower), not a tray count,
+// since a carousel gets refilled in whatever chunk size fits (not always the same
+// size every time).
+const LEVEL1_TOWER_CAP = 142;
+function plantTypePlantsPerTower(id){
+  const pt = plantTypesCache.find(p => p.id === id);
+  return pt && pt.plantsPerTower != null ? Number(pt.plantsPerTower) : null;
+}
 function capitalize(s){ return s.charAt(0).toUpperCase() + s.slice(1); }
 
 // ---- Plant Types (Firestore: plantTypes/{id}) ----
@@ -4123,9 +4132,22 @@ function renderGrowingStock(){
         // Each row is a physical rack row with a fixed number of tray slots — Side A
         // (herbs) rows hold 13 daily-succession trays, Side B (lettuce + ice plant)
         // rows hold 11. Once every slot is occupied by an open (remaining > 0) tray
-        // there's nowhere to put a new one until one gets fully harvested.
-        const maxTrays = TRAY_MAX_BY_SIDE[g.rackSide] || null;
-        if (isAdmin && (maxTrays == null || batches.length < maxTrays)){
+        // there's nowhere to put a new one until one gets fully harvested. Level 1 is
+        // capped differently — one carousel of a fixed 142 towers per plant type, so
+        // it's a plant-count ceiling rather than a tray-count one (chunks refilled
+        // there aren't always the same size).
+        let atCapacity = false;
+        if (loc === "level1"){
+          const perTower = plantTypePlantsPerTower(g.plantTypeId);
+          if (perTower){
+            const totalQty = batches.reduce((s, b) => s + b.remaining, 0);
+            atCapacity = totalQty >= LEVEL1_TOWER_CAP * perTower;
+          }
+        } else {
+          const maxTrays = TRAY_MAX_BY_SIDE[g.rackSide] || null;
+          atCapacity = maxTrays != null && batches.length >= maxTrays;
+        }
+        if (isAdmin && !atCapacity){
           batchesWrap.appendChild(buildAddCard("Add Tray", () => openAddTrayModal(g.plantTypeId, loc, g.rackSide, g.rackTier)));
         }
         row.appendChild(batchesWrap);
