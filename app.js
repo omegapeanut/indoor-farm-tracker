@@ -2904,6 +2904,10 @@ $("addSpecialEventBtn").addEventListener("click", async () => {
 // keeps working unchanged. germLevel3 is the newly split-out room for Level 3.
 const LOCATIONS = { level1: "Level 1", level3: "Level 3", germOnSite: "Level 1 Germ", germLevel3: "Level 3 Germ", germOffSite: "Off Site" };
 const GERM_ROOMS = ["germOnSite", "germLevel3", "germOffSite"];
+// Physical tray capacity per Level 3 rack row: Side A (herbs) rows run a 13-day
+// succession, Side B (lettuce + ice plant) rows run 11. Rows with no rack side set
+// (or on Level 1, which isn't tiered this way) have no cap.
+const TRAY_MAX_BY_SIDE = { A: 13, B: 11 };
 function capitalize(s){ return s.charAt(0).toUpperCase() + s.slice(1); }
 
 // ---- Plant Types (Firestore: plantTypes/{id}) ----
@@ -4044,7 +4048,12 @@ function renderGrowingStock(){
           if (avg != null) colorClass = age >= avg ? "ready" : (age >= avg * 0.7 ? "close" : "fresh");
           batchesWrap.appendChild(buildBatchCard(Math.ceil(remaining / 10), colorClass, age, batch.date, remaining, batch.id));
         });
-        if (isAdmin){
+        // Each row is a physical rack row with a fixed number of tray slots — Side A
+        // (herbs) rows hold 13 daily-succession trays, Side B (lettuce + ice plant)
+        // rows hold 11. Once every slot is occupied by an open (remaining > 0) tray
+        // there's nowhere to put a new one until one gets fully harvested.
+        const maxTrays = TRAY_MAX_BY_SIDE[g.rackSide] || null;
+        if (isAdmin && (maxTrays == null || batches.length < maxTrays)){
           batchesWrap.appendChild(buildAddCard("Add Tray", () => openAddTrayModal(g.plantTypeId, loc, g.rackSide, g.rackTier)));
         }
         row.appendChild(batchesWrap);
