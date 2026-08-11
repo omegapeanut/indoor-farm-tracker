@@ -4116,9 +4116,13 @@ function renderGrowingStock(){
         currentSide = g.rackSide || null;
         const batches = g.batches.slice().sort((a,b) => (a.batch.date||"").localeCompare(b.batch.date||""));
         const avg = computeAvgDaysToHarvest(g.plantTypeId);
+        const groupTotal = batches.reduce((s, b) => s + b.remaining, 0);
         const row = document.createElement("div"); row.className = "stock-type-row";
         const nameEl = document.createElement("div"); nameEl.className = "stock-type-name";
         nameEl.textContent = (g.rackTier != null ? "Tier " + g.rackTier + " · " : "") + plantTypeName(g.plantTypeId);
+        const totalTag = document.createElement("span"); totalTag.className = "stock-type-total";
+        totalTag.textContent = groupTotal.toLocaleString() + " total";
+        nameEl.appendChild(totalTag);
         if (avg != null){
           const avgTag = document.createElement("span"); avgTag.className = "stock-type-avg";
           avgTag.textContent = "avg " + Math.round(avg) + "d to harvest";
@@ -4143,8 +4147,7 @@ function renderGrowingStock(){
         if (loc === "level1"){
           const perTower = plantTypePlantsPerTower(g.plantTypeId);
           if (perTower){
-            const totalQty = batches.reduce((s, b) => s + b.remaining, 0);
-            atCapacity = totalQty >= LEVEL1_TOWER_CAP * perTower;
+            atCapacity = groupTotal >= LEVEL1_TOWER_CAP * perTower;
           }
         } else {
           const maxTrays = TRAY_MAX_BY_SIDE[g.rackSide] || null;
@@ -4174,9 +4177,13 @@ function renderGrowingStock(){
           hasAny = true;
           const batches = g.batches.slice().sort((a,b) => (a.germ.date||"").localeCompare(b.germ.date||""));
           const germDays = plantTypeGermDays(g.plantTypeId);
+          const groupTotal = batches.reduce((s, b) => s + b.remaining, 0);
           const row = document.createElement("div"); row.className = "stock-type-row";
           const nameEl = document.createElement("div"); nameEl.className = "stock-type-name";
           nameEl.textContent = plantTypeName(g.plantTypeId);
+          const totalTag = document.createElement("span"); totalTag.className = "stock-type-total";
+          totalTag.textContent = groupTotal.toLocaleString() + " total";
+          nameEl.appendChild(totalTag);
           row.appendChild(nameEl);
           const batchesWrap = document.createElement("div"); batchesWrap.className = "stock-batches";
           batches.forEach(({ germ, remaining }) => {
