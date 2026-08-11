@@ -791,7 +791,13 @@ function openTrayEditModal(batchId, kind){
   $("trayEditDate").value = batch.date || "";
   $("trayEditQty").value = batch.quantity != null ? batch.quantity : "";
   $("trayHarvestSection").style.display = isGerm ? "none" : "block";
-  if (!isGerm){
+  $("trayGermTransferSection").style.display = isGerm ? "block" : "none";
+  if (isGerm){
+    const remaining = computeGermRemaining(batchId);
+    $("trayGermTransferSub").textContent = remaining + " left in this tray.";
+    $("trayTransferLevel1Btn").disabled = remaining <= 0;
+    $("trayTransferLevel3Btn").disabled = remaining <= 0;
+  } else {
     const remaining = computeBatchRemaining(batchId);
     $("trayHarvestSub").textContent = remaining + " left to harvest from this tray.";
     $("trayHarvestHalfBtn").disabled = remaining <= 0;
@@ -846,6 +852,41 @@ async function harvestFromTray(fraction){
 }
 $("trayHarvestHalfBtn").addEventListener("click", () => harvestFromTray("half"));
 $("trayHarvestFullBtn").addEventListener("click", () => harvestFromTray("full"));
+
+// A germination tray is only ever used wholesale — clicking "Transfer to Level 1/3"
+// moves everything still left in it straight into a growing-rack batch there, same
+// as the Add Tray flow on the destination side, just started from the tray itself.
+async function transferGermTray(destLevel){
+  if (!trayEditBatchId || trayEditKind !== "germinations") return;
+  const germ = germinationsCache.find(g => g.id === trayEditBatchId);
+  if (!germ) return;
+  const remaining = computeGermRemaining(trayEditBatchId);
+  if (remaining <= 0) return;
+  // Inherit rack side/tier from this plant type's most recent existing Level 3
+  // batch, if any, so the transfer lands in the same physical slot as before
+  // without having to ask. Level 1 has no rack side/tier concept.
+  let rackSide = null, rackTier = null;
+  if (destLevel === "level3"){
+    const recent = transplantsCache.filter(t => t.destLevel === "level3" && t.plantTypeId === germ.plantTypeId).sort((a,b) => (b.date||"").localeCompare(a.date||""))[0];
+    if (recent){ rackSide = recent.rackSide || null; rackTier = recent.rackTier != null ? recent.rackTier : null; }
+  }
+  const btn1 = $("trayTransferLevel1Btn"), btn3 = $("trayTransferLevel3Btn");
+  btn1.disabled = true; btn3.disabled = true;
+  try {
+    await addDoc(collection(db, "transplants"), {
+      date: farmTodayKey(), plantTypeId: germ.plantTypeId, destLevel,
+      quantity: remaining, sourceRoom: germ.room, sourceGermId: germ.id,
+      ageAtTransfer: plantTypeGermDays(germ.plantTypeId) || 0,
+      rackSide, rackTier, notes: "", photos: []
+    });
+    closeTrayEditModal();
+  } catch (err){
+    alert("Couldn't transfer this tray: " + err.message);
+    btn1.disabled = false; btn3.disabled = false;
+  }
+}
+$("trayTransferLevel1Btn").addEventListener("click", () => transferGermTray("level1"));
+$("trayTransferLevel3Btn").addEventListener("click", () => transferGermTray("level3"));
 
 // ============================================================================
 // ADD TRAY MODAL — transfer new seedlings in from germination straight into a
@@ -3994,8 +4035,11 @@ function renderGrowingStock(){
     const dateTag = document.createElement("div"); dateTag.className = "stock-date-tag";
     dateTag.textContent = fmtFriendlyDate(dateKey);
     info.appendChild(dateTag);
+    // Capped so a big carousel batch (e.g. 1000+ plants) doesn't turn the dot grid
+    // into a column hundreds of dots tall — past the cap it's just a full-looking
+    // pile; the exact count is always the text underneath, never the dots.
     const dots = document.createElement("div"); dots.className = "stock-dots";
-    for (let i = 0; i < dotCount; i++){
+    for (let i = 0; i < Math.min(dotCount, 12); i++){
       const dot = document.createElement("span"); dot.className = "stock-dot " + colorClass;
       dots.appendChild(dot);
     }
