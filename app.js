@@ -4010,6 +4010,57 @@ $("dashLocationRow").addEventListener("click", (e) => {
   renderDashboard();
 });
 
+// Plain numeric rollup of computeStandingStock() — one line per plant type per
+// floor (busiest crop first) plus a floor grand total, for a quick "how much of
+// each thing do we have" glance without reading through the Growing Stock cards.
+function renderPlantTotals(){
+  const list = $("plantTotalsList");
+  if (!list) return;
+  list.innerHTML = "";
+
+  const stock = computeStandingStock();
+  const locs = dashboardScopeLoc ? [dashboardScopeLoc] : Object.keys(LOCATIONS);
+  let anyRendered = false;
+
+  locs.forEach(loc => {
+    const rows = Object.entries(stock[loc] || {})
+      .map(([plantTypeId, qty]) => ({ plantTypeId, qty: Math.max(0, qty) }))
+      .filter(r => r.qty > 0)
+      .sort((a, b) => b.qty - a.qty);
+    if (!rows.length) return;
+    anyRendered = true;
+
+    const group = document.createElement("div"); group.className = "total-loc-group";
+    const title = document.createElement("div"); title.className = "stock-loc-title";
+    title.textContent = LOCATIONS[loc];
+    group.appendChild(title);
+
+    let locTotal = 0;
+    rows.forEach(r => {
+      locTotal += r.qty;
+      const row = document.createElement("div"); row.className = "total-row";
+      const name = document.createElement("span"); name.textContent = plantTypeName(r.plantTypeId);
+      const qty = document.createElement("span"); qty.className = "qty"; qty.textContent = r.qty.toLocaleString();
+      row.appendChild(name); row.appendChild(qty);
+      group.appendChild(row);
+    });
+
+    const totalRow = document.createElement("div"); totalRow.className = "total-row total-row-sum";
+    const totalLabel = document.createElement("span"); totalLabel.textContent = "Total";
+    const totalQty = document.createElement("span"); totalQty.className = "qty"; totalQty.textContent = locTotal.toLocaleString();
+    totalRow.appendChild(totalLabel); totalRow.appendChild(totalQty);
+    group.appendChild(totalRow);
+
+    list.appendChild(group);
+  });
+
+  if (!anyRendered){
+    const empty = document.createElement("div"); empty.className = "empty-state";
+    empty.textContent = "Nothing currently growing yet.";
+    list.appendChild(empty);
+  }
+}
+
 // One dot per 10 plants, grouped by level then plant type. Level 1/3 group into a
 // cluster per open batch (a transplants entry that still has quantity left), shaded by
 // how old that batch is relative to this crop's own observed average time-to-first-
@@ -4214,6 +4265,7 @@ function renderGrowingStock(){
 
 function renderDashboard(){
   renderDashboardKPIs();
+  renderPlantTotals();
   renderGrowingStock();
 
   const byType = computeHarvestByPlantType(dashboardScopeLoc);
