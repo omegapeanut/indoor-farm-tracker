@@ -452,6 +452,14 @@ header.top p { margin: 0; color: #666; font-size: 13px; }
    open batch (shaded by age vs. that crop's own observed time-to-first-harvest);
    germination rooms have no batch concept here, so they get one plain cluster per
    plant type instead. */
+/* Plant Totals by Floor — plain numeric rollup above Growing Stock's dot cards. */
+.total-loc-group { margin-bottom: 18px; max-width: 420px; }
+.total-loc-group:last-child { margin-bottom: 0; }
+.total-row { display: flex; justify-content: space-between; gap: 12px; padding: 5px 0; border-bottom: 1px solid #f0f0f0; font-size: 13px; }
+.total-row .qty { font-weight: 600; font-variant-numeric: tabular-nums; color: #333; }
+.total-row-sum { border-bottom: none; border-top: 1px solid #ddd; margin-top: 2px; padding-top: 7px; font-weight: 700; }
+.total-row-sum .qty { font-weight: 800; }
+
 .stock-legend-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin: 0 2px; vertical-align: middle; }
 .stock-loc-group { margin-bottom: 18px; }
 .stock-loc-group:last-child { margin-bottom: 0; }
