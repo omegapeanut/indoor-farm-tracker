@@ -171,6 +171,7 @@ onAuthStateChanged(auth, (user) => {
   renderHarvestDestinations();
   Object.keys(LOG_CONFIGS).forEach(renderLogSection);
   renderEnvReadings();
+  renderTanks();
   if (isDashboardActive()) renderDashboard();
   renderAssets();
   renderConsumables();
@@ -217,6 +218,7 @@ function refreshAdminUI(){
   $("addGerminationsRow").style.display = isAdmin ? "flex" : "none";
   $("addLossesRow").style.display = isAdmin ? "flex" : "none";
   $("addEnvReadingsRow").style.display = isAdmin ? "flex" : "none";
+  $("tanksToggleRow").style.display = isAdmin ? "block" : "none";
   $("addAssetRow").style.display = isAdmin ? "flex" : "none";
   $("addConsumableRow").style.display = isAdmin ? "flex" : "none";
   $("addAssetPurchaseRow").style.display = isAdmin ? "flex" : "none";
@@ -238,6 +240,7 @@ function refreshAdminUI(){
     $("plantTypesPanel").style.display = "none";
     $("destinationsPanel").style.display = "none";
     $("purchaseAreasPanel").style.display = "none";
+    $("tanksPanel").style.display = "none";
     if (document.querySelector('#tab-inventory .subtab-panel[data-subtab="purchaseDashboard"]').classList.contains("active")){
       document.querySelector('#tab-inventory .subtab-btn[data-subtab="assets"]').click();
     }
@@ -3103,6 +3106,167 @@ function populatePlantTypeSelects(){
   });
 }
 
+// ---- Tanks (Firestore: tanks/{id}) — nutrient tank zones on Level 1 and
+// Level 3. Each zone (e.g. "East", "North 1") is one physical water system
+// that gets ONE environment reading per visit, regardless of how many
+// individual tanks feed it — tankCount/crops/nutrientType are descriptive
+// metadata only, not used to split readings.
+let tanksCache = [];
+onSnapshot(collection(db, "tanks"), (snap) => {
+  tanksCache = snap.docs.map(d => ({ id: d.id, ...d.data() }))
+    .sort((a,b) => (a.level||"").localeCompare(b.level||"") || (a.name||"").localeCompare(b.name||""));
+  renderTanks();
+  populateEnvReadingsTankOptions();
+}, () => setSyncStatus("err", "Connection error"));
+
+function tankName(id){
+  const t = tanksCache.find(x => x.id === id);
+  return t ? t.name : "";
+}
+
+function renderTanks(){
+  const list = $("tanksList");
+  list.innerHTML = "";
+  if (tanksCache.length === 0){
+    const empty = document.createElement("div");
+    empty.className = "empty-state";
+    empty.textContent = "No tanks added yet.";
+    list.appendChild(empty);
+    return;
+  }
+  tanksCache.forEach(t => {
+    const row = document.createElement("div");
+    row.className = "staff-row";
+    row.style.flexWrap = "wrap";
+
+    const name = document.createElement("div");
+    name.className = "staff-name";
+    name.contentEditable = "true";
+    name.textContent = t.name;
+    name.style.flex = "1 1 120px";
+    name.addEventListener("blur", async () => {
+      const val = name.textContent.trim();
+      if (!val){ name.textContent = t.name; return; }
+      if (val === t.name) return;
+      try { await updateDoc(doc(db, "tanks", t.id), { name: val }); }
+      catch (err){ alert("Couldn't rename this tank: " + err.message); name.textContent = t.name; }
+    });
+    name.addEventListener("keydown", (e) => { if (e.key === "Enter"){ e.preventDefault(); name.blur(); } });
+
+    const level = document.createElement("select");
+    level.style.maxWidth = "110px";
+    [["level1","Level 1"],["level3","Level 3"]].forEach(([val, label]) => {
+      const opt = document.createElement("option");
+      opt.value = val; opt.textContent = label;
+      level.appendChild(opt);
+    });
+    level.value = t.level;
+    level.addEventListener("change", async () => {
+      try { await updateDoc(doc(db, "tanks", t.id), { level: level.value }); }
+      catch (err){ alert("Couldn't change level: " + err.message); level.value = t.level; }
+    });
+
+    const count = document.createElement("input");
+    count.type = "number"; count.min = "0"; count.step = "1";
+    count.className = "staff-pin-input"; count.title = "No. of tanks";
+    count.placeholder = "# tanks";
+    count.style.maxWidth = "80px";
+    if (t.tankCount != null) count.value = t.tankCount;
+    count.addEventListener("change", async () => {
+      const val = count.value === "" ? null : Number(count.value);
+      try { await updateDoc(doc(db, "tanks", t.id), { tankCount: val }); }
+      catch (err){ alert("Couldn't save tank count: " + err.message); count.value = t.tankCount != null ? t.tankCount : ""; }
+    });
+
+    const crops = document.createElement("div");
+    crops.contentEditable = "true";
+    crops.className = "staff-name";
+    crops.style.flex = "1 1 140px";
+    crops.textContent = t.crops || "";
+    crops.dataset.placeholder = "Crop type(s)";
+    crops.addEventListener("blur", async () => {
+      const val = crops.textContent.trim();
+      if (val === (t.crops || "")) return;
+      try { await updateDoc(doc(db, "tanks", t.id), { crops: val }); }
+      catch (err){ alert("Couldn't save crops: " + err.message); crops.textContent = t.crops || ""; }
+    });
+    crops.addEventListener("keydown", (e) => { if (e.key === "Enter"){ e.preventDefault(); crops.blur(); } });
+
+    const nutrient = document.createElement("div");
+    nutrient.contentEditable = "true";
+    nutrient.className = "staff-name";
+    nutrient.style.flex = "1 1 140px";
+    nutrient.textContent = t.nutrientType || "";
+    nutrient.addEventListener("blur", async () => {
+      const val = nutrient.textContent.trim();
+      if (val === (t.nutrientType || "")) return;
+      try { await updateDoc(doc(db, "tanks", t.id), { nutrientType: val }); }
+      catch (err){ alert("Couldn't save nutrient type: " + err.message); nutrient.textContent = t.nutrientType || ""; }
+    });
+    nutrient.addEventListener("keydown", (e) => { if (e.key === "Enter"){ e.preventDefault(); nutrient.blur(); } });
+
+    const del = document.createElement("button");
+    del.className = "icon-btn"; del.textContent = "✕"; del.title = "Remove tank";
+    del.addEventListener("click", async () => {
+      if (!confirm("Remove tank zone \"" + t.name + "\"? Past readings keep their recorded tank name.")) return;
+      try { await moveToTrash("tanks", t.id, t); }
+      catch (err){ alert("Couldn't delete this tank: " + err.message); }
+    });
+
+    row.appendChild(name); row.appendChild(level); row.appendChild(count);
+    row.appendChild(crops); row.appendChild(nutrient); row.appendChild(del);
+    list.appendChild(row);
+  });
+}
+
+$("toggleTanksBtn").addEventListener("click", () => {
+  const panel = $("tanksPanel");
+  panel.style.display = panel.style.display === "none" ? "block" : "none";
+});
+
+$("addTankBtn").addEventListener("click", async () => {
+  if (!isAdmin) return;
+  const nameInput = $("newTankName");
+  const name = requireValue(nameInput, "a zone name");
+  if (!name) return;
+  const level = $("newTankLevel").value;
+  const countInput = $("newTankCount");
+  const tankCount = countInput.value === "" ? null : Number(countInput.value);
+  const crops = $("newTankCrops").value.trim();
+  const nutrientType = $("newTankNutrient").value.trim();
+  try {
+    await addDoc(collection(db, "tanks"), { name, level, tankCount, crops, nutrientType });
+    nameInput.value = ""; countInput.value = ""; $("newTankCrops").value = ""; $("newTankNutrient").value = "";
+  } catch (err){
+    alert("Couldn't add this tank: " + err.message);
+  }
+});
+
+function populateEnvReadingsTankOptions(){
+  const loc = $("envReadingsLocation").value;
+  const row = $("envReadingsTankRow");
+  const sel = $("envReadingsTank");
+  const relevant = (loc === "level1" || loc === "level3") ? tanksCache.filter(t => t.level === loc) : [];
+  if (relevant.length === 0){
+    row.style.display = "none";
+    sel.innerHTML = "";
+    return;
+  }
+  row.style.display = "flex";
+  const prev = sel.value;
+  sel.innerHTML = "";
+  const noneOpt = document.createElement("option");
+  noneOpt.value = ""; noneOpt.textContent = "— None —";
+  sel.appendChild(noneOpt);
+  relevant.forEach(t => {
+    const opt = document.createElement("option");
+    opt.value = t.id; opt.textContent = t.name;
+    sel.appendChild(opt);
+  });
+  if (prev && relevant.some(t => t.id === prev)) sel.value = prev;
+}
+$("envReadingsLocation").addEventListener("change", populateEnvReadingsTankOptions);
+
 // ---- Harvest Destinations (Firestore: harvestDestinations/{id}) — where
 // harvested crops go. Seeded once with a starter list if the collection is
 // empty; managed the same way as Plant Types (rename inline, delete, add).
@@ -3796,8 +3960,10 @@ function renderEnvReadings(){
     row.className = "env-row";
     const dateEl = document.createElement("span"); dateEl.className = "env-date"; dateEl.textContent = r.date || "—";
     const locEl = document.createElement("span"); locEl.className = "env-loc"; locEl.textContent = LOCATIONS[r.location] || r.location || "—";
+    const tankEl = document.createElement("span"); tankEl.className = "env-tank"; tankEl.textContent = (r.tankId && tankName(r.tankId)) || "—";
     row.appendChild(dateEl);
     row.appendChild(locEl);
+    row.appendChild(tankEl);
     row.appendChild(mkCell("pH", r.ph));
     row.appendChild(mkCell("TDS", r.tds));
     row.appendChild(mkCell("EC", r.ec));
@@ -3826,6 +3992,7 @@ $("addEnvReadingsBtn").addEventListener("click", async () => {
   const payload = {
     date: $("envReadingsDate").value || toKey(new Date()),
     location: $("envReadingsLocation").value,
+    tankId: $("envReadingsTankRow").style.display !== "none" ? ($("envReadingsTank").value || null) : null,
     ph: numOrNull("envReadingsPh"),
     tds: numOrNull("envReadingsTds"),
     ec: numOrNull("envReadingsEc"),
@@ -5790,7 +5957,7 @@ $("annotateSave").addEventListener("click", async () => {
 $("exportDataBtn").addEventListener("click", async () => {
   $("dataStatus").textContent = "Gathering data…";
   try {
-    const [scheduleSnap, seriesSnap, houseRulesSnap, findingsSnap, proposalsSnap, plantGuideSnap, specialEventsSnap, plantTypesSnap, harvestDestinationsSnap, harvestsSnap, transplantsSnap, germinationsSnap, lossesSnap, envReadingsSnap, staffSnap, attendanceSnap, inventoryAssetsSnap, inventoryConsumablesSnap, purchaseAreasSnap, purchasePlansSnap, reportsSnap, reportTasksSnap, claimsSnap] = await Promise.all([
+    const [scheduleSnap, seriesSnap, houseRulesSnap, findingsSnap, proposalsSnap, plantGuideSnap, specialEventsSnap, plantTypesSnap, harvestDestinationsSnap, harvestsSnap, transplantsSnap, germinationsSnap, lossesSnap, envReadingsSnap, tanksSnap, staffSnap, attendanceSnap, inventoryAssetsSnap, inventoryConsumablesSnap, purchaseAreasSnap, purchasePlansSnap, reportsSnap, reportTasksSnap, claimsSnap] = await Promise.all([
       getDocs(collection(db, "schedule")),
       getDocs(collection(db, "series")),
       getDoc(doc(db, "meta", "houseRules")),
@@ -5805,6 +5972,7 @@ $("exportDataBtn").addEventListener("click", async () => {
       getDocs(collection(db, "germinations")),
       getDocs(collection(db, "losses")),
       getDocs(collection(db, "envReadings")),
+      getDocs(collection(db, "tanks")),
       getDocs(collection(db, "staff")),
       getDocs(collection(db, "attendance")),
       getDocs(collection(db, "inventoryAssets")),
@@ -5831,6 +5999,7 @@ $("exportDataBtn").addEventListener("click", async () => {
       germinations: Object.fromEntries(germinationsSnap.docs.map(d => [d.id, d.data()])),
       losses: Object.fromEntries(lossesSnap.docs.map(d => [d.id, d.data()])),
       envReadings: Object.fromEntries(envReadingsSnap.docs.map(d => [d.id, d.data()])),
+      tanks: Object.fromEntries(tanksSnap.docs.map(d => [d.id, d.data()])),
       staff: Object.fromEntries(staffSnap.docs.map(d => [d.id, d.data()])),
       attendance: Object.fromEntries(attendanceSnap.docs.map(d => [d.id, d.data()])),
       inventoryAssets: Object.fromEntries(inventoryAssetsSnap.docs.map(d => [d.id, d.data()])),
@@ -5878,6 +6047,7 @@ $("importFileInput").addEventListener("change", async () => {
     Object.entries(dump.germinations || {}).forEach(([id, data]) => ops.push(["germinations", id, data]));
     Object.entries(dump.losses || {}).forEach(([id, data]) => ops.push(["losses", id, data]));
     Object.entries(dump.envReadings || {}).forEach(([id, data]) => ops.push(["envReadings", id, data]));
+    Object.entries(dump.tanks || {}).forEach(([id, data]) => ops.push(["tanks", id, data]));
     Object.entries(dump.staff || {}).forEach(([id, data]) => ops.push(["staff", id, data]));
     Object.entries(dump.attendance || {}).forEach(([id, data]) => ops.push(["attendance", id, data]));
     Object.entries(dump.inventoryAssets || {}).forEach(([id, data]) => ops.push(["inventoryAssets", id, data]));
@@ -6018,7 +6188,7 @@ const CLEARABLE_COLLECTIONS = {
   proposals: "Planning / Proposals", plantGuide: "Plant Guide", specialEvents: "Special Events",
   plantTypes: "Plant Types", harvestDestinations: "Harvest Destinations",
   harvests: "Harvests", transplants: "Transfers (batches)", germinations: "Germinations", losses: "Losses",
-  envReadings: "Environment Readings", staff: "Staff", attendance: "Attendance",
+  envReadings: "Environment Readings", tanks: "Tanks", staff: "Staff", attendance: "Attendance",
   inventoryAssets: "Inventory Assets", inventoryConsumables: "Inventory Consumables",
   purchaseAreas: "Purchase Areas", purchasePlans: "Purchase Plans",
   reports: "Reports", reportTasks: "Report Tasks", claims: "Claims"
