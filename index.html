@@ -1058,11 +1058,17 @@
       <div class="color-dot" data-color="#111111" style="background:#111111;"></div>
       <div class="color-dot" data-color="#f5a623" style="background:#f5a623;"></div>
       <div class="color-dot" data-color="#1e7e34" style="background:#1e7e34;"></div>
+      <div class="color-dot" data-color="#1f6feb" style="background:#1f6feb;"></div>
+      <button class="btn primary" id="annotateToolDraw" title="Draw">✏ Draw</button>
+      <button class="btn" id="annotateToolText" title="Add text">🔤 Text</button>
+      <button class="btn" id="annotateUndo" title="Undo" disabled>↶ Undo</button>
+      <button class="btn" id="annotateRedo" title="Redo" disabled>↷ Redo</button>
       <button class="btn" id="annotateClear" style="margin-left:auto;">Clear drawing</button>
     </div>
     <div class="canvas-wrap" id="canvasWrap">
       <canvas id="baseCanvas"></canvas>
       <canvas id="drawCanvas"></canvas>
+      <input type="text" id="annotateTextInput" class="annotate-text-input" style="display:none;">
     </div>
     <div class="sub" id="annotateStatus" style="margin-top:8px;"></div>
     <div class="modal-actions">
