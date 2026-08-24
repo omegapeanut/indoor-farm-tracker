@@ -5867,19 +5867,33 @@ lightbox.addEventListener("click", (e) => { if (e.target === lightbox) lightbox.
 
 // ---- annotate ----
 const annotateOverlay = $("annotateOverlay");
-const baseCanvas = $("baseCanvas"), drawCanvas = $("drawCanvas");
-const baseCtx = baseCanvas.getContext("2d"), drawCtx = drawCanvas.getContext("2d");
+const baseCanvas = $("baseCanvas"), drawCanvas = $("drawCanvas"), textCanvas = $("textCanvas");
+const baseCtx = baseCanvas.getContext("2d"), drawCtx = drawCanvas.getContext("2d"), textCtx = textCanvas.getContext("2d");
 let annotateCollection = "findings", annotateFindingId = null, annotatePhotoId = null, annotateField = "photos";
 let currentColor = "#e02020";
 let drawing = false, lastX = 0, lastY = 0;
 let annotateMode = "draw"; // "draw" | "text"
 let annotateHistory = [], annotateRedoStack = [];
+const TEXT_FONT_MIN = 10, TEXT_FONT_MAX = 140, TEXT_FONT_DEFAULT = 26;
+
+// Text annotations are kept as live objects — {id, text, x, y, color, fontSize,
+// rotation}, x/y being the text's own center — rather than baked straight into
+// drawCanvas's pixels. That's what lets a placed label be tapped again later and
+// moved, resized, or rotated instead of becoming permanent ink. They're redrawn
+// onto their own transparent textCanvas (on top of the freehand-drawing layer)
+// every time anything about them changes, and only flattened into the photo at
+// Save time.
+let annotateTextObjects = [], selectedTextId = null, nextTextObjId = 1, editingTextObjId = null;
+let draggingTextObj = null, dragStartClient = null, dragOrigPos = null, dragMoved = false, dragWasSelected = false;
+let resizingTextObj = null, resizeStart = null;
 
 document.querySelectorAll(".color-dot").forEach(dot => {
   dot.addEventListener("click", () => {
     document.querySelectorAll(".color-dot").forEach(d => d.classList.remove("selected"));
     dot.classList.add("selected");
     currentColor = dot.dataset.color;
+    const obj = annotateTextObjects.find(o => o.id === selectedTextId);
+    if (obj){ obj.color = currentColor; renderTextLayer(); pushAnnotateHistory(); }
   });
 });
 
@@ -5888,6 +5902,8 @@ function setAnnotateMode(mode){
   $("annotateToolDraw").classList.toggle("primary", mode === "draw");
   $("annotateToolText").classList.toggle("primary", mode === "text");
   finishTextInput();
+  selectedTextId = null;
+  updateSelectionOverlay();
 }
 $("annotateToolDraw").addEventListener("click", () => setAnnotateMode("draw"));
 $("annotateToolText").addEventListener("click", () => setAnnotateMode("text"));
@@ -5897,22 +5913,31 @@ function updateUndoRedoButtons(){
   $("annotateRedo").disabled = annotateRedoStack.length === 0;
 }
 function pushAnnotateHistory(){
-  annotateHistory.push(drawCtx.getImageData(0, 0, drawCanvas.width, drawCanvas.height));
+  annotateHistory.push({
+    img: drawCtx.getImageData(0, 0, drawCanvas.width, drawCanvas.height),
+    textObjects: annotateTextObjects.map(o => ({ ...o })),
+  });
   if (annotateHistory.length > 50) annotateHistory.shift();
   annotateRedoStack = [];
   updateUndoRedoButtons();
 }
+function restoreAnnotateState(state){
+  drawCtx.putImageData(state.img, 0, 0);
+  annotateTextObjects = state.textObjects.map(o => ({ ...o }));
+  selectedTextId = null;
+  renderTextLayer();
+}
 $("annotateUndo").addEventListener("click", () => {
   if (annotateHistory.length <= 1) return;
   annotateRedoStack.push(annotateHistory.pop());
-  drawCtx.putImageData(annotateHistory[annotateHistory.length - 1], 0, 0);
+  restoreAnnotateState(annotateHistory[annotateHistory.length - 1]);
   updateUndoRedoButtons();
 });
 $("annotateRedo").addEventListener("click", () => {
   if (annotateRedoStack.length === 0) return;
   const state = annotateRedoStack.pop();
   annotateHistory.push(state);
-  drawCtx.putImageData(state, 0, 0);
+  restoreAnnotateState(state);
   updateUndoRedoButtons();
 });
 
@@ -5933,13 +5958,17 @@ function openAnnotateModal(col, recordId, photoId, field){
     const w = Math.round(img.width * scale), h = Math.round(img.height * scale);
     baseCanvas.width = w; baseCanvas.height = h;
     drawCanvas.width = w; drawCanvas.height = h;
+    textCanvas.width = w; textCanvas.height = h;
     baseCanvas.style.width = w + "px"; baseCanvas.style.height = h + "px";
     drawCanvas.style.width = w + "px"; drawCanvas.style.height = h + "px";
+    textCanvas.style.width = w + "px"; textCanvas.style.height = h + "px";
     $("canvasWrap").style.width = w + "px"; $("canvasWrap").style.height = h + "px";
     baseCtx.clearRect(0,0,w,h);
     baseCtx.drawImage(img, 0, 0, w, h);
     drawCtx.clearRect(0,0,w,h);
-    annotateHistory = [drawCtx.getImageData(0, 0, w, h)];
+    annotateTextObjects = []; selectedTextId = null; nextTextObjId = 1;
+    renderTextLayer();
+    annotateHistory = [{ img: drawCtx.getImageData(0, 0, w, h), textObjects: [] }];
     annotateRedoStack = [];
     updateUndoRedoButtons();
     annotateOverlay.classList.add("active");
@@ -5953,6 +5982,64 @@ function canvasPos(e){
   const scaleX = drawCanvas.width / rect.width, scaleY = drawCanvas.height / rect.height;
   return { x: (e.clientX - rect.left) * scaleX, y: (e.clientY - rect.top) * scaleY };
 }
+// Canvas-internal pixel coords -> CSS pixels relative to #canvasWrap, for
+// positioning the HTML text input and selection handles over the canvas (which
+// can be scaled down from its internal resolution to fit the modal).
+function canvasToDisplay(cx, cy){
+  const rect = drawCanvas.getBoundingClientRect();
+  const wrapRect = $("canvasWrap").getBoundingClientRect();
+  const scaleX = rect.width / drawCanvas.width, scaleY = rect.height / drawCanvas.height;
+  return { left: cx * scaleX + (rect.left - wrapRect.left), top: cy * scaleY + (rect.top - wrapRect.top), scaleX, scaleY };
+}
+
+// ---- text objects: render, hit-test, select ----
+function textObjBox(obj){
+  textCtx.font = obj.fontSize + "px sans-serif";
+  const w = Math.max(textCtx.measureText(obj.text || " ").width, 10);
+  const h = obj.fontSize * 1.3;
+  return { w, h };
+}
+function renderTextLayer(){
+  textCtx.clearRect(0, 0, textCanvas.width, textCanvas.height);
+  annotateTextObjects.forEach(obj => {
+    textCtx.save();
+    textCtx.translate(obj.x, obj.y);
+    textCtx.rotate(obj.rotation * Math.PI / 180);
+    textCtx.font = obj.fontSize + "px sans-serif";
+    textCtx.fillStyle = obj.color;
+    textCtx.textAlign = "center";
+    textCtx.textBaseline = "middle";
+    textCtx.fillText(obj.text, 0, 0);
+    textCtx.restore();
+  });
+  updateSelectionOverlay();
+}
+function hitTestTextObj(cx, cy){
+  for (let i = annotateTextObjects.length - 1; i >= 0; i--){
+    const obj = annotateTextObjects[i];
+    const { w, h } = textObjBox(obj);
+    const dx = cx - obj.x, dy = cy - obj.y;
+    const rad = -obj.rotation * Math.PI / 180;
+    const localX = dx * Math.cos(rad) - dy * Math.sin(rad);
+    const localY = dx * Math.sin(rad) + dy * Math.cos(rad);
+    if (Math.abs(localX) <= w / 2 + 12 && Math.abs(localY) <= h / 2 + 12) return obj;
+  }
+  return null;
+}
+function updateSelectionOverlay(){
+  const sel = $("textObjSelection");
+  const obj = annotateTextObjects.find(o => o.id === selectedTextId);
+  if (!obj){ sel.style.display = "none"; return; }
+  const { w, h } = textObjBox(obj);
+  const d = canvasToDisplay(obj.x, obj.y);
+  const dispW = w * d.scaleX, dispH = h * d.scaleY;
+  sel.style.width = dispW + "px";
+  sel.style.height = dispH + "px";
+  sel.style.left = (d.left - dispW / 2) + "px";
+  sel.style.top = (d.top - dispH / 2) + "px";
+  sel.style.transform = `rotate(${obj.rotation}deg)`;
+  sel.style.display = "block";
+}
 
 // ---- text tool: click on the canvas to drop a floating input, styled in the
 // currently-selected color, positioned in CSS pixels (not canvas-internal
@@ -5961,27 +6048,58 @@ const annotateTextInput = $("annotateTextInput");
 function cancelTextInput(){
   annotateTextInput.style.display = "none";
   annotateTextInput.value = "";
+  editingTextObjId = null;
 }
 // Hiding the input (or moving focus elsewhere) fires a native blur, which also
 // calls commitTextInput below — the display check guards against re-entering
 // this function from that nested blur once we've already committed once.
-function commitTextInput(canvasX, canvasY){
+function commitTextInput(){
   if (annotateTextInput.style.display === "none") return;
   const text = annotateTextInput.value.trim();
+  const canvasX = annotateTextInput._canvasX, canvasY = annotateTextInput._canvasY;
+  const editId = editingTextObjId;
   cancelTextInput();
+  if (editId){
+    const obj = annotateTextObjects.find(o => o.id === editId);
+    if (!obj) return;
+    if (!text){
+      annotateTextObjects = annotateTextObjects.filter(o => o.id !== editId);
+      selectedTextId = null;
+    } else {
+      obj.text = text;
+      selectedTextId = editId;
+    }
+    renderTextLayer();
+    pushAnnotateHistory();
+    return;
+  }
   if (!text) return;
-  drawCtx.font = "22px sans-serif";
-  drawCtx.textBaseline = "top";
-  drawCtx.fillStyle = currentColor;
-  drawCtx.fillText(text, canvasX, canvasY);
+  const obj = { id: nextTextObjId++, text, x: canvasX, y: canvasY, color: currentColor, fontSize: TEXT_FONT_DEFAULT, rotation: 0 };
+  annotateTextObjects.push(obj);
+  selectedTextId = obj.id;
+  renderTextLayer();
   pushAnnotateHistory();
 }
 function finishTextInput(){
   if (annotateTextInput.style.display !== "none" && annotateTextInput.value.trim()){
-    commitTextInput(annotateTextInput._canvasX, annotateTextInput._canvasY);
+    commitTextInput();
   } else {
     cancelTextInput();
   }
+}
+function openTextInputAt(canvasX, canvasY, editObjId){
+  editingTextObjId = editObjId;
+  const existing = editObjId ? annotateTextObjects.find(o => o.id === editObjId) : null;
+  const d = canvasToDisplay(canvasX, canvasY);
+  annotateTextInput._canvasX = canvasX; annotateTextInput._canvasY = canvasY;
+  annotateTextInput.style.left = d.left + "px";
+  annotateTextInput.style.top = d.top + "px";
+  annotateTextInput.style.color = existing ? existing.color : currentColor;
+  annotateTextInput.style.display = "block";
+  annotateTextInput.value = existing ? existing.text : "";
+  selectedTextId = null;
+  updateSelectionOverlay();
+  setTimeout(() => { annotateTextInput.focus(); annotateTextInput.select(); }, 0);
 }
 drawCanvas.addEventListener("pointerdown", (e) => {
   if (annotateMode === "text"){
@@ -5989,16 +6107,21 @@ drawCanvas.addEventListener("pointerdown", (e) => {
     // (to the canvas or nowhere) right after we call .focus() below, which blurs
     // the input before the user can type anything.
     e.preventDefault();
-    if (annotateTextInput.style.display !== "none") commitTextInput(annotateTextInput._canvasX, annotateTextInput._canvasY);
-    const wrapRect = $("canvasWrap").getBoundingClientRect();
+    if (annotateTextInput.style.display !== "none") commitTextInput();
     const p = canvasPos(e);
-    annotateTextInput._canvasX = p.x; annotateTextInput._canvasY = p.y;
-    annotateTextInput.style.left = (e.clientX - wrapRect.left) + "px";
-    annotateTextInput.style.top = (e.clientY - wrapRect.top) + "px";
-    annotateTextInput.style.color = currentColor;
-    annotateTextInput.style.display = "block";
-    annotateTextInput.value = "";
-    setTimeout(() => annotateTextInput.focus(), 0);
+    const hit = hitTestTextObj(p.x, p.y);
+    if (hit){
+      dragWasSelected = hit.id === selectedTextId;
+      selectedTextId = hit.id;
+      renderTextLayer();
+      draggingTextObj = hit;
+      dragStartClient = { x: e.clientX, y: e.clientY };
+      dragOrigPos = { x: hit.x, y: hit.y };
+      dragMoved = false;
+      return;
+    }
+    if (selectedTextId){ selectedTextId = null; renderTextLayer(); }
+    openTextInputAt(p.x, p.y, null);
     return;
   }
   drawing = true;
@@ -6012,29 +6135,100 @@ drawCanvas.addEventListener("pointermove", (e) => {
   drawCtx.beginPath(); drawCtx.moveTo(lastX, lastY); drawCtx.lineTo(p.x, p.y); drawCtx.stroke();
   lastX = p.x; lastY = p.y;
 });
+
+// ---- resize/rotate handle: a single diagonal drag on the selected text's
+// corner handle scales the font size by how much farther the pointer is from
+// the object's center, and rotates by how much the angle to the center changed
+// — the same one-handle gesture iOS Markup / WhatsApp annotation uses.
+$("textObjHandle").addEventListener("pointerdown", (e) => {
+  e.preventDefault(); e.stopPropagation();
+  const obj = annotateTextObjects.find(o => o.id === selectedTextId);
+  if (!obj) return;
+  const p = canvasPos(e);
+  const dx = p.x - obj.x, dy = p.y - obj.y;
+  resizingTextObj = obj;
+  resizeStart = { distance: Math.hypot(dx, dy) || 1, angle: Math.atan2(dy, dx) * 180 / Math.PI, fontSize: obj.fontSize, rotation: obj.rotation };
+});
+$("textObjDelete").addEventListener("pointerdown", (e) => { e.preventDefault(); e.stopPropagation(); });
+$("textObjDelete").addEventListener("click", (e) => {
+  e.stopPropagation();
+  if (!selectedTextId) return;
+  annotateTextObjects = annotateTextObjects.filter(o => o.id !== selectedTextId);
+  selectedTextId = null;
+  renderTextLayer();
+  pushAnnotateHistory();
+});
+
+// Dragging a selected text object and resizing/rotating via its handle both need
+// to keep tracking the pointer even after it leaves the small element the drag
+// started on, so — unlike freehand drawing, which stays inside drawCanvas —
+// these listen on the window rather than relying on the pointer staying over
+// any one element.
+window.addEventListener("pointermove", (e) => {
+  if (draggingTextObj){
+    const dxClient = e.clientX - dragStartClient.x, dyClient = e.clientY - dragStartClient.y;
+    if (Math.abs(dxClient) > 3 || Math.abs(dyClient) > 3) dragMoved = true;
+    const rect = drawCanvas.getBoundingClientRect();
+    const scaleX = drawCanvas.width / rect.width, scaleY = drawCanvas.height / rect.height;
+    draggingTextObj.x = dragOrigPos.x + dxClient * scaleX;
+    draggingTextObj.y = dragOrigPos.y + dyClient * scaleY;
+    renderTextLayer();
+    return;
+  }
+  if (resizingTextObj){
+    const obj = resizingTextObj;
+    const p = canvasPos(e);
+    const dx = p.x - obj.x, dy = p.y - obj.y;
+    const distance = Math.hypot(dx, dy) || 1;
+    const angle = Math.atan2(dy, dx) * 180 / Math.PI;
+    obj.fontSize = Math.min(TEXT_FONT_MAX, Math.max(TEXT_FONT_MIN, Math.round(resizeStart.fontSize * (distance / resizeStart.distance))));
+    obj.rotation = resizeStart.rotation + (angle - resizeStart.angle);
+    renderTextLayer();
+  }
+});
 window.addEventListener("pointerup", () => {
-  if (drawing) pushAnnotateHistory();
-  drawing = false;
+  if (drawing){
+    pushAnnotateHistory();
+    drawing = false;
+  }
+  if (draggingTextObj){
+    const obj = draggingTextObj, wasSelected = dragWasSelected;
+    draggingTextObj = null;
+    if (dragMoved){ renderTextLayer(); pushAnnotateHistory(); }
+    else if (wasSelected) openTextInputAt(obj.x, obj.y, obj.id);
+  }
+  if (resizingTextObj){
+    resizingTextObj = null;
+    pushAnnotateHistory();
+  }
 });
 annotateTextInput.addEventListener("keydown", (e) => {
-  if (e.key === "Enter"){ e.preventDefault(); commitTextInput(annotateTextInput._canvasX, annotateTextInput._canvasY); }
+  if (e.key === "Enter"){ e.preventDefault(); commitTextInput(); }
   else if (e.key === "Escape"){ e.preventDefault(); cancelTextInput(); }
 });
-annotateTextInput.addEventListener("blur", () => commitTextInput(annotateTextInput._canvasX, annotateTextInput._canvasY));
+annotateTextInput.addEventListener("blur", () => commitTextInput());
 $("annotateClear").addEventListener("click", () => {
   drawCtx.clearRect(0,0,drawCanvas.width, drawCanvas.height);
   pushAnnotateHistory();
 });
-$("annotateCancel").addEventListener("click", () => { cancelTextInput(); annotateOverlay.classList.remove("active"); });
+$("annotateCancel").addEventListener("click", () => {
+  cancelTextInput();
+  selectedTextId = null;
+  updateSelectionOverlay();
+  annotateOverlay.classList.remove("active");
+});
 
 $("annotateSave").addEventListener("click", async () => {
   finishTextInput();
+  selectedTextId = null;
+  updateSelectionOverlay();
   $("annotateStatus").textContent = "Uploading annotated photo…";
   const merged = document.createElement("canvas");
   merged.width = baseCanvas.width; merged.height = baseCanvas.height;
   const mctx = merged.getContext("2d");
   mctx.drawImage(baseCanvas, 0, 0);
   mctx.drawImage(drawCanvas, 0, 0);
+  mctx.drawImage(textCanvas, 0, 0);
 
   merged.toBlob(async (blob) => {
     try {
