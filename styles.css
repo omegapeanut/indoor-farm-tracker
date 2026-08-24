@@ -262,11 +262,16 @@ header.top p { margin: 0; color: #666; font-size: 13px; }
 .lightbox-close { position: absolute; top: 20px; right: 26px; color: #fff; font-size: 28px; cursor: pointer; background: none; border: none; }
 
 /* annotate modal */
-.annotate-toolbar { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+.annotate-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 10px; }
 .color-dot { width: 20px; height: 20px; border-radius: 50%; border: 2px solid transparent; cursor: pointer; }
 .color-dot.selected { border-color: #333; }
 .canvas-wrap { position: relative; display: inline-block; max-width: 100%; }
 .canvas-wrap canvas { position: absolute; top: 0; left: 0; max-width: 100%; touch-action: none; }
+.annotate-text-input {
+  position: absolute; z-index: 5; font-size: 20px; font-family: inherit; line-height: 1.2;
+  padding: 2px 4px; border: 1px dashed #888; border-radius: 3px; background: rgba(255,255,255,0.85);
+  min-width: 40px;
+}
 
 /* ---- Attendance tab ---- */
 .checkin-actions { display: flex; gap: 12px; margin-bottom: 12px; }

@@ -5872,6 +5872,8 @@ const baseCtx = baseCanvas.getContext("2d"), drawCtx = drawCanvas.getContext("2d
 let annotateCollection = "findings", annotateFindingId = null, annotatePhotoId = null, annotateField = "photos";
 let currentColor = "#e02020";
 let drawing = false, lastX = 0, lastY = 0;
+let annotateMode = "draw"; // "draw" | "text"
+let annotateHistory = [], annotateRedoStack = [];
 
 document.querySelectorAll(".color-dot").forEach(dot => {
   dot.addEventListener("click", () => {
@@ -5881,6 +5883,39 @@ document.querySelectorAll(".color-dot").forEach(dot => {
   });
 });
 
+function setAnnotateMode(mode){
+  annotateMode = mode;
+  $("annotateToolDraw").classList.toggle("primary", mode === "draw");
+  $("annotateToolText").classList.toggle("primary", mode === "text");
+  finishTextInput();
+}
+$("annotateToolDraw").addEventListener("click", () => setAnnotateMode("draw"));
+$("annotateToolText").addEventListener("click", () => setAnnotateMode("text"));
+
+function updateUndoRedoButtons(){
+  $("annotateUndo").disabled = annotateHistory.length <= 1;
+  $("annotateRedo").disabled = annotateRedoStack.length === 0;
+}
+function pushAnnotateHistory(){
+  annotateHistory.push(drawCtx.getImageData(0, 0, drawCanvas.width, drawCanvas.height));
+  if (annotateHistory.length > 50) annotateHistory.shift();
+  annotateRedoStack = [];
+  updateUndoRedoButtons();
+}
+$("annotateUndo").addEventListener("click", () => {
+  if (annotateHistory.length <= 1) return;
+  annotateRedoStack.push(annotateHistory.pop());
+  drawCtx.putImageData(annotateHistory[annotateHistory.length - 1], 0, 0);
+  updateUndoRedoButtons();
+});
+$("annotateRedo").addEventListener("click", () => {
+  if (annotateRedoStack.length === 0) return;
+  const state = annotateRedoStack.pop();
+  annotateHistory.push(state);
+  drawCtx.putImageData(state, 0, 0);
+  updateUndoRedoButtons();
+});
+
 function openAnnotateModal(col, recordId, photoId, field){
   if (!isAdmin) return;
   annotateCollection = col; annotateFindingId = recordId; annotatePhotoId = photoId;
@@ -5888,6 +5923,7 @@ function openAnnotateModal(col, recordId, photoId, field){
   const record = galleryCache(col).find(r => r.id === recordId);
   const photo = record[annotateField].find(p => p.id === photoId);
   $("annotateStatus").textContent = "";
+  setAnnotateMode("draw");
 
   const img = new Image();
   img.crossOrigin = "anonymous";
@@ -5903,6 +5939,9 @@ function openAnnotateModal(col, recordId, photoId, field){
     baseCtx.clearRect(0,0,w,h);
     baseCtx.drawImage(img, 0, 0, w, h);
     drawCtx.clearRect(0,0,w,h);
+    annotateHistory = [drawCtx.getImageData(0, 0, w, h)];
+    annotateRedoStack = [];
+    updateUndoRedoButtons();
     annotateOverlay.classList.add("active");
   };
   img.onerror = () => { alert("Couldn't load the photo for annotating (Cloudinary CORS or network issue)."); };
@@ -5914,23 +5953,82 @@ function canvasPos(e){
   const scaleX = drawCanvas.width / rect.width, scaleY = drawCanvas.height / rect.height;
   return { x: (e.clientX - rect.left) * scaleX, y: (e.clientY - rect.top) * scaleY };
 }
+
+// ---- text tool: click on the canvas to drop a floating input, styled in the
+// currently-selected color, positioned in CSS pixels (not canvas-internal
+// resolution, which can differ once the photo is scaled to fit the modal).
+const annotateTextInput = $("annotateTextInput");
+function cancelTextInput(){
+  annotateTextInput.style.display = "none";
+  annotateTextInput.value = "";
+}
+// Hiding the input (or moving focus elsewhere) fires a native blur, which also
+// calls commitTextInput below — the display check guards against re-entering
+// this function from that nested blur once we've already committed once.
+function commitTextInput(canvasX, canvasY){
+  if (annotateTextInput.style.display === "none") return;
+  const text = annotateTextInput.value.trim();
+  cancelTextInput();
+  if (!text) return;
+  drawCtx.font = "22px sans-serif";
+  drawCtx.textBaseline = "top";
+  drawCtx.fillStyle = currentColor;
+  drawCtx.fillText(text, canvasX, canvasY);
+  pushAnnotateHistory();
+}
+function finishTextInput(){
+  if (annotateTextInput.style.display !== "none" && annotateTextInput.value.trim()){
+    commitTextInput(annotateTextInput._canvasX, annotateTextInput._canvasY);
+  } else {
+    cancelTextInput();
+  }
+}
 drawCanvas.addEventListener("pointerdown", (e) => {
+  if (annotateMode === "text"){
+    // Without this, the mousedown that follows this pointerdown steals focus back
+    // (to the canvas or nowhere) right after we call .focus() below, which blurs
+    // the input before the user can type anything.
+    e.preventDefault();
+    if (annotateTextInput.style.display !== "none") commitTextInput(annotateTextInput._canvasX, annotateTextInput._canvasY);
+    const wrapRect = $("canvasWrap").getBoundingClientRect();
+    const p = canvasPos(e);
+    annotateTextInput._canvasX = p.x; annotateTextInput._canvasY = p.y;
+    annotateTextInput.style.left = (e.clientX - wrapRect.left) + "px";
+    annotateTextInput.style.top = (e.clientY - wrapRect.top) + "px";
+    annotateTextInput.style.color = currentColor;
+    annotateTextInput.style.display = "block";
+    annotateTextInput.value = "";
+    setTimeout(() => annotateTextInput.focus(), 0);
+    return;
+  }
   drawing = true;
   const p = canvasPos(e); lastX = p.x; lastY = p.y;
   drawCtx.beginPath(); drawCtx.arc(p.x, p.y, 1.6, 0, Math.PI*2); drawCtx.fillStyle = currentColor; drawCtx.fill();
 });
 drawCanvas.addEventListener("pointermove", (e) => {
-  if (!drawing) return;
+  if (!drawing || annotateMode === "text") return;
   const p = canvasPos(e);
   drawCtx.strokeStyle = currentColor; drawCtx.lineWidth = 3; drawCtx.lineCap = "round"; drawCtx.lineJoin = "round";
   drawCtx.beginPath(); drawCtx.moveTo(lastX, lastY); drawCtx.lineTo(p.x, p.y); drawCtx.stroke();
   lastX = p.x; lastY = p.y;
 });
-window.addEventListener("pointerup", () => { drawing = false; });
-$("annotateClear").addEventListener("click", () => drawCtx.clearRect(0,0,drawCanvas.width, drawCanvas.height));
-$("annotateCancel").addEventListener("click", () => annotateOverlay.classList.remove("active"));
+window.addEventListener("pointerup", () => {
+  if (drawing) pushAnnotateHistory();
+  drawing = false;
+});
+annotateTextInput.addEventListener("keydown", (e) => {
+  if (e.key === "Enter"){ e.preventDefault(); commitTextInput(annotateTextInput._canvasX, annotateTextInput._canvasY); }
+  else if (e.key === "Escape"){ e.preventDefault(); cancelTextInput(); }
+});
+annotateTextInput.addEventListener("blur", () => commitTextInput(annotateTextInput._canvasX, annotateTextInput._canvasY));
+$("annotateClear").addEventListener("click", () => {
+  drawCtx.clearRect(0,0,drawCanvas.width, drawCanvas.height);
+  pushAnnotateHistory();
+});
+$("annotateCancel").addEventListener("click", () => { cancelTextInput(); annotateOverlay.classList.remove("active"); });
 
 $("annotateSave").addEventListener("click", async () => {
+  finishTextInput();
   $("annotateStatus").textContent = "Uploading annotated photo…";
   const merged = document.createElement("canvas");
   merged.width = baseCanvas.width; merged.height = baseCanvas.height;
