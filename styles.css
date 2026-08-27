@@ -267,11 +267,32 @@ header.top p { margin: 0; color: #666; font-size: 13px; }
 .color-dot.selected { border-color: #333; }
 .canvas-wrap { position: relative; display: inline-block; max-width: 100%; }
 .canvas-wrap canvas { position: absolute; top: 0; left: 0; max-width: 100%; touch-action: none; }
+/* textCanvas sits on top (visually) so text renders over freehand strokes, but
+   it's a pure rendering layer — all pointer interaction goes through drawCanvas
+   underneath it, which pointer-events:none lets click/tap/drag pass through to. */
+#textCanvas { pointer-events: none; }
 .annotate-text-input {
   position: absolute; z-index: 5; font-size: 20px; font-family: inherit; line-height: 1.2;
   padding: 2px 4px; border: 1px dashed #888; border-radius: 3px; background: rgba(255,255,255,0.85);
   min-width: 40px;
 }
+/* Text annotations are kept as live objects (position/size/rotation/color) and
+   redrawn onto their own canvas layer every frame, rather than baked straight into
+   the drawing canvas — that's what lets a placed piece of text be tapped again
+   later and moved, resized, or rotated instead of becoming permanent ink. */
+.text-obj-selection {
+  position: absolute; box-sizing: border-box; border: 1.5px dashed #1f6feb;
+  pointer-events: none; touch-action: none;
+}
+.text-obj-delete, .text-obj-handle {
+  position: absolute; width: 24px; height: 24px; border-radius: 50%; background: #1f6feb;
+  color: #fff; display: flex; align-items: center; justify-content: center;
+  font-size: 15px; line-height: 1; pointer-events: auto; touch-action: none; user-select: none;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+}
+.text-obj-delete { top: -12px; left: -12px; cursor: pointer; }
+.text-obj-handle { bottom: -12px; right: -12px; cursor: nwse-resize; }
+.text-obj-handle::after { content: ""; width: 8px; height: 8px; border-radius: 50%; background: #fff; }
 
 /* ---- Attendance tab ---- */
 .checkin-actions { display: flex; gap: 12px; margin-bottom: 12px; }

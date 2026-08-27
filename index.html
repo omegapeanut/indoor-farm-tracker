@@ -1051,7 +1051,7 @@
 <div class="overlay" id="annotateOverlay">
   <div class="modal" style="width:auto;">
     <h3>Annotate Photo</h3>
-    <div class="sub">Draw on the photo to mark it up, then save (uploads a new copy to Cloudinary).</div>
+    <div class="sub" id="annotateHint">Draw on the photo, or add text — tap a text label to select it, drag its corner handle to resize and rotate, or tap it again to edit. Then save (uploads a new copy to Cloudinary).</div>
     <div class="annotate-toolbar">
       <span style="font-size:12px; color:#666;">Color:</span>
       <div class="color-dot selected" data-color="#e02020" style="background:#e02020;"></div>
@@ -1068,7 +1068,12 @@
     <div class="canvas-wrap" id="canvasWrap">
       <canvas id="baseCanvas"></canvas>
       <canvas id="drawCanvas"></canvas>
+      <canvas id="textCanvas"></canvas>
       <input type="text" id="annotateTextInput" class="annotate-text-input" style="display:none;">
+      <div class="text-obj-selection" id="textObjSelection" style="display:none;">
+        <div class="text-obj-delete" id="textObjDelete" title="Delete">×</div>
+        <div class="text-obj-handle" id="textObjHandle" title="Drag to resize / rotate"></div>
+      </div>
     </div>
     <div class="sub" id="annotateStatus" style="margin-top:8px;"></div>
     <div class="modal-actions">
