@@ -301,17 +301,23 @@ header.top p { margin: 0; color: #666; font-size: 13px; }
 .checkin-btn.in:hover { background: #196b2c; }
 .checkin-btn.out { background: #b5540b; }
 .checkin-btn.out:hover { background: #9c480a; }
+.checkin-btn.claim { background: #0b57d0; }
+.checkin-btn.claim:hover { background: #0947ac; }
 .kiosk-message { padding: 10px 14px; border-radius: 8px; font-size: 13px; margin-bottom: 14px; }
 .kiosk-message.ok { background: #e6f4ea; color: #1e7e34; }
 .kiosk-message.err { background: #fdeceb; color: #c0392b; }
 .staff-toggle-row { margin-bottom: 14px; }
 .staff-toggle-row button { border: 1px solid #d8d8d8; background: #fff; border-radius: 6px; padding: 6px 12px; cursor: pointer; font-size: 12px; }
-.staff-row { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid #f0f0f0; }
+.staff-row { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid #f0f0f0; }
 .staff-row:last-child { border-bottom: none; }
-.staff-row .staff-name { flex: 1; font-size: 13px; padding: 3px 5px; border-radius: 5px; }
+.staff-row .staff-name { flex: 1 1 100px; font-size: 13px; padding: 3px 5px; border-radius: 5px; }
 .staff-row .staff-name[contenteditable=true]:focus { background: #f6f8fc; outline: 1px solid #cfe0fb; }
 .staff-pin-input { font-size: 13px; color: #333; font-variant-numeric: tabular-nums; letter-spacing: 2px; width: 64px; text-align: center; border: 1px solid #d8d8d8; border-radius: 5px; padding: 4px 2px; }
 .staff-pin-input:focus { outline: 1px solid #cfe0fb; border-color: #cfe0fb; }
+.staff-dept-input, .staff-empid-input { font-size: 12.5px; color: #333; border: 1px solid #d8d8d8; border-radius: 5px; padding: 4px 6px; width: 110px; }
+.staff-dept-input:focus, .staff-empid-input:focus { outline: 1px solid #cfe0fb; border-color: #cfe0fb; }
+.staff-sig-thumb { height: 28px; max-width: 70px; object-fit: contain; border: 1px solid #eee; border-radius: 4px; background: #fafafa; vertical-align: middle; }
+.staff-sig-btn { font-size: 11.5px; padding: 4px 8px; }
 .att-summary { font-size: 12px; color: #666; }
 
 .att-table-head {
@@ -716,6 +722,8 @@ header.top p { margin: 0; color: #666; font-size: 13px; }
 .pdf-claims-sign-row { display: flex; gap: 60px; margin-bottom: 22px; }
 .pdf-claims-sign-block { flex: 1; font-size: 11.5px; color: #444; }
 .pdf-claims-sign-line { border-bottom: 1px solid #999; height: 28px; }
+.pdf-claims-sign-line.pdf-claims-sign-date { display: flex; align-items: flex-end; padding-bottom: 2px; font-weight: 600; color: #222; }
+.pdf-claims-sign-img { display: block; max-height: 26px; max-width: 100%; border-bottom: 1px solid #999; margin-bottom: 2px; }
 .pdf-meta.pdf-claims-footer-meta { border-bottom: none; padding-bottom: 0; margin: 24px 0 0; }
 .pdf-claims-photo-grid { display: flex; flex-wrap: wrap; gap: 10px; margin: 8px 0; }
 .pdf-claims-photo-item { width: calc(25% - 8px); }
