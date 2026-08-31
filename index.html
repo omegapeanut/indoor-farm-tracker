@@ -255,6 +255,9 @@
           <button class="checkin-btn in" id="kioskCheckInBtn">✅ Check In</button>
           <button class="checkin-btn out" id="kioskCheckOutBtn">🚪 Check Out</button>
         </div>
+        <div class="checkin-actions" style="margin-top:8px;">
+          <button class="checkin-btn claim" id="kioskClaimBtn" style="flex:1;">🧾 Submit a Claim</button>
+        </div>
         <div class="kiosk-message" id="kioskMessage" style="display:none;"></div>
 
         <div class="staff-toggle-row" id="staffToggleRow" style="display:none;">
@@ -262,11 +265,12 @@
         </div>
         <div class="section" id="staffPanel" style="display:none;">
           <h2>Staff PINs</h2>
-          <p class="hint">Give each staff member a 4-digit PIN — they'll enter it after pressing Check In / Check Out above. PINs are readable by the app (needed for the kiosk to work) but only admin can add, edit, or remove staff.</p>
+          <p class="hint">Give each staff member a 4-digit PIN — they'll enter it after pressing Check In / Check Out (or Submit a Claim) above. Department and Employee ID are used on generated claim forms; Employee ID is assigned automatically and stays the same every time. PINs are readable by the app (needed for the kiosk to work) but only admin can add, edit, or remove staff.</p>
           <div id="staffList"></div>
-          <div class="add-row">
+          <div class="add-row" style="flex-wrap:wrap;">
             <input type="text" id="newStaffName" placeholder="Staff name">
             <input type="text" id="newStaffPin" placeholder="4-digit PIN" maxlength="4" inputmode="numeric" style="max-width:110px;">
+            <input type="text" id="newStaffDepartment" placeholder="Department (optional)" style="max-width:170px;">
             <button id="addStaffBtn">Add</button>
           </div>
           <div class="sub" id="staffError" style="color:#c0392b; display:none; margin-top:8px;"></div>
@@ -1041,6 +1045,53 @@
   </div>
 </div>
 
+<!-- SUBMIT A CLAIM MODAL (PIN-gated self-service) -->
+<div class="overlay" id="claimSubmitOverlay">
+  <div class="modal">
+    <h3>Submit a Claim</h3>
+    <div class="sub">Filing as <strong id="claimSubmitName"></strong><span id="claimSubmitMeta"></span></div>
+    <div class="row2">
+      <div class="field"><label>Date</label><input type="date" id="claimSubmitDate"></div>
+      <div class="field"><label>Category</label>
+        <select id="claimSubmitCategory">
+          <option value="taxi">Taxi / Transport</option>
+          <option value="meals">Meals</option>
+          <option value="purchases">Purchases</option>
+          <option value="other">Other</option>
+        </select>
+      </div>
+    </div>
+    <div class="field"><label>Amount</label><input type="number" id="claimSubmitAmount" min="0" step="0.01" placeholder="0.00"></div>
+    <div class="field"><label>What's this for?</label><textarea id="claimSubmitNotes" rows="2" placeholder="e.g. Taxi home after night shift"></textarea></div>
+    <div class="field">
+      <label>Receipt photo (optional)</label>
+      <div><button type="button" class="btn" id="claimSubmitReceiptBtn">📷 Attach receipt</button></div>
+      <div id="claimSubmitReceiptPreview" class="photo-strip" style="margin-top:6px;"></div>
+    </div>
+    <div class="field">
+      <label>Signature</label>
+      <div id="claimSubmitSignatureOnFile" style="display:none;">
+        <img id="claimSubmitSignatureImg" class="staff-sig-thumb" style="height:40px; max-width:140px;">
+        <span class="hint">Signature on file — attached automatically.</span>
+        <button type="button" class="btn staff-sig-btn" id="claimSubmitReplaceSignatureBtn">Replace</button>
+      </div>
+      <div id="claimSubmitNoSignature">
+        <button type="button" class="btn" id="claimSubmitAddSignatureBtn">✎ Upload your signature</button>
+        <span class="hint">Optional — or sign the printed claim form by hand later.</span>
+      </div>
+      <img id="claimSubmitSignaturePreview" class="staff-sig-thumb" style="display:none; height:40px; max-width:140px; margin-top:6px;">
+    </div>
+    <div class="sub" id="claimSubmitStatus" style="margin-top:8px;"></div>
+    <div class="modal-actions">
+      <div></div>
+      <div style="display:flex; gap:8px;">
+        <button class="btn" id="claimSubmitCancelBtn">Cancel</button>
+        <button class="btn primary" id="claimSubmitBtn">Submit Claim</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- LIGHTBOX -->
 <div class="lightbox" id="lightbox">
   <button class="lightbox-close" id="lightboxClose">&times;</button>
@@ -1087,6 +1138,9 @@
 </div>
 
 <input type="file" id="photoFileInput" accept="image/*" multiple style="display:none;">
+<input type="file" id="staffSignatureFileInput" accept="image/*" style="display:none;">
+<input type="file" id="claimReceiptFileInput" accept="image/*" multiple style="display:none;">
+<input type="file" id="claimSignatureFileInput" accept="image/*" style="display:none;">
 
 <!-- PDF export target: only visible during print (see @media print in styles.css) -->
 <div id="pdfPrintArea"></div>

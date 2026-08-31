@@ -1205,10 +1205,32 @@ $("deleteSeriesBtn").addEventListener("click", async () => {
 // STAFF PIN ROSTER (Firestore: staff/{id})
 // ============================================================================
 let staffCache = [];
+// Employee IDs are assigned once and never change, so a claim form always shows the
+// same ID for the same person. Sequential and zero-padded (EMP001, EMP002, …) rather
+// than random, since it's meant to read like a real company ID on a printed form.
+function nextEmployeeId(){
+  let max = 0;
+  staffCache.forEach(s => {
+    const m = /^EMP(\d+)$/.exec(s.employeeId || "");
+    if (m) max = Math.max(max, Number(m[1]));
+  });
+  return "EMP" + String(max + 1).padStart(3, "0");
+}
 onSnapshot(collection(db, "staff"), (snap) => {
   staffCache = snap.docs.map(d => ({ id: d.id, ...d.data() }));
   renderStaffList();
   markListenerReady();
+  // Backfill: any staff member added before Employee IDs existed gets one assigned
+  // automatically (admin-only, since staff writes require it) — this only ever
+  // needs to run once per person.
+  if (isAdmin){
+    staffCache.filter(s => !s.employeeId).forEach(async (s) => {
+      const employeeId = nextEmployeeId();
+      staffCache = staffCache.map(x => x.id === s.id ? { ...x, employeeId } : x);
+      try { await updateDoc(doc(db, "staff", s.id), { employeeId }); }
+      catch (err){ /* will retry next snapshot */ }
+    });
+  }
 }, () => setSyncStatus("err", "Connection error"));
 
 function renderStaffList(){
@@ -1259,6 +1281,56 @@ function renderStaffList(){
     });
     pin.addEventListener("keydown", (e) => { if (e.key === "Enter"){ e.preventDefault(); pin.blur(); } });
 
+    const dept = document.createElement("input");
+    dept.className = "staff-dept-input";
+    dept.type = "text";
+    dept.placeholder = "Department";
+    dept.value = s.department || "";
+    dept.addEventListener("blur", async () => {
+      const val = dept.value.trim();
+      if (val === (s.department || "")) return;
+      try { await updateDoc(doc(db, "staff", s.id), { department: val }); }
+      catch (err){ alert("Couldn't save department: " + err.message); dept.value = s.department || ""; }
+    });
+    dept.addEventListener("keydown", (e) => { if (e.key === "Enter"){ e.preventDefault(); dept.blur(); } });
+
+    const empId = document.createElement("input");
+    empId.className = "staff-empid-input";
+    empId.type = "text";
+    empId.title = "Employee ID (used on claim forms)";
+    empId.placeholder = "Employee ID";
+    empId.value = s.employeeId || "";
+    empId.addEventListener("blur", async () => {
+      const val = empId.value.trim();
+      if (val === (s.employeeId || "")) return;
+      try { await updateDoc(doc(db, "staff", s.id), { employeeId: val }); }
+      catch (err){ alert("Couldn't save employee ID: " + err.message); empId.value = s.employeeId || ""; }
+    });
+    empId.addEventListener("keydown", (e) => { if (e.key === "Enter"){ e.preventDefault(); empId.blur(); } });
+
+    const sigWrap = document.createElement("span");
+    sigWrap.style.cssText = "display:flex; align-items:center; gap:6px;";
+    if (s.signatureUrl){
+      const sigImg = document.createElement("img");
+      sigImg.className = "staff-sig-thumb"; sigImg.src = s.signatureUrl; sigImg.title = "Signature on file";
+      sigWrap.appendChild(sigImg);
+    }
+    const sigBtn = document.createElement("button");
+    sigBtn.className = "btn staff-sig-btn";
+    sigBtn.textContent = s.signatureUrl ? "Replace sig." : "+ Signature";
+    sigBtn.addEventListener("click", () => { staffSignatureTargetId = s.id; $("staffSignatureFileInput").click(); });
+    sigWrap.appendChild(sigBtn);
+    if (s.signatureUrl){
+      const sigRemove = document.createElement("button");
+      sigRemove.className = "icon-btn"; sigRemove.textContent = "✕"; sigRemove.title = "Remove signature";
+      sigRemove.addEventListener("click", async () => {
+        if (!confirm("Remove " + s.name + "'s saved signature?")) return;
+        try { await updateDoc(doc(db, "staff", s.id), { signatureUrl: null }); }
+        catch (err){ alert("Couldn't remove signature: " + err.message); }
+      });
+      sigWrap.appendChild(sigRemove);
+    }
+
     const del = document.createElement("button");
     del.className = "icon-btn";
     del.textContent = "✕";
@@ -1268,10 +1340,25 @@ function renderStaffList(){
       await moveToTrash("staff", s.id, s);
     });
 
-    row.appendChild(name); row.appendChild(pin); row.appendChild(pinErr); row.appendChild(del);
+    row.appendChild(name); row.appendChild(dept); row.appendChild(empId); row.appendChild(pin); row.appendChild(pinErr);
+    row.appendChild(sigWrap); row.appendChild(del);
     list.appendChild(row);
   });
 }
+
+let staffSignatureTargetId = null;
+$("staffSignatureFileInput").addEventListener("change", async () => {
+  const file = $("staffSignatureFileInput").files[0];
+  const targetId = staffSignatureTargetId;
+  $("staffSignatureFileInput").value = "";
+  if (!file || !targetId) return;
+  try {
+    const { url } = await uploadToCloudinary(file);
+    await updateDoc(doc(db, "staff", targetId), { signatureUrl: url });
+  } catch (err){
+    alert("Couldn't upload this signature: " + err.message);
+  }
+});
 
 $("toggleStaffPanelBtn").addEventListener("click", () => {
   const panel = $("staffPanel");
@@ -1280,15 +1367,16 @@ $("toggleStaffPanelBtn").addEventListener("click", () => {
 
 $("addStaffBtn").addEventListener("click", async () => {
   if (!isAdmin) return;
-  const nameInput = $("newStaffName"), pinInput = $("newStaffPin"), errEl = $("staffError");
+  const nameInput = $("newStaffName"), pinInput = $("newStaffPin"), deptInput = $("newStaffDepartment"), errEl = $("staffError");
   errEl.style.display = "none";
   const name = nameInput.value.trim();
   const pin = pinInput.value.trim();
+  const department = deptInput.value.trim();
   if (!name || !/^\d{4}$/.test(pin)){ errEl.textContent = "Enter a name and a 4-digit PIN."; errEl.style.display = "block"; return; }
   if (staffCache.some(s => s.pin === pin)){ errEl.textContent = "That PIN is already assigned to someone else — pick a different one."; errEl.style.display = "block"; return; }
   try {
-    await addDoc(collection(db, "staff"), { name, pin });
-    nameInput.value = ""; pinInput.value = "";
+    await addDoc(collection(db, "staff"), { name, pin, department, employeeId: nextEmployeeId(), signatureUrl: null });
+    nameInput.value = ""; pinInput.value = ""; deptInput.value = "";
   } catch (err){
     errEl.textContent = "Couldn't save this staff member: " + err.message;
     errEl.style.display = "block";
@@ -1513,8 +1601,8 @@ let pinBuffer = "", pinMode = "in";
 function updatePinDots(){ document.querySelectorAll("#pinDots .pin-dot").forEach((dot,i) => dot.classList.toggle("filled", i < pinBuffer.length)); }
 function openPinPad(mode){
   pinMode = mode; pinBuffer = "";
-  $("pinModalTitle").textContent = mode === "in" ? "Check In" : "Check Out";
-  $("pinModalSub").textContent = "Enter your 4-digit PIN";
+  $("pinModalTitle").textContent = mode === "in" ? "Check In" : mode === "out" ? "Check Out" : "Submit a Claim";
+  $("pinModalSub").textContent = mode === "claim" ? "Enter your 4-digit PIN to file a claim" : "Enter your 4-digit PIN";
   $("pinError").textContent = "";
   updatePinDots();
   pinOverlay.classList.add("active");
@@ -1522,6 +1610,7 @@ function openPinPad(mode){
 function closePinPad(){ pinOverlay.classList.remove("active"); pinBuffer = ""; }
 $("kioskCheckInBtn").addEventListener("click", () => openPinPad("in"));
 $("kioskCheckOutBtn").addEventListener("click", () => openPinPad("out"));
+$("kioskClaimBtn").addEventListener("click", () => openPinPad("claim"));
 $("pinCancelBtn").addEventListener("click", closePinPad);
 pinOverlay.addEventListener("click", (e) => { if (e.target === pinOverlay) closePinPad(); });
 document.querySelectorAll("#pinPad button[data-digit]").forEach(btn => {
@@ -1543,7 +1632,8 @@ function attemptPin(){
     return;
   }
   closePinPad();
-  performCheckAction(match, pinMode);
+  if (pinMode === "claim") openClaimSubmitModal(match);
+  else performCheckAction(match, pinMode);
 }
 
 function showKioskMessage(text, isErr){
@@ -1604,6 +1694,125 @@ async function performCheckAction(staffMember, mode){
     showKioskMessage("Couldn't record this: " + err.message, true);
   }
 }
+
+// ---- Submit a Claim kiosk (PIN-gated self-service, see firestore.rules: claims
+// allows an unauthenticated create) — pre-fills the claimant's department, employee
+// ID, and saved signature from their staff record, so the same person always claims
+// under the same identity without needing the admin login. ----
+const claimSubmitOverlay = $("claimSubmitOverlay");
+let claimSubmitStaff = null;
+let claimSubmitReceiptFiles = [];
+let claimSubmitSignatureFile = null;
+
+function openClaimSubmitModal(staffMember){
+  claimSubmitStaff = staffMember;
+  claimSubmitReceiptFiles = [];
+  claimSubmitSignatureFile = null;
+  $("claimSubmitName").textContent = staffMember.name;
+  const metaBits = [];
+  if (staffMember.department) metaBits.push(staffMember.department);
+  if (staffMember.employeeId) metaBits.push(staffMember.employeeId);
+  $("claimSubmitMeta").textContent = metaBits.length ? " (" + metaBits.join(" · ") + ")" : "";
+  const t = toKey(new Date());
+  $("claimSubmitDate").value = inRange(t) ? t : START_DATE;
+  $("claimSubmitCategory").value = "taxi";
+  $("claimSubmitAmount").value = "";
+  $("claimSubmitNotes").value = "";
+  $("claimSubmitReceiptPreview").innerHTML = "";
+  $("claimSubmitStatus").textContent = "";
+  $("claimSubmitSignaturePreview").style.display = "none";
+  $("claimSubmitSignatureOnFile").style.display = staffMember.signatureUrl ? "block" : "none";
+  if (staffMember.signatureUrl) $("claimSubmitSignatureImg").src = staffMember.signatureUrl;
+  $("claimSubmitNoSignature").style.display = staffMember.signatureUrl ? "none" : "block";
+  $("claimSubmitBtn").disabled = false; $("claimSubmitBtn").textContent = "Submit Claim";
+  claimSubmitOverlay.classList.add("active");
+}
+function closeClaimSubmitModal(){ claimSubmitOverlay.classList.remove("active"); claimSubmitStaff = null; }
+$("claimSubmitCancelBtn").addEventListener("click", closeClaimSubmitModal);
+claimSubmitOverlay.addEventListener("click", (e) => { if (e.target === claimSubmitOverlay) closeClaimSubmitModal(); });
+
+function renderClaimSubmitReceiptPreview(){
+  const strip = $("claimSubmitReceiptPreview");
+  strip.innerHTML = "";
+  claimSubmitReceiptFiles.forEach((file, i) => {
+    const item = document.createElement("div");
+    item.className = "photo-item";
+    const wrap = document.createElement("div");
+    wrap.className = "photo-thumb-wrap";
+    const img = document.createElement("img");
+    img.className = "photo-thumb"; img.src = URL.createObjectURL(file);
+    wrap.appendChild(img);
+    const rem = document.createElement("button");
+    rem.className = "photo-remove"; rem.textContent = "✕"; rem.title = "Remove";
+    rem.addEventListener("click", () => { claimSubmitReceiptFiles.splice(i, 1); renderClaimSubmitReceiptPreview(); });
+    wrap.appendChild(rem);
+    item.appendChild(wrap);
+    strip.appendChild(item);
+  });
+}
+$("claimSubmitReceiptBtn").addEventListener("click", () => $("claimReceiptFileInput").click());
+$("claimReceiptFileInput").addEventListener("change", () => {
+  claimSubmitReceiptFiles.push(...Array.from($("claimReceiptFileInput").files));
+  $("claimReceiptFileInput").value = "";
+  renderClaimSubmitReceiptPreview();
+});
+
+$("claimSubmitAddSignatureBtn").addEventListener("click", () => $("claimSignatureFileInput").click());
+$("claimSubmitReplaceSignatureBtn").addEventListener("click", () => $("claimSignatureFileInput").click());
+$("claimSignatureFileInput").addEventListener("change", () => {
+  const file = $("claimSignatureFileInput").files[0];
+  $("claimSignatureFileInput").value = "";
+  if (!file) return;
+  claimSubmitSignatureFile = file;
+  const preview = $("claimSubmitSignaturePreview");
+  preview.src = URL.createObjectURL(file);
+  preview.style.display = "inline-block";
+});
+
+$("claimSubmitBtn").addEventListener("click", async () => {
+  if (!claimSubmitStaff) return;
+  const amount = $("claimSubmitAmount").value === "" ? null : Number($("claimSubmitAmount").value);
+  if (!amount || amount <= 0){ $("claimSubmitStatus").textContent = "Enter the amount you're claiming."; return; }
+  const btn = $("claimSubmitBtn");
+  btn.disabled = true; btn.textContent = "Submitting…";
+  $("claimSubmitStatus").textContent = "";
+  try {
+    const photos = [];
+    for (const file of claimSubmitReceiptFiles){
+      const { url, publicId } = await uploadToCloudinary(file);
+      photos.push({ id: uid(), url, publicId });
+    }
+    let signatureUrl = claimSubmitStaff.signatureUrl || null;
+    if (claimSubmitSignatureFile){
+      const { url } = await uploadToCloudinary(claimSubmitSignatureFile);
+      signatureUrl = url;
+      // Best-effort: save it back for next time. If this write fails (e.g. offline),
+      // the claim itself still goes through with the signature attached below.
+      try { await updateDoc(doc(db, "staff", claimSubmitStaff.id), { signatureUrl: url }); } catch (err){ /* not fatal */ }
+    }
+    const payload = {
+      date: $("claimSubmitDate").value || toKey(new Date()),
+      claimant: claimSubmitStaff.name,
+      staffId: claimSubmitStaff.id,
+      department: claimSubmitStaff.department || "",
+      employeeId: claimSubmitStaff.employeeId || "",
+      signatureUrl,
+      category: $("claimSubmitCategory").value || "other",
+      amount,
+      notes: $("claimSubmitNotes").value.trim(),
+      status: "pending",
+      photos,
+    };
+    await addDoc(collection(db, "claims"), payload);
+    const claimantName = claimSubmitStaff.name;
+    closeClaimSubmitModal();
+    showKioskMessage("Claim submitted: $" + amount.toFixed(2) + " (" + (CLAIM_CATEGORY_LABELS[payload.category] || "Other") + ") for " + claimantName + " — pending review.", false);
+  } catch (err){
+    $("claimSubmitStatus").textContent = "Couldn't submit this claim: " + err.message;
+  } finally {
+    btn.disabled = false; btn.textContent = "Submit Claim";
+  }
+});
 
 // ============================================================================
 // HOUSE RULES (Firestore: meta/houseRules, field rules: string[])
@@ -2417,15 +2626,26 @@ function buildClaimsPdfHtml(){
   const claimants = [...new Set(items.map(c => (c.claimant || "").trim()).filter(Boolean))];
   const dates = items.map(c => c.date).filter(Boolean).sort();
   const expensePeriod = dates.length ? (dates[0] === dates[dates.length - 1] ? dates[0] : dates[0] + " – " + dates[dates.length - 1]) : "—";
+  // Employee ID/Department/Signature live on each claim's staff snapshot (see the
+  // "Submit a Claim" kiosk and the admin add-form) — only shown when every claim in
+  // this report agrees on the same value, since one combined form can't show more
+  // than one of each without being ambiguous about who it belongs to.
+  const distinctEmployeeIds = [...new Set(items.map(c => c.employeeId).filter(Boolean))];
+  const distinctDepartments = [...new Set(items.map(c => c.department).filter(Boolean))];
+  const distinctSignatures = [...new Set(items.map(c => c.signatureUrl).filter(Boolean))];
+  const employeeId = distinctEmployeeIds.length === 1 ? distinctEmployeeIds[0] : null;
+  const department = distinctDepartments.length === 1 ? distinctDepartments[0] : null;
+  const signatureUrl = distinctSignatures.length === 1 ? distinctSignatures[0] : null;
+  const todayFormatted = new Date().toLocaleDateString("default", { dateStyle: "medium" });
 
   html += '<div class="pdf-claims-header">';
   html += '<div class="pdf-claims-header-row"><span class="pdf-claims-label">Company Name:</span><span class="pdf-claims-value pdf-claims-value-wide">Indoor Farm — Takeover Tracker</span></div>';
   html += '<div class="pdf-claims-header-row two">';
   html += '<span><span class="pdf-claims-label">Employee Name:</span><span class="pdf-claims-value">' + (claimants.length ? escapeHtml(claimants.join(", ")) : "&nbsp;") + '</span></span>';
-  html += '<span><span class="pdf-claims-label">Employee ID:</span><span class="pdf-claims-value">&nbsp;</span></span>';
+  html += '<span><span class="pdf-claims-label">Employee ID:</span><span class="pdf-claims-value">' + (employeeId ? escapeHtml(employeeId) : "&nbsp;") + '</span></span>';
   html += '</div>';
   html += '<div class="pdf-claims-header-row two">';
-  html += '<span><span class="pdf-claims-label">Department:</span><span class="pdf-claims-value">&nbsp;</span></span>';
+  html += '<span><span class="pdf-claims-label">Department:</span><span class="pdf-claims-value">' + (department ? escapeHtml(department) : "&nbsp;") + '</span></span>';
   html += '<span><span class="pdf-claims-label">Expense Period:</span><span class="pdf-claims-value">' + escapeHtml(expensePeriod) + '</span></span>';
   html += '</div>';
   html += '</div>';
@@ -2460,8 +2680,12 @@ function buildClaimsPdfHtml(){
   html += '</div>';
 
   html += '<div class="pdf-claims-sign-row">';
-  html += '<div class="pdf-claims-sign-block"><div class="pdf-claims-sign-line"></div><span>Employee Signature</span></div>';
-  html += '<div class="pdf-claims-sign-block"><div class="pdf-claims-sign-line"></div><span>Date</span></div>';
+  if (signatureUrl){
+    html += '<div class="pdf-claims-sign-block"><img class="pdf-claims-sign-img" src="' + escapeHtml(cloudinaryThumb(signatureUrl, 300)) + '"><span>Employee Signature</span></div>';
+  } else {
+    html += '<div class="pdf-claims-sign-block"><div class="pdf-claims-sign-line"></div><span>Employee Signature</span></div>';
+  }
+  html += '<div class="pdf-claims-sign-block"><div class="pdf-claims-sign-line pdf-claims-sign-date">' + escapeHtml(todayFormatted) + '</div><span>Date</span></div>';
   html += '</div>';
 
   const withPhotos = items.filter(c => (c.photos || []).length);
@@ -2508,8 +2732,19 @@ $("addClaimBtn").addEventListener("click", async () => {
   const notes = notesInput.value.trim();
   const btn = $("addClaimBtn");
   btn.disabled = true; btn.textContent = "Adding…";
+  // If the claimant matches a known staff member, snapshot their department/employee
+  // ID/signature onto the claim too, same as the self-service kiosk flow — so a claim
+  // logged manually by the admin still gets the enriched claim-form fields.
+  const matchedStaff = staffCache.find(s => s.name.trim().toLowerCase() === claimant.toLowerCase());
+  const payload = { date, claimant, category, amount, notes, status: "pending", photos: [] };
+  if (matchedStaff){
+    payload.staffId = matchedStaff.id;
+    payload.department = matchedStaff.department || "";
+    payload.employeeId = matchedStaff.employeeId || "";
+    payload.signatureUrl = matchedStaff.signatureUrl || null;
+  }
   try {
-    const newDoc = await addDoc(collection(db, "claims"), { date, claimant, category, amount, notes, status: "pending", photos: [] });
+    const newDoc = await addDoc(collection(db, "claims"), payload);
     expandedClaims[newDoc.id] = true;
     claimantInput.value = ""; amountInput.value = ""; notesInput.value = ""; categoryInput.value = "taxi";
   } catch (err){

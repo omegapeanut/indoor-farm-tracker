@@ -19,6 +19,11 @@ rules_version = '2';
 //   hidden from a determined snoop, that requires a Cloud Function so the
 //   client never reads the staff collection directly — ask me if you want
 //   that built later.
+// - Claims are the exception to "anyone can create, only admin can read" —
+//   they're admin-only to even view (amounts/receipts), but a PIN-matched
+//   staff member can still CREATE their own claim (the "Submit a Claim"
+//   kiosk), the same way anyone can create an attendance punch. They can't
+//   read it back afterward, or see anyone else's claims, without admin login.
 // ============================================================================
 
 service cloud.firestore {
@@ -36,6 +41,15 @@ service cloud.firestore {
     function isKioskPunch() {
       return request.resource.data.diff(resource.data).affectedKeys()
         .hasOnly(['signIn', 'signOut', 'signInLoc', 'signOutLoc']);
+    }
+
+    // The PIN-authenticated "Submit a Claim" kiosk saves a first-time signature back
+    // onto the claimant's own staff record so future claims can reuse it, without
+    // requiring the admin login. Same trust level as the PIN itself (a casual
+    // deterrent, not real auth) — scoped to touching only this one field.
+    function isSignatureUpdate() {
+      return request.resource.data.diff(resource.data).affectedKeys()
+        .hasOnly(['signatureUrl']);
     }
 
     match /schedule/{date} {
@@ -100,7 +114,9 @@ service cloud.firestore {
 
     match /staff/{id} {
       allow read: if true;
-      allow write: if isAdmin();
+      allow create: if isAdmin();
+      allow update: if isAdmin() || isSignatureUpdate();
+      allow delete: if isAdmin();
     }
 
     match /attendance/{id} {
@@ -157,10 +173,16 @@ service cloud.firestore {
 
     // Claims (expense reimbursement + receipts) are the one collection kept off the
     // "anyone can read" default above — amounts and receipt photos are more sensitive
-    // than farm operations notes, so this needs an admin login to even view.
+    // than farm operations notes, so this needs an admin login to even view or manage.
+    // Creating one is the exception, mirroring the attendance kiosk: the PIN-gated
+    // "Submit a Claim" flow lets a staff member file their own claim (as a create)
+    // without an admin login, but they can't read it back, edit it, or see anyone
+    // else's — only admin can review, edit, or delete.
     match /claims/{id} {
       allow read: if isAdmin();
-      allow write: if isAdmin();
+      allow create: if true;
+      allow update: if isAdmin();
+      allow delete: if isAdmin();
     }
 
     // Deleted records land here before being permanently removed (see moveToTrash()
