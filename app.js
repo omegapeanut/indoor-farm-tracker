@@ -2070,8 +2070,8 @@ function cloudinaryThumb(url, width){
   return url.replace("/upload/", "/upload/w_" + width + ",q_auto,f_auto/");
 }
 
-function buildFindingsPdfHtml(){
-  const items = findingsCache.slice().sort((a,b) => b.date.localeCompare(a.date));
+function buildFindingsPdfHtml(items){
+  if (!items) items = findingsCache.slice().sort((a,b) => b.date.localeCompare(a.date));
   const generated = new Date().toLocaleString("default", { dateStyle: "medium", timeStyle: "short" });
   let html = '<div class="pdf-doc"><h1>Findings Log</h1>';
   html += '<p class="pdf-meta">Indoor Farm — Takeover Tracker · Generated ' + escapeHtml(generated) + ' · ' + items.length + ' entr' + (items.length === 1 ? "y" : "ies") + '</p>';
@@ -2108,14 +2108,99 @@ function waitForImages(container, timeoutMs){
   }));
 }
 
-$("downloadFindingsPdfBtn").addEventListener("click", async () => {
+// ---- Findings report: pick which entries to include, then generate a PDF from just
+// those (text + photos), instead of always dumping the whole log. ----
+const findingsReportOverlay = $("findingsReportOverlay");
+let findingsReportSelected = {};
+
+function findingsReportSortedItems(){
+  return findingsCache.slice().sort((a,b) => b.date.localeCompare(a.date));
+}
+function updateFindingsReportCount(){
+  const total = findingsReportSortedItems().length;
+  const selected = Object.values(findingsReportSelected).filter(Boolean).length;
+  $("findingsReportCount").textContent = selected + " of " + total + " selected";
+  $("findingsReportGenerateBtn").disabled = selected === 0;
+}
+function renderFindingsReportList(){
+  const list = $("findingsReportList");
+  list.innerHTML = "";
+  const items = findingsReportSortedItems();
+  if (items.length === 0){
+    const empty = document.createElement("div");
+    empty.className = "empty-state";
+    empty.textContent = "No findings logged yet.";
+    list.appendChild(empty);
+    updateFindingsReportCount();
+    return;
+  }
+  items.forEach(f => {
+    const row = document.createElement("label");
+    row.className = "report-select-row";
+    const cb = document.createElement("input");
+    cb.type = "checkbox";
+    cb.checked = !!findingsReportSelected[f.id];
+    cb.addEventListener("change", () => {
+      findingsReportSelected[f.id] = cb.checked;
+      updateFindingsReportCount();
+    });
+    row.appendChild(cb);
+    const main = document.createElement("div");
+    main.className = "report-select-main";
+    const dateEl = document.createElement("div");
+    dateEl.className = "report-select-date"; dateEl.textContent = f.date;
+    main.appendChild(dateEl);
+    if (f.text){
+      const textEl = document.createElement("div");
+      textEl.className = "report-select-text"; textEl.textContent = f.text;
+      main.appendChild(textEl);
+    }
+    if (f.photos && f.photos.length){
+      const photosEl = document.createElement("div");
+      photosEl.className = "report-select-photos";
+      photosEl.textContent = "📷 " + f.photos.length + " photo" + (f.photos.length === 1 ? "" : "s");
+      main.appendChild(photosEl);
+    }
+    row.appendChild(main);
+    list.appendChild(row);
+  });
+  updateFindingsReportCount();
+}
+function openFindingsReportModal(){
+  // Default to everything selected, so a click straight through to Generate reproduces
+  // the old "whole log" report — selection is there for when you want less than that.
+  findingsReportSelected = {};
+  findingsReportSortedItems().forEach(f => { findingsReportSelected[f.id] = true; });
+  renderFindingsReportList();
+  findingsReportOverlay.classList.add("active");
+}
+function closeFindingsReportModal(){ findingsReportOverlay.classList.remove("active"); }
+$("findingsReportCancelBtn").addEventListener("click", closeFindingsReportModal);
+findingsReportOverlay.addEventListener("click", (e) => { if (e.target === findingsReportOverlay) closeFindingsReportModal(); });
+$("findingsReportSelectAll").addEventListener("click", () => {
+  findingsReportSortedItems().forEach(f => { findingsReportSelected[f.id] = true; });
+  renderFindingsReportList();
+});
+$("findingsReportSelectNone").addEventListener("click", () => {
+  findingsReportSelected = {};
+  renderFindingsReportList();
+});
+
+$("downloadFindingsPdfBtn").addEventListener("click", () => {
   if (!isAdmin) return;
-  const btn = $("downloadFindingsPdfBtn");
+  openFindingsReportModal();
+});
+
+$("findingsReportGenerateBtn").addEventListener("click", async () => {
+  const selectedItems = findingsReportSortedItems().filter(f => findingsReportSelected[f.id]);
+  if (selectedItems.length === 0) return;
+  const btn = $("findingsReportGenerateBtn");
   const originalLabel = btn.textContent;
   btn.disabled = true; btn.textContent = "Preparing PDF…";
   const area = $("pdfPrintArea");
-  area.innerHTML = buildFindingsPdfHtml();
+  area.innerHTML = buildFindingsPdfHtml(selectedItems);
   await waitForImages(area, 8000);
+  closeFindingsReportModal();
   document.body.classList.add("printing-pdf");
   window.print();
   btn.disabled = false; btn.textContent = originalLabel;
