@@ -232,6 +232,14 @@ header.top p { margin: 0; color: #666; font-size: 13px; }
 .reorder-row .reorder-next { font-weight: 600; color: #0b57d0; }
 
 .finding-card { border: 1px solid #eee; border-radius: 8px; margin-bottom: 10px; overflow: hidden; }
+.report-select-list { max-height: 50vh; overflow-y: auto; border: 1px solid #eee; border-radius: 8px; padding: 2px 12px; }
+.report-select-row { display: flex; align-items: flex-start; gap: 10px; padding: 9px 0; border-bottom: 1px solid #f0f0f0; cursor: pointer; }
+.report-select-row:last-child { border-bottom: none; }
+.report-select-row input[type=checkbox] { margin-top: 3px; width: 16px; height: 16px; flex-shrink: 0; }
+.report-select-row .report-select-main { flex: 1; min-width: 0; }
+.report-select-row .report-select-date { font-size: 12px; font-weight: 600; color: #333; }
+.report-select-row .report-select-text { font-size: 12px; color: #777; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.report-select-row .report-select-photos { font-size: 11px; color: #999; margin-top: 2px; }
 .finding-header { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 10px 12px; cursor: pointer; background: #fafafa; }
 .finding-header:hover { background: #f3f3f3; }
 .finding-header-left { display: flex; align-items: center; gap: 8px; min-width: 0; }

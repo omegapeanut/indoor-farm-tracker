@@ -163,7 +163,7 @@
         <div class="search-row">
           <input type="text" id="findingsSearch" placeholder="Search findings by keyword…">
           <button id="findingsSearchClear">Clear</button>
-          <button id="downloadFindingsPdfBtn" style="display:none;">⬇ Download PDF</button>
+          <button id="downloadFindingsPdfBtn" style="display:none;">📄 Generate Report</button>
         </div>
         <div class="finding-add" id="addFindingRow" style="display:none;">
           <input type="date" id="newFindingDate">
@@ -1087,6 +1087,27 @@
       <div style="display:flex; gap:8px;">
         <button class="btn" id="claimSubmitCancelBtn">Cancel</button>
         <button class="btn primary" id="claimSubmitBtn">Submit Claim</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- FINDINGS REPORT MODAL (choose which findings to include, then generate a PDF) -->
+<div class="overlay" id="findingsReportOverlay">
+  <div class="modal" style="width:520px; max-width:92vw;">
+    <h3>Generate Report</h3>
+    <div class="sub">Choose which findings to include — the text and photos of each selected entry go into the PDF.</div>
+    <div style="display:flex; align-items:center; gap:8px; margin:10px 0;">
+      <button class="btn" id="findingsReportSelectAll">Select All</button>
+      <button class="btn" id="findingsReportSelectNone">Select None</button>
+      <span class="hint" id="findingsReportCount" style="margin-left:auto;"></span>
+    </div>
+    <div id="findingsReportList" class="report-select-list"></div>
+    <div class="modal-actions">
+      <div></div>
+      <div style="display:flex; gap:8px;">
+        <button class="btn" id="findingsReportCancelBtn">Cancel</button>
+        <button class="btn primary" id="findingsReportGenerateBtn">Generate PDF</button>
       </div>
     </div>
   </div>
