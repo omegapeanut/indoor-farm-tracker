@@ -6261,6 +6261,12 @@ $("annotateRedo").addEventListener("click", () => {
   updateUndoRedoButtons();
 });
 
+// The editing canvases are deliberately kept small (capped below) so drawing and
+// dragging stay smooth and the modal fits the screen — but the *saved* image is
+// composited from this full-resolution source at Save time, not from those small
+// canvases, so annotating a photo never permanently throws away its original detail.
+let annotateSourceImg = null;
+
 function openAnnotateModal(col, recordId, photoId, field){
   if (!isAdmin) return;
   annotateCollection = col; annotateFindingId = recordId; annotatePhotoId = photoId;
@@ -6273,6 +6279,7 @@ function openAnnotateModal(col, recordId, photoId, field){
   const img = new Image();
   img.crossOrigin = "anonymous";
   img.onload = () => {
+    annotateSourceImg = img;
     const maxW = Math.min(window.innerWidth * 0.8, 640);
     const scale = Math.min(1, maxW / img.width);
     const w = Math.round(img.width * scale), h = Math.round(img.height * scale);
@@ -6319,19 +6326,26 @@ function textObjBox(obj){
   const h = obj.fontSize * 1.3;
   return { w, h };
 }
+// Shared by the live editor (scale 1, onto textCanvas) and the full-resolution save
+// (scale = fullResWidth / editorWidth, onto the merge canvas) — text is vector data
+// (position/font size/rotation), so re-rendering it at a different scale stays crisp
+// instead of stretching a raster copy the way the freehand-stroke layer has to.
+function drawTextObjectsOnto(ctx, scale){
+  annotateTextObjects.forEach(obj => {
+    ctx.save();
+    ctx.translate(obj.x * scale, obj.y * scale);
+    ctx.rotate(obj.rotation * Math.PI / 180);
+    ctx.font = (obj.fontSize * scale) + "px sans-serif";
+    ctx.fillStyle = obj.color;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(obj.text, 0, 0);
+    ctx.restore();
+  });
+}
 function renderTextLayer(){
   textCtx.clearRect(0, 0, textCanvas.width, textCanvas.height);
-  annotateTextObjects.forEach(obj => {
-    textCtx.save();
-    textCtx.translate(obj.x, obj.y);
-    textCtx.rotate(obj.rotation * Math.PI / 180);
-    textCtx.font = obj.fontSize + "px sans-serif";
-    textCtx.fillStyle = obj.color;
-    textCtx.textAlign = "center";
-    textCtx.textBaseline = "middle";
-    textCtx.fillText(obj.text, 0, 0);
-    textCtx.restore();
-  });
+  drawTextObjectsOnto(textCtx, 1);
   updateSelectionOverlay();
 }
 function hitTestTextObj(cx, cy){
@@ -6543,12 +6557,20 @@ $("annotateSave").addEventListener("click", async () => {
   selectedTextId = null;
   updateSelectionOverlay();
   $("annotateStatus").textContent = "Uploading annotated photo…";
+  // Composite at the photo's original resolution (annotateSourceImg), not the small
+  // on-screen editing canvas — the drawing layer (raster) gets scaled up to match,
+  // and the text layer is redrawn from its vector data at that same scale so it
+  // stays sharp. uploadToCloudinary's own compression step still caps the final
+  // upload size, same as every other photo in the app.
+  const fullW = annotateSourceImg.naturalWidth || annotateSourceImg.width;
+  const fullH = annotateSourceImg.naturalHeight || annotateSourceImg.height;
+  const fullResScale = fullW / drawCanvas.width;
   const merged = document.createElement("canvas");
-  merged.width = baseCanvas.width; merged.height = baseCanvas.height;
+  merged.width = fullW; merged.height = fullH;
   const mctx = merged.getContext("2d");
-  mctx.drawImage(baseCanvas, 0, 0);
-  mctx.drawImage(drawCanvas, 0, 0);
-  mctx.drawImage(textCanvas, 0, 0);
+  mctx.drawImage(annotateSourceImg, 0, 0, fullW, fullH);
+  mctx.drawImage(drawCanvas, 0, 0, fullW, fullH);
+  drawTextObjectsOnto(mctx, fullResScale);
 
   merged.toBlob(async (blob) => {
     try {
@@ -6560,7 +6582,7 @@ $("annotateSave").addEventListener("click", async () => {
     } catch (err){
       $("annotateStatus").textContent = "Upload failed: " + err.message;
     }
-  }, "image/jpeg", 0.85);
+  }, "image/jpeg", 0.92);
 });
 
 // ============================================================================
