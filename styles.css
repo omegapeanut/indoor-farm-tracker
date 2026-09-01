@@ -682,16 +682,39 @@ header.top p { margin: 0; color: #666; font-size: 13px; }
   body.printing-pdf > *:not(#pdfPrintArea) { display: none !important; }
   body.printing-pdf #pdfPrintArea { display: block !important; }
 }
-.pdf-doc { font-family: Arial, Helvetica, sans-serif; color: #111; }
-.pdf-doc h1 { font-size: 20px; margin: 0 0 4px; }
+.pdf-doc { font-family: Arial, Helvetica, sans-serif; color: #1d1d1f; }
+.pdf-doc h1 { font-size: 22px; margin: 0; letter-spacing: -0.01em; }
 .pdf-doc .pdf-meta { font-size: 11px; color: #666; margin: 0 0 18px; padding-bottom: 10px; border-bottom: 1px solid #ccc; }
-.pdf-doc .pdf-entry { margin-bottom: 16px; page-break-inside: avoid; }
-.pdf-doc .pdf-entry-date { font-size: 13px; font-weight: 700; margin-bottom: 4px; }
-.pdf-doc .pdf-entry-text { font-size: 12px; line-height: 1.5; white-space: pre-wrap; }
-.pdf-doc .pdf-photo-grid { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 8px; }
-.pdf-doc .pdf-photo { width: calc(50% - 5px); height: auto; border: 1px solid #ccc; border-radius: 4px; display: block; }
-.pdf-att-day-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin-bottom: 4px; }
-.pdf-att-findings-tag { font-size: 11px; color: #555; background: #f0f0f0; border-radius: 3px; padding: 2px 8px; white-space: nowrap; }
+/* Letterhead-style header shared by the Findings and Attendance reports: title/org on
+   the left, a headline count + generated timestamp on the right, under one accent rule. */
+.pdf-doc .pdf-header {
+  display: flex; align-items: flex-end; justify-content: space-between; gap: 16px;
+  margin: 0 0 20px; padding-bottom: 14px; border-bottom: 3px solid #0b57d0;
+}
+.pdf-doc .pdf-header-org { font-size: 11.5px; color: #666; margin-top: 3px; }
+.pdf-doc .pdf-header-stats { text-align: right; font-size: 11px; color: #666; white-space: nowrap; }
+.pdf-doc .pdf-header-stats strong { display: block; font-size: 20px; line-height: 1.2; color: #0b57d0; font-weight: 700; }
+.pdf-doc .pdf-header-stats span { display: block; margin-top: 2px; }
+.pdf-doc .pdf-empty { font-size: 13px; color: #666; padding: 30px 0; text-align: center; }
+.pdf-doc .pdf-entry {
+  margin-bottom: 14px; padding: 12px 14px; border: 1px solid #e3e3e6; border-radius: 6px;
+  background: #fbfbfc; page-break-inside: avoid; break-inside: avoid;
+}
+.pdf-doc .pdf-entry-date {
+  display: inline-block; font-size: 11px; font-weight: 700; color: #0b57d0; background: #eaf1fc;
+  border-radius: 3px; padding: 3px 9px; margin-bottom: 8px;
+}
+.pdf-doc .pdf-entry-text { font-size: 12.5px; line-height: 1.55; white-space: pre-wrap; }
+.pdf-doc .pdf-photo-grid { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.pdf-doc .pdf-photo-frame {
+  width: calc(50% - 4px); aspect-ratio: 4 / 3; border-radius: 5px; overflow: hidden;
+  border: 1px solid #ddd; background: #f0f0f0;
+}
+.pdf-doc .pdf-photo { width: 100%; height: 100%; object-fit: cover; display: block; }
+.pdf-att-day-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin-bottom: 8px; }
+.pdf-att-day-head .pdf-entry-date { margin-bottom: 0; }
+.pdf-att-findings-tag { font-size: 11px; color: #555; background: #f0f0f0; border-radius: 3px; padding: 3px 9px; white-space: nowrap; }
+.pdf-attendance .pdf-claims-table { margin-bottom: 0; }
 
 /* Weekly Farm Inspection & Maintenance Report — same #pdfPrintArea/print mechanism as
    Findings, but photos need to read clearly on the printed page, so they're shown big

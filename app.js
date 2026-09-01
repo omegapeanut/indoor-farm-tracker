@@ -1819,11 +1819,12 @@ async function buildAttendancePdfHtml(){
   const snap = await getDocs(collection(db, "attendance"));
   const records = snap.docs.map(d => ({ id: d.id, ...d.data() }));
   const generated = new Date().toLocaleString("default", { dateStyle: "medium", timeStyle: "short" });
-  let html = '<div class="pdf-doc pdf-attendance"><h1>Attendance Report</h1>';
-  html += '<p class="pdf-meta">Indoor Farm — Takeover Tracker · Generated ' + escapeHtml(generated) + '</p>';
+  let html = '<div class="pdf-doc pdf-attendance">';
+  html += '<div class="pdf-header"><div><h1>Attendance Report</h1><div class="pdf-header-org">Indoor Farm — Takeover Tracker</div></div>';
+  html += '<div class="pdf-header-stats"><strong>' + records.length + '</strong>record' + (records.length === 1 ? "" : "s") + '<span>Generated ' + escapeHtml(generated) + '</span></div></div>';
 
   if (records.length === 0){
-    html += "<p>No attendance recorded yet.</p></div>";
+    html += '<p class="pdf-empty">No attendance recorded yet.</p></div>';
     return html;
   }
 
@@ -1844,7 +1845,7 @@ async function buildAttendancePdfHtml(){
     const rows = byDate[date].slice().sort((a,b) => (a.name || "").localeCompare(b.name || ""));
     const findingsCount = findingsCountByDate[date] || 0;
     html += '<div class="pdf-entry">';
-    html += '<div class="pdf-att-day-head"><span class="pdf-entry-date">' + escapeHtml(date) + '</span>';
+    html += '<div class="pdf-att-day-head"><span class="pdf-entry-date">' + escapeHtml(pdfFormatDayLabel(date)) + '</span>';
     html += '<span class="pdf-att-findings-tag">' + findingsCount + " finding" + (findingsCount === 1 ? "" : "s") + ' recorded</span></div>';
     html += '<table class="pdf-claims-table"><thead><tr><th>Staff</th><th>Sign In</th><th>Sign Out</th></tr></thead><tbody>';
     rows.forEach(r => {
@@ -1872,7 +1873,7 @@ $("downloadAttendancePdfBtn").addEventListener("click", async () => {
     area.innerHTML = await buildAttendancePdfHtml();
     await waitForImages(area, 8000);
     document.body.classList.add("printing-pdf");
-    window.print();
+    await printPdfArea();
   } finally {
     btn.disabled = false; btn.textContent = original;
   }
@@ -2134,20 +2135,26 @@ function cloudinaryThumb(url, width){
   return url.replace("/upload/", "/upload/w_" + width + ",q_auto,f_auto/");
 }
 
+function pdfFormatDayLabel(dateKey){
+  try { return toDate(dateKey).toLocaleDateString("default", { weekday: "short", day: "numeric", month: "short", year: "numeric" }); }
+  catch (err){ return dateKey; }
+}
+
 function buildFindingsPdfHtml(items){
   if (!items) items = findingsCache.slice().sort((a,b) => b.date.localeCompare(a.date));
   const generated = new Date().toLocaleString("default", { dateStyle: "medium", timeStyle: "short" });
-  let html = '<div class="pdf-doc"><h1>Findings Log</h1>';
-  html += '<p class="pdf-meta">Indoor Farm — Takeover Tracker · Generated ' + escapeHtml(generated) + ' · ' + items.length + ' entr' + (items.length === 1 ? "y" : "ies") + '</p>';
+  let html = '<div class="pdf-doc">';
+  html += '<div class="pdf-header"><div><h1>Findings Log</h1><div class="pdf-header-org">Indoor Farm — Takeover Tracker</div></div>';
+  html += '<div class="pdf-header-stats"><strong>' + items.length + '</strong>entr' + (items.length === 1 ? "y" : "ies") + '<span>Generated ' + escapeHtml(generated) + '</span></div></div>';
   if (items.length === 0){
-    html += "<p>No findings logged yet.</p>";
+    html += '<p class="pdf-empty">No findings logged yet.</p>';
   } else {
     items.forEach(f => {
-      html += '<div class="pdf-entry"><div class="pdf-entry-date">' + escapeHtml(f.date) + '</div>';
+      html += '<div class="pdf-entry"><div class="pdf-entry-date">' + escapeHtml(pdfFormatDayLabel(f.date)) + '</div>';
       html += '<div class="pdf-entry-text">' + escapeHtml(f.text || "").replace(/\n/g, "<br>") + '</div>';
       if (f.photos && f.photos.length){
         html += '<div class="pdf-photo-grid">';
-        f.photos.forEach(p => { html += '<img class="pdf-photo" src="' + escapeHtml(cloudinaryThumb(p.url, 1000)) + '">'; });
+        f.photos.forEach(p => { html += '<div class="pdf-photo-frame"><img class="pdf-photo" src="' + escapeHtml(cloudinaryThumb(p.url, 1000)) + '"></div>'; });
         html += '</div>';
       }
       html += '</div>';
@@ -2170,6 +2177,16 @@ function waitForImages(container, timeoutMs){
       setTimeout(done, timeoutMs);
     });
   }));
+}
+
+// Chrome sometimes paginates a just-injected report before the browser has actually
+// painted it (worst on long reports), producing a stray blank first page in the print
+// preview. Giving it two animation frames after the content/class swap lets layout and
+// paint settle before print() forces pagination.
+function printPdfArea(){
+  return new Promise(r => requestAnimationFrame(r))
+    .then(() => new Promise(r => requestAnimationFrame(r)))
+    .then(() => window.print());
 }
 
 // ---- Findings report: pick which entries to include, then generate a PDF from just
@@ -2266,7 +2283,7 @@ $("findingsReportGenerateBtn").addEventListener("click", async () => {
   await waitForImages(area, 8000);
   closeFindingsReportModal();
   document.body.classList.add("printing-pdf");
-  window.print();
+  await printPdfArea();
   btn.disabled = false; btn.textContent = originalLabel;
 });
 window.addEventListener("afterprint", () => {
@@ -2863,7 +2880,7 @@ $("downloadClaimsPdfBtn").addEventListener("click", async () => {
   area.innerHTML = buildClaimsPdfHtml();
   await waitForImages(area, 8000);
   document.body.classList.add("printing-pdf");
-  window.print();
+  await printPdfArea();
   btn.disabled = false; btn.textContent = original;
 });
 
@@ -5939,7 +5956,7 @@ function buildReportBody(r){
       area.innerHTML = buildReportPdfHtml(r);
       await waitForImages(area, 8000);
       document.body.classList.add("printing-pdf");
-      window.print();
+      await printPdfArea();
       pdfBtn.disabled = false; pdfBtn.textContent = original;
     });
     pdfRow.appendChild(pdfBtn);
