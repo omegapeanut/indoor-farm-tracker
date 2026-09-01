@@ -696,19 +696,27 @@ header.top p { margin: 0; color: #666; font-size: 13px; }
 .pdf-doc .pdf-header-stats strong { display: block; font-size: 20px; line-height: 1.2; color: #0b57d0; font-weight: 700; }
 .pdf-doc .pdf-header-stats span { display: block; margin-top: 2px; }
 .pdf-doc .pdf-empty { font-size: 13px; color: #666; padding: 30px 0; text-align: center; }
+/* Deliberately NOT page-break-inside:avoid on the entry itself: a long entry (lots of
+   text plus photos) can be taller than the space left on the current page, and "avoid"
+   would push the whole card to a fresh page rather than split it — leaving the tail of
+   the previous page (sometimes nearly the whole page, right under the report header)
+   blank. Letting a large entry split at its border is a far smaller cosmetic cost than
+   that. The finer-grained rules below still keep small, indivisible pieces intact. */
 .pdf-doc .pdf-entry {
   margin-bottom: 14px; padding: 12px 14px; border: 1px solid #e3e3e6; border-radius: 6px;
-  background: #fbfbfc; page-break-inside: avoid; break-inside: avoid;
+  background: #fbfbfc;
 }
 .pdf-doc .pdf-entry-date {
   display: inline-block; font-size: 11px; font-weight: 700; color: #0b57d0; background: #eaf1fc;
   border-radius: 3px; padding: 3px 9px; margin-bottom: 8px;
+  page-break-after: avoid; break-after: avoid;
 }
 .pdf-doc .pdf-entry-text { font-size: 12.5px; line-height: 1.55; white-space: pre-wrap; }
 .pdf-doc .pdf-photo-grid { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
 .pdf-doc .pdf-photo-frame {
   width: calc(50% - 4px); aspect-ratio: 4 / 3; border-radius: 5px; overflow: hidden;
   border: 1px solid #ddd; background: #f0f0f0;
+  page-break-inside: avoid; break-inside: avoid;
 }
 .pdf-doc .pdf-photo { width: 100%; height: 100%; object-fit: cover; display: block; }
 .pdf-att-day-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin-bottom: 8px; }
@@ -721,13 +729,17 @@ header.top p { margin: 0; color: #666; font-size: 13px; }
    at their real aspect ratio instead of small square thumbnails. */
 .pdf-report .pdf-report-meta { display: flex; flex-wrap: wrap; gap: 4px 20px; font-size: 12px; margin: 0 0 14px; }
 .pdf-report .pdf-report-notes { font-size: 12px; line-height: 1.5; white-space: pre-wrap; margin: 0 0 18px; padding-bottom: 12px; border-bottom: 1px solid #ccc; }
-.pdf-report .pdf-issue { margin-bottom: 24px; padding-bottom: 16px; border-bottom: 1px solid #ddd; page-break-inside: avoid; }
-.pdf-report .pdf-issue h2 { font-size: 15px; margin: 0 0 6px; }
+/* Not page-break-inside:avoid here for the same reason as the Findings entry cards
+   above: an issue with a long description and several photos can be taller than the
+   space left on the page, and "avoid" would rather leave that space blank than split
+   it — better to let it break cleanly than blank out most of a page. */
+.pdf-report .pdf-issue { margin-bottom: 24px; padding-bottom: 16px; border-bottom: 1px solid #ddd; }
+.pdf-report .pdf-issue h2 { font-size: 15px; margin: 0 0 6px; page-break-after: avoid; break-after: avoid; }
 .pdf-report .pdf-issue h3 { font-size: 12.5px; margin: 14px 0 4px; color: #444; text-transform: uppercase; letter-spacing: 0.03em; }
 .pdf-report .pdf-issue-desc { font-size: 13px; font-weight: 600; line-height: 1.5; white-space: pre-wrap; margin: 0 0 6px; }
 .pdf-report .pdf-issue p { font-size: 12px; line-height: 1.5; white-space: pre-wrap; margin: 0 0 6px; }
 .pdf-report .pdf-report-photo-grid { display: flex; flex-wrap: wrap; gap: 10px; margin: 8px 0; }
-.pdf-report .pdf-report-photo { width: calc(50% - 5px); height: auto; border: 1px solid #ccc; border-radius: 4px; }
+.pdf-report .pdf-report-photo { width: calc(50% - 5px); height: auto; border: 1px solid #ccc; border-radius: 4px; page-break-inside: avoid; break-inside: avoid; }
 .pdf-report .pdf-report-footer { margin-top: 20px; padding-top: 12px; border-top: 1px solid #ccc; font-size: 10.5px; color: #666; }
 .pdf-report .pdf-report-footer p { margin: 0 0 4px; }
 
