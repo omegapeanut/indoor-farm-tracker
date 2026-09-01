@@ -690,6 +690,8 @@ header.top p { margin: 0; color: #666; font-size: 13px; }
 .pdf-doc .pdf-entry-text { font-size: 12px; line-height: 1.5; white-space: pre-wrap; }
 .pdf-doc .pdf-photo-grid { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 8px; }
 .pdf-doc .pdf-photo { width: calc(50% - 5px); height: auto; border: 1px solid #ccc; border-radius: 4px; display: block; }
+.pdf-att-day-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin-bottom: 4px; }
+.pdf-att-findings-tag { font-size: 11px; color: #555; background: #f0f0f0; border-radius: 3px; padding: 2px 8px; white-space: nowrap; }
 
 /* Weekly Farm Inspection & Maintenance Report — same #pdfPrintArea/print mechanism as
    Findings, but photos need to read clearly on the printed page, so they're shown big

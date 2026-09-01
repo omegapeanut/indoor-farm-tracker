@@ -209,6 +209,7 @@ function refreshAdminUI(){
   $("dsAddEventBtn").style.display = isAdmin ? "inline-block" : "none";
   $("dsResetBtn").style.display = isAdmin ? "inline-block" : "none";
   $("addAttRow").style.display = isAdmin ? "flex" : "none";
+  $("downloadAttendancePdfRow").style.display = isAdmin ? "flex" : "none";
   $("staffToggleRow").style.display = isAdmin ? "block" : "none";
   $("plantTypesToggleRow").style.display = isAdmin ? "block" : "none";
   $("destinationsToggleRow").style.display = isAdmin ? "block" : "none";
@@ -1811,6 +1812,69 @@ $("claimSubmitBtn").addEventListener("click", async () => {
     $("claimSubmitStatus").textContent = "Couldn't submit this claim: " + err.message;
   } finally {
     btn.disabled = false; btn.textContent = "Submit Claim";
+  }
+});
+
+async function buildAttendancePdfHtml(){
+  const snap = await getDocs(collection(db, "attendance"));
+  const records = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  const generated = new Date().toLocaleString("default", { dateStyle: "medium", timeStyle: "short" });
+  let html = '<div class="pdf-doc pdf-attendance"><h1>Attendance Report</h1>';
+  html += '<p class="pdf-meta">Indoor Farm — Takeover Tracker · Generated ' + escapeHtml(generated) + '</p>';
+
+  if (records.length === 0){
+    html += "<p>No attendance recorded yet.</p></div>";
+    return html;
+  }
+
+  const findingsCountByDate = {};
+  findingsCache.forEach(f => {
+    if (!f.date) return;
+    findingsCountByDate[f.date] = (findingsCountByDate[f.date] || 0) + 1;
+  });
+
+  const byDate = {};
+  records.forEach(r => {
+    const key = r.date || "—";
+    (byDate[key] = byDate[key] || []).push(r);
+  });
+  const dates = Object.keys(byDate).sort();
+
+  dates.forEach(date => {
+    const rows = byDate[date].slice().sort((a,b) => (a.name || "").localeCompare(b.name || ""));
+    const findingsCount = findingsCountByDate[date] || 0;
+    html += '<div class="pdf-entry">';
+    html += '<div class="pdf-att-day-head"><span class="pdf-entry-date">' + escapeHtml(date) + '</span>';
+    html += '<span class="pdf-att-findings-tag">' + findingsCount + " finding" + (findingsCount === 1 ? "" : "s") + ' recorded</span></div>';
+    html += '<table class="pdf-claims-table"><thead><tr><th>Staff</th><th>Sign In</th><th>Sign Out</th></tr></thead><tbody>';
+    rows.forEach(r => {
+      html += '<tr>';
+      html += '<td>' + escapeHtml(r.name || "—") + '</td>';
+      html += '<td>' + escapeHtml(r.signIn || "—") + '</td>';
+      html += '<td>' + escapeHtml(r.signOut || "—") + '</td>';
+      html += '</tr>';
+    });
+    html += '</tbody></table></div>';
+  });
+
+  html += '<p class="pdf-meta pdf-claims-footer-meta">Generated ' + escapeHtml(generated) + ' · ' + dates.length + ' day' + (dates.length === 1 ? "" : "s") + ' · ' + records.length + ' record' + (records.length === 1 ? "" : "s") + '</p>';
+  html += '</div>';
+  return html;
+}
+
+$("downloadAttendancePdfBtn").addEventListener("click", async () => {
+  if (!isAdmin) return;
+  const btn = $("downloadAttendancePdfBtn");
+  const original = btn.textContent;
+  btn.disabled = true; btn.textContent = "Preparing report…";
+  try {
+    const area = $("pdfPrintArea");
+    area.innerHTML = await buildAttendancePdfHtml();
+    await waitForImages(area, 8000);
+    document.body.classList.add("printing-pdf");
+    window.print();
+  } finally {
+    btn.disabled = false; btn.textContent = original;
   }
 });
 
