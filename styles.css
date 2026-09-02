@@ -698,8 +698,14 @@ header.top p { margin: 0; color: #666; font-size: 13px; }
 .pdf-doc .pdf-empty { font-size: 13px; color: #666; padding: 30px 0; text-align: center; }
 /* Cover page: the header plus a few summary stats, forced onto its own page so the
    entry list always starts fresh on page 2 — a fixed, short amount of content that
-   can never itself trigger the almost-blank-page problem a long entry can. */
-.pdf-doc .pdf-cover { page-break-after: always; break-after: page; }
+   can never itself trigger the almost-blank-page problem a long entry can. Sized to
+   one A4 page's printable height (297mm - 15mm margin top/bottom) and centered as a
+   flex column so the content sits in the middle of the page instead of leaving a
+   large empty gap underneath that reads as "nothing printed here". */
+.pdf-doc .pdf-cover {
+  min-height: 267mm; display: flex; flex-direction: column; justify-content: center;
+  page-break-after: always; break-after: page;
+}
 .pdf-doc .pdf-cover-stats { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 36px; }
 .pdf-doc .pdf-stat-tile {
   flex: 1 1 150px; min-width: 150px; border: 1px solid #e3e3e6; border-radius: 8px;
