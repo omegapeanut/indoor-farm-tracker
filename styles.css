@@ -702,17 +702,17 @@ header.top p { margin: 0; color: #666; font-size: 13px; }
 }
 .pdf-doc .pdf-cover-title { font-size: 44px; font-weight: 800; line-height: 1.05; margin: 0 0 16px; letter-spacing: -0.01em; }
 .pdf-doc .pdf-cover-subtitle { font-size: 14px; color: #555; }
-.pdf-doc .pdf-cover-band { background: #0b57d0; color: #fff; padding: 28px 32px; border-radius: 4px; }
+.pdf-doc .pdf-cover-band { background: #8a9a6e; color: #24291d; padding: 28px 32px; border-radius: 4px; }
 .pdf-doc .pdf-cover-band-mark { display: flex; gap: 4px; margin-bottom: 18px; }
-.pdf-doc .pdf-cover-band-mark span { width: 7px; height: 24px; background: rgba(255,255,255,0.85); }
+.pdf-doc .pdf-cover-band-mark span { width: 7px; height: 24px; background: rgba(36,41,29,0.8); }
 .pdf-doc .pdf-cover-band h2 { margin: 0 0 16px; font-size: 13px; text-transform: uppercase; letter-spacing: 0.1em; font-weight: 700; }
-.pdf-doc .pdf-cover-empty { margin: 0; font-size: 13px; color: rgba(255,255,255,0.9); }
+.pdf-doc .pdf-cover-empty { margin: 0; font-size: 13px; color: rgba(36,41,29,0.85); }
 .pdf-doc .pdf-cover-meta-row {
   display: flex; justify-content: space-between; gap: 20px; padding: 10px 0;
-  border-top: 1px solid rgba(255,255,255,0.3); font-size: 12.5px;
+  border-top: 1px solid rgba(36,41,29,0.2); font-size: 12.5px;
 }
 .pdf-doc .pdf-cover-meta-row:first-of-type { border-top: none; padding-top: 0; }
-.pdf-doc .pdf-cover-meta-row span:first-child { opacity: 0.85; }
+.pdf-doc .pdf-cover-meta-row span:first-child { opacity: 0.75; }
 .pdf-doc .pdf-cover-meta-row span:last-child { font-weight: 700; }
 /* Deliberately NOT page-break-inside:avoid on the entry itself: a long entry (lots of
    text plus photos) can be taller than the space left on the current page, and "avoid"
