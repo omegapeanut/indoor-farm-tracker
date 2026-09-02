@@ -685,35 +685,35 @@ header.top p { margin: 0; color: #666; font-size: 13px; }
 .pdf-doc { font-family: Arial, Helvetica, sans-serif; color: #1d1d1f; }
 .pdf-doc h1 { font-size: 22px; margin: 0; letter-spacing: -0.01em; }
 .pdf-doc .pdf-meta { font-size: 11px; color: #666; margin: 0 0 18px; padding-bottom: 10px; border-bottom: 1px solid #ccc; }
-/* Letterhead-style header shared by the Findings and Attendance reports: title/org on
-   the left, a headline count + generated timestamp on the right, under one accent rule. */
-.pdf-doc .pdf-header {
-  display: flex; align-items: flex-end; justify-content: space-between; gap: 16px;
-  margin: 0 0 20px; padding-bottom: 14px; border-bottom: 3px solid #0b57d0;
-}
-.pdf-doc .pdf-header-org { font-size: 11.5px; color: #666; margin-top: 3px; }
-.pdf-doc .pdf-header-stats { text-align: right; font-size: 11px; color: #666; white-space: nowrap; }
-.pdf-doc .pdf-header-stats strong { display: block; font-size: 20px; line-height: 1.2; color: #0b57d0; font-weight: 700; }
-.pdf-doc .pdf-header-stats span { display: block; margin-top: 2px; }
 .pdf-doc .pdf-empty { font-size: 13px; color: #666; padding: 30px 0; text-align: center; }
-/* Cover page: the header plus a few summary stats, forced onto its own page so the
-   entry list always starts fresh on page 2 — a fixed, short amount of content that
-   can never itself trigger the almost-blank-page problem a long entry can. Sized to
-   one A4 page's printable height (297mm - 15mm margin top/bottom) and centered as a
-   flex column so the content sits in the middle of the page instead of leaving a
-   large empty gap underneath that reads as "nothing printed here". */
+/* Cover page: a bold title block up top, a solid-color summary band pinned to the
+   bottom — forced onto its own page so the entry list always starts fresh on page 2.
+   A fixed, short amount of content that can never itself trigger the almost-blank-page
+   problem a long entry can. Sized to one A4 page's printable height (297mm - 15mm
+   margin top/bottom) with the title and band pushed to opposite ends. */
 .pdf-doc .pdf-cover {
-  min-height: 267mm; display: flex; flex-direction: column; justify-content: center;
+  min-height: 267mm; display: flex; flex-direction: column; justify-content: space-between;
   page-break-after: always; break-after: page;
 }
-.pdf-doc .pdf-cover-stats { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 36px; }
-.pdf-doc .pdf-stat-tile {
-  flex: 1 1 150px; min-width: 150px; border: 1px solid #e3e3e6; border-radius: 8px;
-  background: #fbfbfc; padding: 16px 18px;
+.pdf-doc .pdf-cover-top { padding-top: 26mm; }
+.pdf-doc .pdf-cover-eyebrow {
+  display: inline-block; text-transform: uppercase; letter-spacing: 0.14em; font-size: 11px;
+  font-weight: 600; color: #444; padding-bottom: 10px; margin-bottom: 30px; border-bottom: 2px solid #1d1d1f;
 }
-.pdf-doc .pdf-stat-tile strong { display: block; font-size: 26px; line-height: 1.2; color: #0b57d0; font-weight: 700; }
-.pdf-doc .pdf-stat-tile span { display: block; margin-top: 5px; font-size: 11.5px; color: #666; }
-.pdf-doc .pdf-stat-tile-wide { flex-basis: 100%; }
+.pdf-doc .pdf-cover-title { font-size: 44px; font-weight: 800; line-height: 1.05; margin: 0 0 16px; letter-spacing: -0.01em; }
+.pdf-doc .pdf-cover-subtitle { font-size: 14px; color: #555; }
+.pdf-doc .pdf-cover-band { background: #0b57d0; color: #fff; padding: 28px 32px; border-radius: 4px; }
+.pdf-doc .pdf-cover-band-mark { display: flex; gap: 4px; margin-bottom: 18px; }
+.pdf-doc .pdf-cover-band-mark span { width: 7px; height: 24px; background: rgba(255,255,255,0.85); }
+.pdf-doc .pdf-cover-band h2 { margin: 0 0 16px; font-size: 13px; text-transform: uppercase; letter-spacing: 0.1em; font-weight: 700; }
+.pdf-doc .pdf-cover-empty { margin: 0; font-size: 13px; color: rgba(255,255,255,0.9); }
+.pdf-doc .pdf-cover-meta-row {
+  display: flex; justify-content: space-between; gap: 20px; padding: 10px 0;
+  border-top: 1px solid rgba(255,255,255,0.3); font-size: 12.5px;
+}
+.pdf-doc .pdf-cover-meta-row:first-of-type { border-top: none; padding-top: 0; }
+.pdf-doc .pdf-cover-meta-row span:first-child { opacity: 0.85; }
+.pdf-doc .pdf-cover-meta-row span:last-child { font-weight: 700; }
 /* Deliberately NOT page-break-inside:avoid on the entry itself: a long entry (lots of
    text plus photos) can be taller than the space left on the current page, and "avoid"
    would push the whole card to a fresh page rather than split it — leaving the tail of
