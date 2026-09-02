@@ -1820,11 +1820,13 @@ async function buildAttendancePdfHtml(){
   const records = snap.docs.map(d => ({ id: d.id, ...d.data() }));
   const generated = new Date().toLocaleString("default", { dateStyle: "medium", timeStyle: "short" });
   let html = '<div class="pdf-doc pdf-attendance">';
-  html += '<div class="pdf-header"><div><h1>Attendance Report</h1><div class="pdf-header-org">Indoor Farm — Takeover Tracker</div></div>';
-  html += '<div class="pdf-header-stats"><strong>' + records.length + '</strong>record' + (records.length === 1 ? "" : "s") + '<span>Generated ' + escapeHtml(generated) + '</span></div></div>';
+  html += '<div class="pdf-cover"><div class="pdf-cover-top">';
+  html += '<div class="pdf-cover-eyebrow">Indoor Farm — Takeover Tracker</div>';
+  html += '<h1 class="pdf-cover-title">Attendance Report</h1>';
 
   if (records.length === 0){
-    html += '<p class="pdf-empty">No attendance recorded yet.</p></div>';
+    html += '<div class="pdf-cover-subtitle">&nbsp;</div></div>';
+    html += '<div class="pdf-cover-band">' + pdfCoverBandMark() + '<h2>Summary</h2><p class="pdf-cover-empty">No attendance recorded yet.</p></div></div></div>';
     return html;
   }
 
@@ -1840,6 +1842,16 @@ async function buildAttendancePdfHtml(){
     (byDate[key] = byDate[key] || []).push(r);
   });
   const dates = Object.keys(byDate).sort();
+  const staffCount = new Set(records.map(r => r.name).filter(Boolean)).size;
+  const findingsInRange = dates.reduce((sum, d) => sum + (findingsCountByDate[d] || 0), 0);
+
+  html += '<div class="pdf-cover-subtitle">' + escapeHtml(pdfDateRangeLabel(dates)) + '</div></div>';
+  html += '<div class="pdf-cover-band">' + pdfCoverBandMark() + '<h2>Summary</h2>';
+  html += pdfCoverMetaRow("Days covered", dates.length);
+  html += pdfCoverMetaRow("Staff", staffCount);
+  html += pdfCoverMetaRow("Findings logged", findingsInRange);
+  html += pdfCoverMetaRow("Generated", generated);
+  html += '</div></div>';
 
   dates.forEach(date => {
     const rows = byDate[date].slice().sort((a,b) => (a.name || "").localeCompare(b.name || ""));
@@ -2140,15 +2152,48 @@ function pdfFormatDayLabel(dateKey){
   catch (err){ return dateKey; }
 }
 
+function pdfDateRangeLabel(dateKeys){
+  const dates = dateKeys.filter(Boolean).sort();
+  if (!dates.length) return "—";
+  return dates[0] === dates[dates.length - 1]
+    ? pdfFormatDayLabel(dates[0])
+    : pdfFormatDayLabel(dates[0]) + " – " + pdfFormatDayLabel(dates[dates.length - 1]);
+}
+
+// A cover page — big title up top, a solid-color "summary" band pinned to the bottom —
+// forced onto its own page instead of starting the entry list right under a header: a
+// real entry can be taller than the space left on page 1, so mixing entries into the
+// header page risks an almost-blank first page whenever that happens to be a big entry.
+// A fixed-height cover never has that problem, and reads like an actual report cover.
+function pdfCoverMetaRow(label, value){
+  return '<div class="pdf-cover-meta-row"><span>' + escapeHtml(label) + '</span><span>' + escapeHtml(String(value)) + '</span></div>';
+}
+function pdfCoverBandMark(){
+  return '<div class="pdf-cover-band-mark"><span></span><span></span><span></span></div>';
+}
+
 function buildFindingsPdfHtml(items){
   if (!items) items = findingsCache.slice().sort((a,b) => b.date.localeCompare(a.date));
   const generated = new Date().toLocaleString("default", { dateStyle: "medium", timeStyle: "short" });
   let html = '<div class="pdf-doc">';
-  html += '<div class="pdf-header"><div><h1>Findings Log</h1><div class="pdf-header-org">Indoor Farm — Takeover Tracker</div></div>';
-  html += '<div class="pdf-header-stats"><strong>' + items.length + '</strong>entr' + (items.length === 1 ? "y" : "ies") + '<span>Generated ' + escapeHtml(generated) + '</span></div></div>';
+  html += '<div class="pdf-cover"><div class="pdf-cover-top">';
+  html += '<div class="pdf-cover-eyebrow">Indoor Farm — Takeover Tracker</div>';
+  html += '<h1 class="pdf-cover-title">Findings Log</h1>';
+  html += '<div class="pdf-cover-subtitle">' + escapeHtml(pdfDateRangeLabel(items.map(f => f.date))) + '</div>';
+  html += '</div>';
+  html += '<div class="pdf-cover-band">' + pdfCoverBandMark() + '<h2>Summary</h2>';
   if (items.length === 0){
-    html += '<p class="pdf-empty">No findings logged yet.</p>';
+    html += '<p class="pdf-cover-empty">No findings logged yet.</p>';
   } else {
+    const withPhotos = items.filter(f => f.photos && f.photos.length).length;
+    const totalPhotos = items.reduce((sum, f) => sum + (f.photos ? f.photos.length : 0), 0);
+    html += pdfCoverMetaRow("Total entries", items.length);
+    html += pdfCoverMetaRow("With photos", withPhotos);
+    html += pdfCoverMetaRow("Total photos", totalPhotos);
+    html += pdfCoverMetaRow("Generated", generated);
+  }
+  html += '</div></div>';
+  if (items.length > 0){
     items.forEach(f => {
       html += '<div class="pdf-entry"><div class="pdf-entry-date">' + escapeHtml(pdfFormatDayLabel(f.date)) + '</div>';
       html += '<div class="pdf-entry-text">' + escapeHtml(f.text || "").replace(/\n/g, "<br>") + '</div>';
