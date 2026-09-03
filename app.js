@@ -4968,6 +4968,33 @@ async function uploadToCloudinary(blob){
   return { url: data.secure_url, publicId: data.public_id };
 }
 
+if (window.pdfjsLib){
+  pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dist@2.16.105/build/pdf.worker.min.js";
+}
+// Renders each page of a PDF to a JPEG blob (via pdf.js) so a multi-page PDF can be
+// broken apart and uploaded as individual photos, the same as any other image — each
+// page then gets its own annotate/delete controls for free, with no new UI needed.
+async function pdfFileToPageBlobs(file, onProgress){
+  if (!window.pdfjsLib) throw new Error("PDF support failed to load — check your connection and try again.");
+  const buffer = await file.arrayBuffer();
+  const pdf = await pdfjsLib.getDocument({ data: buffer }).promise;
+  const blobs = [];
+  for (let i = 1; i <= pdf.numPages; i++){
+    if (onProgress) onProgress(i, pdf.numPages);
+    const page = await pdf.getPage(i);
+    const base = page.getViewport({ scale: 1 });
+    const scale = 1600 / Math.max(base.width, base.height);
+    const viewport = page.getViewport({ scale });
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.round(viewport.width);
+    canvas.height = Math.round(viewport.height);
+    await page.render({ canvasContext: canvas.getContext("2d"), viewport }).promise;
+    const blob = await new Promise(resolve => canvas.toBlob(resolve, "image/jpeg", 0.92));
+    if (blob) blobs.push(blob);
+  }
+  return blobs;
+}
+
 // ============================================================================
 // INVENTORY — Assets (Firestore: inventoryAssets/{id}) — company equipment,
 // same collapsible-card/photo-strip pattern as Findings Log / Plant Guide.
@@ -6259,12 +6286,15 @@ const photoFileInput = $("photoFileInput");
 function openPhotoPicker(col, recordId, btnEl, field){
   photoTargetCollection = col; photoTargetFindingId = recordId; photoTargetBtn = btnEl || null;
   photoTargetField = field || "photos";
+  // PDF selection is only offered for Findings, where each page becomes its own
+  // annotatable photo — other galleries keep the plain image-only picker.
+  photoFileInput.accept = col === "findings" ? "image/*,.pdf,application/pdf" : "image/*";
   photoFileInput.value = ""; photoFileInput.click();
 }
 
 photoFileInput.addEventListener("change", async () => {
-  const files = Array.from(photoFileInput.files || []);
-  if (!files.length || !photoTargetFindingId) return;
+  const rawFiles = Array.from(photoFileInput.files || []);
+  if (!rawFiles.length || !photoTargetFindingId) return;
   const col = photoTargetCollection;
   const recordId = photoTargetFindingId;
   const btn = photoTargetBtn;
@@ -6273,8 +6303,30 @@ photoFileInput.addEventListener("change", async () => {
   if (!record) return;
 
   galleryExpanded(col)[recordId] = true;
-  if (btn){ btn.textContent = files.length > 1 ? "Uploading 1/" + files.length + "…" : "Uploading…"; btn.style.pointerEvents = "none"; btn.style.opacity = "0.6"; }
+  if (btn){ btn.style.pointerEvents = "none"; btn.style.opacity = "0.6"; }
   try {
+    let files = rawFiles;
+    if (col === "findings" && rawFiles.some(f => f.type === "application/pdf" || /\.pdf$/i.test(f.name))){
+      if (btn) btn.textContent = "Reading PDF…";
+      const expanded = [];
+      for (const f of rawFiles){
+        const isPdf = f.type === "application/pdf" || /\.pdf$/i.test(f.name);
+        if (!isPdf){ expanded.push(f); continue; }
+        try {
+          const pages = await pdfFileToPageBlobs(f, (page, total) => {
+            if (btn) btn.textContent = "Reading PDF page " + page + "/" + total + "…";
+          });
+          if (!pages.length) alert("\"" + f.name + "\" doesn't have any pages to import.");
+          expanded.push(...pages);
+        } catch (err){
+          alert("Couldn't read \"" + f.name + "\": " + err.message);
+        }
+      }
+      files = expanded;
+    }
+    if (!files.length) return;
+
+    if (btn) btn.textContent = files.length > 1 ? "Uploading 1/" + files.length + "…" : "Uploading…";
     const uploaded = [];
     for (let i = 0; i < files.length; i++){
       try {
