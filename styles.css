@@ -731,12 +731,16 @@ header.top p { margin: 0; color: #666; font-size: 13px; }
 }
 .pdf-doc .pdf-entry-text { font-size: 12.5px; line-height: 1.55; white-space: pre-wrap; }
 .pdf-doc .pdf-photo-grid { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+/* No fixed aspect-ratio/object-fit:cover here on purpose — that used to crop portrait
+   photos (a scanned document page, a PDF page uploaded as a photo) right where the
+   content that matters usually is. Each frame instead just follows the photo's own
+   natural aspect ratio, so nothing gets cut off. */
 .pdf-doc .pdf-photo-frame {
-  width: calc(50% - 4px); aspect-ratio: 4 / 3; border-radius: 5px; overflow: hidden;
+  width: calc(50% - 4px); border-radius: 5px; overflow: hidden;
   border: 1px solid #ddd; background: #f0f0f0;
   page-break-inside: avoid; break-inside: avoid;
 }
-.pdf-doc .pdf-photo { width: 100%; height: 100%; object-fit: cover; display: block; }
+.pdf-doc .pdf-photo { width: 100%; height: auto; display: block; }
 .pdf-att-day-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin-bottom: 8px; }
 .pdf-att-day-head .pdf-entry-date { margin-bottom: 0; }
 .pdf-att-findings-tag { font-size: 11px; color: #555; background: #f0f0f0; border-radius: 3px; padding: 3px 9px; white-space: nowrap; }
