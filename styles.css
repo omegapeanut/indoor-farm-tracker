@@ -1011,3 +1011,5 @@ button.nl-card:hover { background: var(--sage); border-color: var(--sage); box-s
   .tab-btn { background: transparent; border-radius: 12px; padding: 6px 4px; }
   .tab-btn.active { background: transparent; color: var(--green); border-color: transparent; }
 }
+h1, h2, h3, .modal h3, .nl-bh .nl-no, .nl-bh .nl-bt, .nl-cap-num b, .nl-qc-n, .nl-trays, .nl-quick-head b { font-variant-numeric: lining-nums; font-feature-settings: "lnum" 1; }
+.nl-qc-n, .nl-trays, .nl-cap-num b { font-weight: 600; }
