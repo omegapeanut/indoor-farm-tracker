@@ -204,8 +204,8 @@ function quickCountPanel(){
   const counts = {};
   inLoc(loc).forEach(b => { counts[b.variety] = (counts[b.variety] || 0) + (Number(b.trays) || 0); });
   let h = '<div class="nl-quick"><div class="nl-quick-head"><b>Quick count</b> — tap a crop for +1 tray, dated today' +
-    '<span class="nl-seg"><button class="' + (loc === "nursery" ? "on" : "") + '" data-action="qloc" data-loc="nursery">Nursery</button>' +
-    '<button class="' + (loc === "germ" ? "on" : "") + '" data-action="qloc" data-loc="germ">Germination</button></span></div><div class="nl-qgrid">';
+    '<span class="nl-seg"><button class="' + (loc === "germ" ? "on" : "") + '" data-action="qloc" data-loc="germ">Germination</button>' +
+    '<button class="' + (loc === "nursery" ? "on" : "") + '" data-action="qloc" data-loc="nursery">Nursery</button></span></div><div class="nl-qgrid">';
   state.varieties.forEach((v, i) => {
     const n = counts[v] || 0;
     h += '<div class="nl-qc"><button class="nl-qc-add" data-action="qadd" data-i="' + i + '"><span class="nl-qc-name">' + esc(v) + '</span><span class="nl-qc-row"><span class="nl-qc-n">' + n + '</span><span class="nl-qc-plus">+1</span></span></button>' +
