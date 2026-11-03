@@ -26,7 +26,7 @@ const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov
 const EXIT_LABELS = { level1: "Level 1 (robot arm)", level3: "Level 3 (manual)", disposed: "Disposed" };
 
 let state = { batches: [], varieties: DEFAULT_VARIETIES.slice(), capGerm: 24, capNursery: 56 };
-let loaded = false, isAdmin = false, loadError = "", showLegacy = false, showHistory = false, quickLoc = "nursery";
+let loaded = false, isAdmin = false, loadError = "", showLegacy = false, showHistory = false, quickLoc = "germ";
 
 function esc(s){ return String(s == null ? "" : s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
 function uid(){ return Date.now().toString(36) + Math.random().toString(36).slice(2, 7); }
