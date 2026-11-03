@@ -149,6 +149,8 @@ function sortBatches(arr){
   return arr.slice().sort((a, b) => (a.sownDate || "9999").localeCompare(b.sownDate || "9999"));
 }
 
+function blk(no,title,inner,extra){ return '<section class="nl-block"><div class="nl-bh"><span class="nl-no">'+no+'</span><span class="nl-bt">'+title+'</span>'+(extra||'')+'</div>'+inner+'</section>'; }
+
 function render(){
   if (!root) return;
   const stats = computeStats();
@@ -160,7 +162,7 @@ function render(){
   if (loadError) h += '<div class="kiosk-message err">Couldn\'t load: ' + esc(loadError) + '</div>';
   if (!loaded && !loadError) h += '<p class="hint">Loading…</p>';
 
-  h += '<div class="nl-caps">' + capCard("Germination chamber", gUsed, state.capGerm) + capCard("Nursery", nUsed, state.capNursery) + '</div>';
+  let capH = '<div class="nl-caps">' + capCard("Germination chamber", gUsed, state.capGerm) + capCard("Nursery", nUsed, state.capNursery) + '</div>';
 
   // actionable prompts only (free space is already shown in the capacity strip)
   const alerts = [];
@@ -171,26 +173,22 @@ function render(){
     const dueG = germ.filter(b => { const st = stats[b.variety]; const t = st ? avg(st.germ) : null; const a = b.sownDate ? daysBetween(b.sownDate, today()) : null; return t != null && a != null && a >= Math.round(t); });
     if (dueG.length) alerts.push("Ready to move to nursery (" + plural(nFree, "space") + " free): " + dueG.map(b => esc(b.variety) + " ×" + b.trays).join(", ") + ".");
   }
-  if (alerts.length) h += '<div class="nl-alerts">' + alerts.map(a => '<div>⚠ ' + a + '</div>').join("") + '</div>';
+  if (alerts.length) capH += '<div class="nl-alerts">' + alerts.map(a => '<div>' + a + '</div>').join("") + '</div>';
+  h += blk("01", "Capacity", capH);
 
   if (isAdmin){
-    h += '<div class="nl-actions"><button class="btn primary" data-action="sow">+ Sow into germination</button>' +
+    let act = '<div class="nl-actions"><button class="btn primary" data-action="sow">+ Sow into germination</button>' +
       '<button class="btn" data-action="existing">+ Add existing stock</button>' +
       '<button class="btn" data-action="settings">⚙ Varieties &amp; capacity</button></div>';
+    h += blk("02", "Actions", act + quickCountPanel());
   }
 
-  if (isAdmin) h += quickCountPanel();
+  h += blk("03", "Germination chamber", '<div class="nl-list">' + (germ.length ? groupBatches(germ).map(b => batchCard(b, stats)).join("") : '<div class="empty-state">Empty — sow something.</div>') + '</div>', '<span class="nl-count">' + gUsed + ' / ' + state.capGerm + '</span>');
+  h += blk("04", "Nursery", '<div class="nl-list">' + (nur.length ? groupBatches(nur).map(b => batchCard(b, stats)).join("") : '<div class="empty-state">Empty.</div>') + '</div>', '<span class="nl-count">' + nUsed + ' / ' + state.capNursery + '</span>');
 
-  h += '<div class="nl-cols">';
-  h += '<div class="nl-col"><h3>Germination chamber <span class="nl-count">' + gUsed + '/' + state.capGerm + '</span></h3>' +
-    '<div class="nl-list">' + (germ.length ? groupBatches(germ).map(b => batchCard(b, stats)).join("") : '<div class="empty-state">Empty — sow something.</div>') + '</div>' + '</div>';
-  h += '<div class="nl-col"><h3>Nursery <span class="nl-count">' + nUsed + '/' + state.capNursery + '</span></h3>' +
-    '<div class="nl-list">' + (nur.length ? groupBatches(nur).map(b => batchCard(b, stats)).join("") : '<div class="empty-state">Empty.</div>') + '</div>' + '</div>';
-  h += '</div>';
-
-  h += summaryTables(germ, nur, gUsed, nUsed);
-  h += patternSection(stats);
-  h += historySection();
+  h += blk("05", "Tray count by variety", summaryTables(germ, nur, gUsed, nUsed));
+  h += blk("06", "Patterns — from recorded dates", patternSection(stats));
+  h += blk("07", "History", historySection());
 
   h += '<p class="nl-legacy"><button class="btn" data-action="legacy">' + (showLegacy ? "Hide" : "Show") + ' old Grow Log (hidden, nothing deleted)</button></p>';
   h += '</div>';
@@ -247,7 +245,7 @@ function summaryTables(germ, nur, gUsed, nUsed){
     const g = sumTrays(germ.filter(b => b.variety === v)), n = sumTrays(nur.filter(b => b.variety === v));
     return { v, g, n, t: g + n };
   }).filter(r => r.t > 0).sort((a, b) => b.t - a.t || a.v.localeCompare(b.v));
-  let h = '<h3 class="nl-h3">Tray count by variety</h3>';
+  let h = '';
   if (!rows.length) return h + '<div class="empty-state">No trays recorded yet.</div>';
   h += '<table class="nl-table"><thead><tr><th>Variety</th><th>Nursery</th><th>Germination</th><th>Total</th></tr></thead><tbody>';
   rows.forEach(r => { h += '<tr><td>' + esc(r.v) + '</td><td>' + r.n + '</td><td>' + r.g + '</td><td>' + r.t + '</td></tr>'; });
@@ -257,7 +255,7 @@ function summaryTables(germ, nur, gUsed, nUsed){
 
 function patternSection(stats){
   const rows = Object.keys(stats).filter(v => stats[v].germ.length || stats[v].nursery.length || stats[v].exited).sort();
-  let h = '<h3 class="nl-h3">Patterns (from recorded dates)</h3>';
+  let h = '';
   if (!rows.length) return h + '<p class="hint">Average days will appear here once batches have dates and have moved through.</p>';
   h += '<table class="nl-table"><thead><tr><th>Variety</th><th>Avg days in germination</th><th>Avg days in nursery</th><th>→ L1</th><th>→ L3</th><th>Disposed</th></tr></thead><tbody>';
   rows.forEach(v => {
@@ -270,7 +268,7 @@ function patternSection(stats){
 
 function historySection(){
   const done = state.batches.filter(b => b.exitType).sort((a, b) => (b.exitDate || "").localeCompare(a.exitDate || ""));
-  let h = '<h3 class="nl-h3 nl-toggle" data-action="history">' + (showHistory ? "▾" : "▸") + ' History — trays that have left (' + done.length + ')</h3>';
+  let h = '<p class="hint nl-toggle" data-action="history">' + (showHistory ? "Hide" : "Show") + ' trays that have left (' + done.length + ')</p>';
   if (!showHistory) return h;
   if (!done.length) return h + '<div class="empty-state">Nothing has left the nursery yet.</div>';
   h += '<table class="nl-table"><thead><tr><th>Variety</th><th>Trays</th><th>Sown</th><th>To nursery</th><th>Left</th><th>Went to</th><th>Note</th>' + (isAdmin ? "<th></th>" : "") + '</tr></thead><tbody>';
