@@ -967,7 +967,8 @@ table tbody tr:nth-child(even) { background: transparent; }
 .pdf-claims-table tbody tr:nth-child(even) { background: transparent; }
 
 /* ---- Level 1 nursery log, aligned to the same grid ---- */
-.nl-root { padding: 0; }
+.nl-root { padding: 18px 20px 14px; }
+.nl-block:last-of-type { padding-bottom: 14px; }
 .nl-block { border-top: 1px solid var(--ink); padding: 14px 0 6px; margin-top: 14px; }
 .nl-block:first-of-type { margin-top: 6px; }
 .nl-bh { display: flex; align-items: baseline; gap: 12px; margin: 0 0 10px; font-size: 11px; font-weight: 600; letter-spacing: 0.16em; text-transform: uppercase; }
@@ -1023,3 +1024,78 @@ button.nl-card:hover { background: transparent; border-color: var(--ink); box-sh
   .tab-btn { letter-spacing: 0.06em; }
   .tab-btn.active { border-bottom-color: transparent; box-shadow: inset 0 2px 0 var(--ink); }
 }
+
+/* ============================================================================
+   READABLE OVERRIDE (style C): warm paper, bold ink lines, larger sentence-case text
+   ============================================================================ */
+:root { --paper: #faf7f0; --sheet: #fffdf8; --ink: #2a2418; --mute: #5a4f38; --rule: #b9b09a; --accent: #1f5a43; }
+body { font-size: 15px; line-height: 1.5; }
+.section { border: 2px solid var(--ink); }
+.section h2, .section > h2 { font-size: 16px; font-weight: 600; letter-spacing: 0; text-transform: none; border-bottom: 2px solid var(--ink); }
+.section h3, .nl-bh { font-size: 15px; letter-spacing: 0; text-transform: none; font-weight: 600; }
+h1 { font-size: 24px; font-weight: 600; letter-spacing: 0; text-transform: none; }
+.hint, .sync-status { font-size: 13.5px; color: var(--mute); }
+
+.tabs { border-bottom: 2px solid var(--ink); }
+.tab-btn { font-size: 14px; letter-spacing: 0; text-transform: none; color: var(--mute); font-weight: 500; padding: 10px 14px; }
+.tab-btn.active { color: var(--ink); font-weight: 700; border-bottom: 4px solid var(--ink); }
+.subtab-btn, .dash-loc-btn { font-size: 13.5px; letter-spacing: 0; text-transform: none; }
+.subtab-btn.active, .dash-loc-btn.active { font-weight: 700; border-bottom: 3px solid var(--ink); }
+
+.btn, .admin-btn, .att-btn, .cal-controls button, .pin-pad button { font-size: 13.5px; letter-spacing: 0; text-transform: none; font-weight: 600; border: 1.5px solid var(--ink); padding: 8px 14px; }
+.btn.primary, .add-row button, .finding-add-actions button { border: 2px solid var(--ink); border-bottom-width: 4px; font-weight: 700; }
+.checkin-btn.in, .checkin-btn.out, .checkin-btn.claim { border: 2px solid var(--ink); border-left-width: 8px; text-transform: none; letter-spacing: 0; font-size: 16px; font-weight: 700; }
+
+.admin-badge.on, .day-tag, .ds-status, .event-special-tag, .proposal-badge, .report-badge, .claim-badge, .finding-latest-tag,
+.att-badge, .inv-badge, .purchase-price-tag, .pdf-att-findings-tag { font-size: 12px; text-transform: none; letter-spacing: 0; font-weight: 700; border-width: 1.5px; }
+.now-pill { text-transform: none; letter-spacing: 0; font-weight: 700; border-width: 1.5px; }
+
+.day-cell { border: 1px solid var(--rule); }
+.day-cell.maintenance { background: repeating-linear-gradient(135deg, transparent 0 6px, rgba(180,84,10,0.28) 6px 8px); }
+.day-cell.holiday { background: repeating-linear-gradient(45deg, transparent 0 6px, rgba(75,74,122,0.28) 6px 8px); }
+
+input, select, textarea { border: 1.5px solid var(--ink); font-size: 15px; }
+table th { font-size: 13px; letter-spacing: 0; text-transform: none; font-weight: 700; border-bottom: 2px solid var(--ink); }
+table td { font-size: 14px; }
+.modal { border: 2px solid var(--ink); }
+.modal h3 { font-size: 16px; letter-spacing: 0; text-transform: none; border-bottom: 2px solid var(--ink); }
+.field label { font-size: 13px; letter-spacing: 0; text-transform: none; font-weight: 600; color: var(--ink); }
+
+/* Grow Log */
+.nl-root { padding: 18px 20px 14px; }
+.nl-block { border-top: 2px solid var(--ink); }
+.nl-bh .nl-no { font-size: 13px; color: var(--mute); }
+.nl-cap { border: 2px solid var(--ink); border-left-width: 8px; padding: 10px 14px; }
+.nl-cap.ok { border-color: var(--ink); border-left-color: var(--accent); }
+.nl-cap.over { border-color: #8a2b20; }
+.nl-cap-title { font-size: 14px; letter-spacing: 0; text-transform: none; font-weight: 600; color: var(--ink); }
+.nl-cap-num { font-size: 15px; }
+.nl-cap-num b { font-size: 26px; font-weight: 600; }
+.nl-cap-sub { font-size: 14px; }
+.nl-bar { height: 12px; border: 1.5px solid var(--ink); background: transparent; }
+.nl-bar-fill { background: var(--ink); }
+.nl-alerts { font-size: 14px; border: 2px solid #b4540a; border-left-width: 8px; color: #6b3a05; }
+.nl-quick { border: 2px solid var(--ink); }
+.nl-quick-head { font-size: 14px; letter-spacing: 0; text-transform: none; }
+.nl-seg { border: 2px solid var(--ink); }
+.nl-seg button { font-size: 14px; letter-spacing: 0; text-transform: none; font-weight: 600; padding: 8px 14px; }
+.nl-seg button.on { font-weight: 700; box-shadow: inset 0 -4px 0 var(--ink); }
+.nl-qc-add { border: 1.5px solid var(--ink); padding: 8px 10px; }
+.nl-qc-add:hover { box-shadow: inset 0 0 0 1px var(--ink); }
+.nl-qc-name { font-size: 13.5px; font-weight: 600; }
+.nl-qc-n { font-size: 26px; font-weight: 600; }
+.nl-qc-plus { font-size: 13px; font-weight: 700; border-width: 1.5px; }
+.nl-qc-minus { width: 26px; height: 26px; border: 1.5px solid var(--ink); color: var(--ink); }
+.nl-list { grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 8px; }
+.nl-card { border: 1.5px solid var(--ink); padding: 8px 12px; }
+button.nl-card:hover { box-shadow: inset 6px 0 0 var(--ink); }
+.nl-card.due { border: 1.5px solid #b4540a; border-left-width: 6px; box-shadow: none; }
+.nl-card-name { font-size: 15px; font-weight: 600; }
+.nl-trays { font-size: 20px; font-weight: 600; }
+.nl-card-sub { font-size: 12.5px; color: var(--mute); }
+.nl-due { font-size: 12px; font-weight: 700; color: #b4540a; border-width: 1.5px; text-transform: none; letter-spacing: 0; }
+.nl-table th { font-size: 13px; border-bottom: 2px solid var(--ink); }
+.nl-table td { font-size: 14px; border-bottom: 1px solid var(--rule); }
+.nl-table tr.nl-total td { border-top: 2px solid var(--ink); border-bottom: 2px solid var(--ink); font-weight: 700; }
+.nl-legacy { border-top: 2px solid var(--ink); }
+@media (max-width: 640px) { .nl-root { padding: 14px 12px; } .nl-list { grid-template-columns: repeat(2, minmax(0, 1fr)); } .tab-btn.active { border-bottom-color: transparent; box-shadow: inset 0 4px 0 var(--ink); } }
