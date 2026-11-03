@@ -113,10 +113,9 @@ function bar(used, max){
 
 function capCard(title, used, max){
   const left = max - used;
-  const msg = left > 0 ? plural(left, "tray space") + " free" : (left === 0 ? "Full" : plural(-left, "tray") + " over capacity");
-  return '<div class="nl-cap ' + (left === 0 ? "ok" : "") + '"><div class="nl-cap-title">' + title + '</div>' +
-    '<div class="nl-cap-num"><b>' + used + '</b> / ' + max + '</div>' + bar(used, max) +
-    '<div class="nl-cap-sub">' + msg + '</div></div>';
+  const msg = left > 0 ? left + " free" : (left === 0 ? "Full" : (-left) + " over");
+  return '<div class="nl-cap ' + (left === 0 ? "ok" : (left < 0 ? "over" : "")) + '"><div class="nl-cap-row"><span class="nl-cap-title">' + title + '</span>' +
+    '<span class="nl-cap-num"><b>' + used + '</b>/' + max + '</span><span class="nl-cap-sub">' + msg + '</span></div>' + bar(used, max) + '</div>';
 }
 
 function batchCard(b, stats){
@@ -126,14 +125,12 @@ function batchCard(b, stats){
   const st = stats[b.variety];
   const typical = st ? avg(g ? st.germ : st.nursery) : null;
   const due = age != null && typical != null && age >= Math.round(typical);
-  const sub = g ? ("Sown " + fmt(b.sownDate)) : ("In nursery " + (b.nurseryDate ? "since " + fmt(b.nurseryDate) : "(date unknown)") + (b.sownDate ? " · sown " + fmt(b.sownDate) : ""));
+  const when = g ? ("Sown " + fmt(b.sownDate)) : (b.nurseryDate ? "In " + fmt(b.nurseryDate) : "date unknown");
+  const sub = when + (age != null ? " · day " + age : "") + (typical != null ? " (typ. " + Math.round(typical) + "d)" : "");
   const tag = isAdmin ? "button" : "div";
   return '<' + tag + ' class="nl-card' + (due ? " due" : "") + '" data-action="open" data-id="' + esc(b.id) + '">' +
-    '<span class="nl-card-top"><b>' + esc(b.variety) + '</b><span class="nl-trays">' + plural(b.trays, "tray") + '</span></span>' +
-    '<span class="nl-card-sub">' + esc(sub) + '</span>' +
-    '<span class="nl-card-age">' + (age != null ? "Day " + age : "age unknown") +
-    (typical != null ? ' <span class="nl-typical">· typical ' + Math.round(typical) + 'd</span>' : "") +
-    (due ? ' <span class="nl-due">ready?</span>' : "") + '</span>' +
+    '<span class="nl-card-name">' + esc(b.variety) + '</span><span class="nl-trays">' + b.trays + '</span>' +
+    '<span class="nl-card-sub">' + esc(sub) + (due ? ' <span class="nl-due">ready?</span>' : "") + '</span>' +
     '</' + tag + '>';
 }
 
@@ -148,19 +145,20 @@ function render(){
   const gUsed = sumTrays(germ), nUsed = sumTrays(nur);
   let h = '<div class="section nl-root">';
   h += '<h2>Level 1 — Germination chamber &amp; Nursery</h2>';
-  h += '<p class="hint">Record each tray batch with its date. Tap a germination batch to move it to the nursery; tap a nursery batch to send it to Level 1, Level 3, or dispose. Goal: keep both areas full.</p>';
+  h += '<p class="hint">Tap a germination batch to move it to the nursery; tap a nursery batch to send it to Level 1, Level 3, or dispose.</p>';
   if (loadError) h += '<div class="kiosk-message err">Couldn\'t load: ' + esc(loadError) + '</div>';
   if (!loaded && !loadError) h += '<p class="hint">Loading…</p>';
 
   h += '<div class="nl-caps">' + capCard("Germination chamber", gUsed, state.capGerm) + capCard("Nursery", nUsed, state.capNursery) + '</div>';
 
-  // keep-full prompts
+  // actionable prompts only (free space is already shown in the capacity strip)
   const alerts = [];
   const gFree = state.capGerm - gUsed, nFree = state.capNursery - nUsed;
-  if (loaded && gFree > 0) alerts.push("Germination has " + plural(gFree, "free tray space") + " — sow " + gFree + " more " + (gFree === 1 ? "tray" : "trays") + ".");
+  if (loaded && gFree < 0) alerts.push("Germination is " + (-gFree) + " over capacity.");
+  if (loaded && nFree < 0) alerts.push("Nursery is " + (-nFree) + " over capacity.");
   if (loaded && nFree > 0){
     const dueG = germ.filter(b => { const st = stats[b.variety]; const t = st ? avg(st.germ) : null; const a = b.sownDate ? daysBetween(b.sownDate, today()) : null; return t != null && a != null && a >= Math.round(t); });
-    alerts.push("Nursery has " + plural(nFree, "free tray space") + "." + (dueG.length ? " Germination batches ready to move: " + dueG.map(b => esc(b.variety) + " (" + b.trays + ")").join(", ") + "." : ""));
+    if (dueG.length) alerts.push("Ready to move to nursery (" + plural(nFree, "space") + " free): " + dueG.map(b => esc(b.variety) + " ×" + b.trays).join(", ") + ".");
   }
   if (alerts.length) h += '<div class="nl-alerts">' + alerts.map(a => '<div>⚠ ' + a + '</div>').join("") + '</div>';
 
@@ -174,9 +172,9 @@ function render(){
 
   h += '<div class="nl-cols">';
   h += '<div class="nl-col"><h3>Germination chamber <span class="nl-count">' + gUsed + '/' + state.capGerm + '</span></h3>' +
-    (germ.length ? germ.map(b => batchCard(b, stats)).join("") : '<div class="empty-state">Empty — sow something.</div>') + '</div>';
+    '<div class="nl-list">' + (germ.length ? germ.map(b => batchCard(b, stats)).join("") : '<div class="empty-state">Empty — sow something.</div>') + '</div>' + '</div>';
   h += '<div class="nl-col"><h3>Nursery <span class="nl-count">' + nUsed + '/' + state.capNursery + '</span></h3>' +
-    (nur.length ? nur.map(b => batchCard(b, stats)).join("") : '<div class="empty-state">Empty.</div>') + '</div>';
+    '<div class="nl-list">' + (nur.length ? nur.map(b => batchCard(b, stats)).join("") : '<div class="empty-state">Empty.</div>') + '</div>' + '</div>';
   h += '</div>';
 
   h += summaryTables(germ, nur, gUsed, nUsed);
@@ -201,7 +199,7 @@ function quickCountPanel(){
     '<button class="' + (loc === "germ" ? "on" : "") + '" data-action="qloc" data-loc="germ">Germination</button></span></div><div class="nl-qgrid">';
   state.varieties.forEach((v, i) => {
     const n = counts[v] || 0;
-    h += '<div class="nl-qc"><button class="nl-qc-add" data-action="qadd" data-i="' + i + '"><span class="nl-qc-name">' + esc(v) + '</span><span class="nl-qc-n">' + n + '</span><span class="nl-qc-plus">+1</span></button>' +
+    h += '<div class="nl-qc"><button class="nl-qc-add" data-action="qadd" data-i="' + i + '"><span class="nl-qc-name">' + esc(v) + '</span><span class="nl-qc-row"><span class="nl-qc-n">' + n + '</span><span class="nl-qc-plus">+1</span></span></button>' +
       '<button class="nl-qc-minus" data-action="qsub" data-i="' + i + '" title="Remove 1 tray (undo)"' + (n ? "" : " disabled") + '>−</button></div>';
   });
   return h + '</div></div>';
@@ -243,12 +241,6 @@ function summaryTables(germ, nur, gUsed, nUsed){
   h += '<table class="nl-table"><thead><tr><th>Variety</th><th>Nursery</th><th>Germination</th><th>Total</th></tr></thead><tbody>';
   rows.forEach(r => { h += '<tr><td>' + esc(r.v) + '</td><td>' + r.n + '</td><td>' + r.g + '</td><td>' + r.t + '</td></tr>'; });
   h += '<tr class="nl-total"><td>Total</td><td>' + nUsed + '</td><td>' + gUsed + '</td><td>' + (nUsed + gUsed) + '</td></tr></tbody></table>';
-  const util = (u, m) => (m ? Math.round(u / m * 100) : 0) + "%";
-  const tm = state.capGerm + state.capNursery, tu = gUsed + nUsed;
-  h += '<h3 class="nl-h3">Capacity</h3><table class="nl-table"><thead><tr><th>Area</th><th>Trays in use</th><th>Max</th><th>Space left</th><th>Utilisation</th></tr></thead><tbody>' +
-    '<tr><td>Nursery</td><td>' + nUsed + '</td><td>' + state.capNursery + '</td><td>' + (state.capNursery - nUsed) + '</td><td>' + util(nUsed, state.capNursery) + '</td></tr>' +
-    '<tr><td>Germination chamber</td><td>' + gUsed + '</td><td>' + state.capGerm + '</td><td>' + (state.capGerm - gUsed) + '</td><td>' + util(gUsed, state.capGerm) + '</td></tr>' +
-    '<tr class="nl-total"><td>Total</td><td>' + tu + '</td><td>' + tm + '</td><td>' + (tm - tu) + '</td><td>' + util(tu, tm) + '</td></tr></tbody></table>';
   return h;
 }
 
