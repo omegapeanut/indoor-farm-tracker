@@ -326,8 +326,11 @@
 
   <!-- GROW LOG TAB -->
   <div class="tab-panel" id="tab-growlog">
-    <div class="section">
-      <h2>Grow Log</h2>
+    <!-- New Level 1 Germination + Nursery tracker (nursery.js). The previous Grow Log is kept
+         below, hidden, so its code and data stay intact; nursery.js can toggle it back on. -->
+    <div id="nurseryLogRoot"></div>
+    <div class="section" id="legacyGrowLog" style="display:none;">
+      <h2>Grow Log (old)</h2>
       <p class="hint">Daily harvest, seedling transfers, germination, losses, and environment readings across Level 1, Level 3, and both germination rooms.</p>
 
       <div class="staff-toggle-row" id="plantTypesToggleRow" style="display:none;">
@@ -1177,5 +1180,6 @@
      page can be annotated like any other photo — same CDN-script approach as Chart.js -->
 <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@2.16.105/build/pdf.min.js"></script>
 <script type="module" src="app.js"></script>
+<script type="module" src="nursery.js"></script>
 </body>
 </html>
