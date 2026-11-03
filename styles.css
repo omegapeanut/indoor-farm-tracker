@@ -819,15 +819,15 @@ header.top p { margin: 0; color: #666; font-size: 13px; }
 .nl-seg { margin-left: auto; display: inline-flex; border: 1px solid #b9d3f7; border-radius: 8px; overflow: hidden; }
 .nl-seg button { border: none; background: #fff; padding: 6px 12px; font-size: 12.5px; cursor: pointer; }
 .nl-seg button.on { background: #0b57d0; color: #fff; font-weight: 600; }
-.nl-qgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(138px, 1fr)); gap: 6px; }
-.nl-qc { display: flex; gap: 3px; min-width: 0; }
-.nl-qc-add { flex: 1; min-width: 0; display: flex; flex-direction: column; justify-content: space-between; gap: 4px; text-align: left; padding: 7px 9px; border: 1px solid #b9d3f7; border-radius: 8px; background: #fff; cursor: pointer; font: inherit; touch-action: manipulation; user-select: none; }
+.nl-qgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(124px, 1fr)); gap: 6px; }
+.nl-qc { position: relative; min-width: 0; }
+.nl-qc-add { width: 100%; display: flex; flex-direction: column; gap: 2px; text-align: left; padding: 6px 9px 7px; border: 1px solid #b9d3f7; border-radius: 8px; background: #fff; cursor: pointer; font: inherit; touch-action: manipulation; user-select: none; }
 .nl-qc-add:active { background: #dfeaff; transform: scale(0.98); }
-.nl-qc-name { font-size: 12px; font-weight: 600; line-height: 1.2; min-height: 2.4em; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; word-break: break-word; }
+.nl-qc-name { font-size: 11.5px; font-weight: 600; line-height: 1.2; min-height: 2.4em; padding-right: 22px; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; word-break: break-word; }
 .nl-qc-row { display: flex; align-items: center; justify-content: space-between; }
 .nl-qc-n { font-size: 22px; font-weight: 800; color: #0b57d0; line-height: 1; }
 .nl-qc-plus { font-size: 11px; font-weight: 700; color: #fff; background: #0b57d0; border-radius: 10px; padding: 3px 9px; }
-.nl-qc-minus { flex: 0 0 28px; border: 1px solid #e0c4c0; background: #fff; color: #c0392b; border-radius: 8px; font-size: 18px; cursor: pointer; padding: 0; }
+.nl-qc-minus { position: absolute; top: 4px; right: 4px; width: 22px; height: 22px; border: 1px solid #e0c4c0; background: #fff; color: #c0392b; border-radius: 50%; font-size: 15px; line-height: 1; cursor: pointer; padding: 0; }
 .nl-qc-minus:disabled { opacity: 0.3; cursor: default; }
 
 /* batch lists: compact one-per-row cards, scrollable so the page doesn't get long */
@@ -859,7 +859,7 @@ button.nl-card:hover { border-color: #0b57d0; background: #f5f9ff; }
 .nl-varlist { max-height: 200px; overflow: auto; margin-bottom: 8px; }
 .nl-varrow { display: flex; justify-content: space-between; align-items: center; padding: 5px 2px; border-bottom: 1px solid #f0f0f0; font-size: 13px; }
 @media (max-width: 640px) {
-  .nl-qgrid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .nl-qgrid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .nl-cols { grid-template-columns: 1fr; }
   .nl-list { max-height: 280px; }
   .nl-table th, .nl-table td { padding: 5px 4px; }
