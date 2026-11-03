@@ -840,3 +840,20 @@ button.nl-card:hover { border-color: #0b57d0; background: #f5f9ff; }
   .nl-table { font-size: 12px; }
   .nl-table th, .nl-table td { padding: 6px 5px; }
 }
+
+/* Quick count tally */
+.nl-quick { background: #f4f8ff; border: 1px solid #cfe0fb; border-radius: 12px; padding: 12px; margin-bottom: 16px; }
+.nl-quick-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; font-size: 13px; margin-bottom: 10px; }
+.nl-seg { margin-left: auto; display: inline-flex; border: 1px solid #b9d3f7; border-radius: 8px; overflow: hidden; }
+.nl-seg button { border: none; background: #fff; padding: 7px 14px; font-size: 13px; cursor: pointer; }
+.nl-seg button.on { background: #0b57d0; color: #fff; font-weight: 600; }
+.nl-qgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; }
+.nl-qc { display: flex; gap: 4px; }
+.nl-qc-add { flex: 1; min-width: 0; display: grid; grid-template-columns: 1fr auto; grid-template-areas: "name n" "plus n"; align-items: center; text-align: left; gap: 0 6px; padding: 10px 12px; border: 1px solid #b9d3f7; border-radius: 10px; background: #fff; cursor: pointer; font: inherit; touch-action: manipulation; user-select: none; }
+.nl-qc-add:active { background: #dfeaff; transform: scale(0.98); }
+.nl-qc-name { grid-area: name; font-size: 13px; font-weight: 600; line-height: 1.2; }
+.nl-qc-plus { grid-area: plus; font-size: 12px; color: #0b57d0; font-weight: 700; }
+.nl-qc-n { grid-area: n; font-size: 26px; font-weight: 800; color: #0b57d0; }
+.nl-qc-minus { width: 38px; border: 1px solid #e0c4c0; background: #fff; color: #c0392b; border-radius: 10px; font-size: 20px; cursor: pointer; }
+.nl-qc-minus:disabled { opacity: 0.35; cursor: default; }
+@media (max-width: 640px) { .nl-qgrid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }

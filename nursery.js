@@ -26,7 +26,7 @@ const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov
 const EXIT_LABELS = { level1: "Level 1 (robot arm)", level3: "Level 3 (manual)", disposed: "Disposed" };
 
 let state = { batches: [], varieties: DEFAULT_VARIETIES.slice(), capGerm: 24, capNursery: 56 };
-let loaded = false, isAdmin = false, loadError = "", showLegacy = false, showHistory = false;
+let loaded = false, isAdmin = false, loadError = "", showLegacy = false, showHistory = false, quickLoc = "nursery";
 
 function esc(s){ return String(s == null ? "" : s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
 function uid(){ return Date.now().toString(36) + Math.random().toString(36).slice(2, 7); }
@@ -170,6 +170,8 @@ function render(){
       '<button class="btn" data-action="settings">⚙ Varieties &amp; capacity</button></div>';
   }
 
+  if (isAdmin) h += quickCountPanel();
+
   h += '<div class="nl-cols">';
   h += '<div class="nl-col"><h3>Germination chamber <span class="nl-count">' + gUsed + '/' + state.capGerm + '</span></h3>' +
     (germ.length ? germ.map(b => batchCard(b, stats)).join("") : '<div class="empty-state">Empty — sow something.</div>') + '</div>';
@@ -186,6 +188,48 @@ function render(){
   root.innerHTML = h;
   const legacy = document.getElementById("legacyGrowLog");
   if (legacy) legacy.style.display = showLegacy ? "" : "none";
+}
+
+// One-tap tally: each press adds 1 tray of that crop to the chosen area, dated today.
+// Taps on the same crop the same day merge into a single batch so the lists stay tidy.
+function quickCountPanel(){
+  const loc = quickLoc;
+  const counts = {};
+  inLoc(loc).forEach(b => { counts[b.variety] = (counts[b.variety] || 0) + (Number(b.trays) || 0); });
+  let h = '<div class="nl-quick"><div class="nl-quick-head"><b>Quick count</b> — tap a crop for +1 tray, dated today' +
+    '<span class="nl-seg"><button class="' + (loc === "nursery" ? "on" : "") + '" data-action="qloc" data-loc="nursery">Nursery</button>' +
+    '<button class="' + (loc === "germ" ? "on" : "") + '" data-action="qloc" data-loc="germ">Germination</button></span></div><div class="nl-qgrid">';
+  state.varieties.forEach((v, i) => {
+    const n = counts[v] || 0;
+    h += '<div class="nl-qc"><button class="nl-qc-add" data-action="qadd" data-i="' + i + '"><span class="nl-qc-name">' + esc(v) + '</span><span class="nl-qc-n">' + n + '</span><span class="nl-qc-plus">+1</span></button>' +
+      '<button class="nl-qc-minus" data-action="qsub" data-i="' + i + '" title="Remove 1 tray (undo)"' + (n ? "" : " disabled") + '>−</button></div>';
+  });
+  return h + '</div></div>';
+}
+
+function quickAdd(i){
+  const v = state.varieties[i]; if (v == null) return;
+  const loc = quickLoc, t = today();
+  mutate(s => {
+    const key = loc === "nursery" ? "nurseryDate" : "sownDate";
+    let b = s.batches.find(x => !x.exitType && x.tally && x.variety === v && x.location === loc && x[key] === t);
+    if (b) b.trays = (Number(b.trays) || 0) + 1;
+    else s.batches.push({ id: uid(), variety: v, trays: 1, location: loc, sownDate: loc === "germ" ? t : null, nurseryDate: loc === "nursery" ? t : null, exitDate: null, exitType: null, note: "", tally: true });
+  });
+}
+
+function quickSub(i){
+  const v = state.varieties[i]; if (v == null) return;
+  const loc = quickLoc;
+  mutate(s => {
+    const key = loc === "nursery" ? "nurseryDate" : "sownDate";
+    const list = s.batches.filter(x => !x.exitType && x.variety === v && x.location === loc);
+    if (!list.length) return;
+    // prefer today's tally batch, otherwise the most recently added one
+    const b = list.find(x => x.tally && x[key] === today()) || list[list.length - 1];
+    b.trays = (Number(b.trays) || 0) - 1;
+    if (b.trays <= 0) s.batches = s.batches.filter(x => x.id !== b.id);
+  });
 }
 
 function summaryTables(germ, nur, gUsed, nUsed){
@@ -413,6 +457,9 @@ function onClick(e){
   if (!t) return;
   const a = t.dataset.action;
   if (a === "open" && isAdmin) openBatch(t.dataset.id);
+  else if (a === "qadd" && isAdmin) quickAdd(parseInt(t.dataset.i, 10));
+  else if (a === "qsub" && isAdmin) quickSub(parseInt(t.dataset.i, 10));
+  else if (a === "qloc"){ quickLoc = t.dataset.loc; render(); }
   else if (a === "sow") openAdd("germ");
   else if (a === "existing") openAdd("nursery");
   else if (a === "settings") openSettings();
