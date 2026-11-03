@@ -830,12 +830,12 @@ header.top p { margin: 0; color: #666; font-size: 13px; }
 .nl-qc-minus { position: absolute; top: 4px; right: 4px; width: 22px; height: 22px; border: 1px solid #e0c4c0; background: #fff; color: #c0392b; border-radius: 50%; font-size: 15px; line-height: 1; cursor: pointer; padding: 0; }
 .nl-qc-minus:disabled { opacity: 0.3; cursor: default; }
 
-/* batch lists: compact one-per-row cards, scrollable so the page doesn't get long */
+/* batch lists: compact cards packed in a grid — no inner scrolling */
 .nl-cols { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; align-items: start; }
 .nl-col h3 { font-size: 13px; margin: 0 0 6px; display: flex; justify-content: space-between; }
 .nl-count { font-weight: 500; color: #666; }
-.nl-list { max-height: 360px; overflow-y: auto; padding-right: 2px; }
-.nl-card { display: grid; grid-template-columns: 1fr auto; align-items: baseline; gap: 0 8px; width: 100%; text-align: left; font: inherit; color: inherit; background: #fff; border: 1px solid #e0e3e8; border-radius: 8px; padding: 6px 10px; margin-bottom: 5px; }
+.nl-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 5px; }
+.nl-card { display: grid; grid-template-columns: 1fr auto; align-items: baseline; gap: 0 8px; width: 100%; text-align: left; font: inherit; color: inherit; background: #fff; border: 1px solid #e0e3e8; border-radius: 8px; padding: 6px 10px; margin: 0; }
 button.nl-card { cursor: pointer; }
 button.nl-card:hover { border-color: #0b57d0; background: #f5f9ff; }
 .nl-card.due { border-color: #e09a1a; background: #fffaf0; }
@@ -861,6 +861,6 @@ button.nl-card:hover { border-color: #0b57d0; background: #f5f9ff; }
 @media (max-width: 640px) {
   .nl-qgrid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .nl-cols { grid-template-columns: 1fr; }
-  .nl-list { max-height: 280px; }
+  .nl-list { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .nl-table th, .nl-table td { padding: 5px 4px; }
 }

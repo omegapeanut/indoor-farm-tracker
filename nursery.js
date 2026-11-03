@@ -119,7 +119,7 @@ function capCard(title, used, max){
 }
 
 function batchCard(b, stats){
-  const g = inLoc("germ").includes(b);
+  const g = b.location === "germ";
   const startKey = g ? b.sownDate : (b.nurseryDate || b.sownDate);
   const age = startKey ? daysBetween(startKey, today()) : null;
   const st = stats[b.variety];
@@ -128,10 +128,21 @@ function batchCard(b, stats){
   const when = g ? ("Sown " + fmt(b.sownDate)) : (b.nurseryDate ? "In " + fmt(b.nurseryDate) : "date unknown");
   const sub = when + (age != null ? " · day " + age : "") + (typical != null ? " (typ. " + Math.round(typical) + "d)" : "");
   const tag = isAdmin ? "button" : "div";
-  return '<' + tag + ' class="nl-card' + (due ? " due" : "") + '" data-action="open" data-id="' + esc(b.id) + '">' +
+  return '<' + tag + ' class="nl-card' + (due ? " due" : "") + '" data-action="open" data-id="' + esc(b.id) + '" data-ids="' + esc((b.ids || [b.id]).join(",")) + '">' +
     '<span class="nl-card-name">' + esc(b.variety) + '</span><span class="nl-trays">' + b.trays + '</span>' +
     '<span class="nl-card-sub">' + esc(sub) + (due ? ' <span class="nl-due">ready?</span>' : "") + '</span>' +
     '</' + tag + '>';
+}
+
+// Identical batches (same crop and dates) show as one row with the combined tray count.
+function groupBatches(arr){
+  const map = new Map();
+  arr.forEach(b => {
+    const k = [b.variety, b.sownDate || "", b.nurseryDate || ""].join("|");
+    if (!map.has(k)) map.set(k, Object.assign({}, b, { ids: [b.id], trays: 0 }));
+    const g = map.get(k); g.trays += Number(b.trays) || 0; if (!g.ids.includes(b.id)) g.ids.push(b.id);
+  });
+  return [...map.values()];
 }
 
 function sortBatches(arr){
@@ -172,9 +183,9 @@ function render(){
 
   h += '<div class="nl-cols">';
   h += '<div class="nl-col"><h3>Germination chamber <span class="nl-count">' + gUsed + '/' + state.capGerm + '</span></h3>' +
-    '<div class="nl-list">' + (germ.length ? germ.map(b => batchCard(b, stats)).join("") : '<div class="empty-state">Empty — sow something.</div>') + '</div>' + '</div>';
+    '<div class="nl-list">' + (germ.length ? groupBatches(germ).map(b => batchCard(b, stats)).join("") : '<div class="empty-state">Empty — sow something.</div>') + '</div>' + '</div>';
   h += '<div class="nl-col"><h3>Nursery <span class="nl-count">' + nUsed + '/' + state.capNursery + '</span></h3>' +
-    '<div class="nl-list">' + (nur.length ? nur.map(b => batchCard(b, stats)).join("") : '<div class="empty-state">Empty.</div>') + '</div>' + '</div>';
+    '<div class="nl-list">' + (nur.length ? groupBatches(nur).map(b => batchCard(b, stats)).join("") : '<div class="empty-state">Empty.</div>') + '</div>' + '</div>';
   h += '</div>';
 
   h += summaryTables(germ, nur, gUsed, nUsed);
@@ -448,7 +459,18 @@ function onClick(e){
   const t = e.target.closest("[data-action]");
   if (!t) return;
   const a = t.dataset.action;
-  if (a === "open" && isAdmin) openBatch(t.dataset.id);
+  if (a === "open" && isAdmin){
+    const ids = (t.dataset.ids || t.dataset.id).split(",");
+    if (ids.length > 1){
+      const first = ids[0];
+      mutate(st => {
+        const keep = st.batches.find(x => x.id === first);
+        ids.slice(1).forEach(id => { const o = st.batches.find(x => x.id === id); if (o){ keep.trays = (Number(keep.trays) || 0) + (Number(o.trays) || 0); } });
+        st.batches = st.batches.filter(x => !ids.slice(1).includes(x.id));
+      });
+    }
+    openBatch(ids[0]);
+  }
   else if (a === "qadd" && isAdmin) quickAdd(parseInt(t.dataset.i, 10));
   else if (a === "qsub" && isAdmin) quickSub(parseInt(t.dataset.i, 10));
   else if (a === "qloc"){ quickLoc = t.dataset.loc; render(); }
