@@ -22,7 +22,7 @@ const DEFAULT_VARIETY_TRAYS = { "Crystal Green Lettuce": 11, "Garland Chrysanthe
 const EXIT_LABELS = { harvested: "Harvested", disposed: "Disposed" };
 
 let state = { batches: [], varieties: DEFAULT_VARIETIES.slice(), totalTrays: 0, plantsPerTray: 0, varietyTrays: Object.assign({}, DEFAULT_VARIETY_TRAYS) };
-let loaded = false, isAdmin = false, loadError = "", showHistory = false, quickReady = false;
+let loaded = false, isAdmin = false, loadError = "", showHistory = false, quickReady = false, showFilled = false;
 
 function esc(s){ return String(s == null ? "" : s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
 function uid(){ return Date.now().toString(36) + Math.random().toString(36).slice(2, 7); }
@@ -144,8 +144,9 @@ function render(){
   h += blk("01", "Capacity", capH);
   if (isAdmin) h += blk("02", "Actions",
     '<div class="nl-actions"><button class="btn primary" data-action="add">+ Add trays</button><button class="btn" data-action="settings">⚙ Trays per crop &amp; plants per tray</button></div>' + quickPanel());
-  h += blk("03", "Filled trays now", '<div class="nl-list">' + (act.length ? groupBatches(act).map(b => batchCard(b, stats)).join("") : '<div class="empty-state">No filled trays recorded yet.</div>') + '</div>',
-    '<span class="nl-count">' + filled + (effTotal() ? ' / ' + effTotal() : "") + ' trays</span>');
+  const filledBody = act.length ? '<div class="nl-list">' + groupBatches(act).map(b => batchCard(b, stats)).join("") + '</div>' : '<div class="empty-state">No filled trays recorded yet.</div>';
+  h += '<section class="nl-block"><div class="nl-bh nl-toggle" data-action="toggleFilled" style="cursor:pointer;"><span class="nl-no">03</span><span class="nl-bt">Filled trays now</span>' +
+    '<span class="nl-count">' + filled + (effTotal() ? ' / ' + effTotal() : "") + ' trays · ' + (showFilled ? "Hide ▴" : "Show ▾") + '</span></div>' + (showFilled ? filledBody : "") + '</section>';
   h += blk("04", "By variety", varietyTable(act, filled, plants));
   h += blk("05", "History", historySection(stats));
   h += '</div>';
@@ -380,6 +381,7 @@ function onClick(e){
   else if (a === "qready"){ quickReady = t.dataset.ready === "1"; render(); }
   else if (a === "add") openAdd();
   else if (a === "settings") openSettings();
+  else if (a === "toggleFilled"){ showFilled = !showFilled; render(); }
   else if (a === "history"){ showHistory = !showHistory; render(); }
   else if (a === "undo"){
     if (confirm("Put these trays back as filled?")) mutate(s => { const b = s.batches.find(x => x.id === t.dataset.id); b.exitType = null; b.exitDate = null; b.note = ""; });
