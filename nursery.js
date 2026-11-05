@@ -247,9 +247,9 @@ function summaryTables(germ, nur, gUsed, nUsed){
   }).filter(r => r.t > 0).sort((a, b) => b.t - a.t || a.v.localeCompare(b.v));
   let h = '';
   if (!rows.length) return h + '<div class="empty-state">No trays recorded yet.</div>';
-  h += '<table class="nl-table"><thead><tr><th>Variety</th><th>Nursery (max ' + state.capNursery + ')</th><th>Germination (max ' + state.capGerm + ')</th><th>Total (max ' + (state.capNursery + state.capGerm) + ')</th></tr></thead><tbody>';
-  rows.forEach(r => { h += '<tr><td>' + esc(r.v) + '</td><td>' + r.n + '</td><td>' + r.g + '</td><td>' + r.t + '</td></tr>'; });
-  h += '<tr class="nl-total"><td>Total</td><td>' + nUsed + ' / ' + state.capNursery + '</td><td>' + gUsed + ' / ' + state.capGerm + '</td><td>' + (nUsed + gUsed) + ' / ' + (state.capNursery + state.capGerm) + '</td></tr></tbody></table>';
+  h += '<table class="nl-table"><thead><tr><th>Variety</th><th>Germination (max ' + state.capGerm + ')</th><th>Nursery (max ' + state.capNursery + ')</th><th>Total (max ' + (state.capNursery + state.capGerm) + ')</th></tr></thead><tbody>';
+  rows.forEach(r => { h += '<tr><td>' + esc(r.v) + '</td><td>' + r.g + '</td><td>' + r.n + '</td><td>' + r.t + '</td></tr>'; });
+  h += '<tr class="nl-total"><td>Total</td><td>' + gUsed + ' / ' + state.capGerm + '</td><td>' + nUsed + ' / ' + state.capNursery + '</td><td>' + (nUsed + gUsed) + ' / ' + (state.capNursery + state.capGerm) + '</td></tr></tbody></table>';
   return h;
 }
 
