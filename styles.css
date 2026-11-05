@@ -1013,3 +1013,10 @@ button.nl-card:hover { background: var(--sage); border-color: var(--sage); box-s
 }
 h1, h2, h3, .modal h3, .nl-bh .nl-no, .nl-bh .nl-bt, .nl-cap-num b, .nl-qc-n, .nl-trays, .nl-quick-head b { font-variant-numeric: lining-nums; font-feature-settings: "lnum" 1; }
 .nl-qc-n, .nl-trays, .nl-cap-num b { font-weight: 600; }
+
+/* Level 3 ready / not ready */
+.nl-card.ready { background: var(--sage); border-color: #b9c9b3; }
+.nl-state { display: inline-block; font-size: 11.5px; font-weight: 700; border-radius: 999px; padding: 1px 9px; margin-right: 4px; }
+.nl-state.is-ready { background: var(--green); color: var(--cream); }
+.nl-state.not-ready { background: var(--blush); color: #8a4a33; }
+@media (max-width: 640px) { #level3LogRoot .nl-caps { grid-template-columns: 1fr !important; } }
