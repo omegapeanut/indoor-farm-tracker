@@ -18,9 +18,10 @@ const root = document.getElementById("level3LogRoot");
 
 const DEFAULT_VARIETIES = ["Perilla", "Mustard", "Sorrel", "Mizuna", "Swiss Chard", "Kale", "Ice Plant", "Red Coral Lettuce", "Crystal Green Lettuce", "Mini Red Romaine Lettuce", "Garland Chrysanthemum"];
 const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+const DEFAULT_VARIETY_TRAYS = { "Crystal Green Lettuce": 11, "Garland Chrysanthemum": 11, "Ice Plant": 22, "Kale": 13, "Mini Red Romaine Lettuce": 11, "Red Coral Lettuce": 11 };
 const EXIT_LABELS = { harvested: "Harvested", disposed: "Disposed" };
 
-let state = { batches: [], varieties: DEFAULT_VARIETIES.slice(), totalTrays: 0, plantsPerTray: 0 };
+let state = { batches: [], varieties: DEFAULT_VARIETIES.slice(), totalTrays: 0, plantsPerTray: 0, varietyTrays: Object.assign({}, DEFAULT_VARIETY_TRAYS) };
 let loaded = false, isAdmin = false, loadError = "", showHistory = false, quickReady = false;
 
 function esc(s){ return String(s == null ? "" : s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
@@ -50,7 +51,8 @@ function init(){
         batches: Array.isArray(d.batches) ? d.batches : [],
         varieties: Array.isArray(d.varieties) && d.varieties.length ? d.varieties : DEFAULT_VARIETIES.slice(),
         totalTrays: num(d.totalTrays),
-        plantsPerTray: num(d.plantsPerTray)
+        plantsPerTray: num(d.plantsPerTray),
+        varietyTrays: d.varietyTrays && typeof d.varietyTrays === "object" ? d.varietyTrays : Object.assign({}, DEFAULT_VARIETY_TRAYS)
       };
     }
     loaded = true; loadError = "";
@@ -72,6 +74,7 @@ async function mutate(fn){
 
 const active = () => state.batches.filter(b => !b.exitType);
 const sumTrays = (arr) => arr.reduce((s, b) => s + num(b.trays), 0);
+const effTotal = () => { const s = Object.values(state.varietyTrays || {}).reduce((a, x) => a + num(x), 0); return s || state.totalTrays; };
 const sumPlants = (arr) => arr.reduce((s, b) => s + num(b.plants), 0);
 
 function computeStats(){
@@ -93,16 +96,16 @@ function bar(used, max){
   return '<div class="nl-bar"><div class="nl-bar-fill ' + (max && used >= max ? "full" : (pct >= 85 ? "high" : "")) + '" style="width:' + pct + '%"></div></div>';
 }
 
-function capCards(filled, plants, readyTrays){
-  const total = state.totalTrays, empty = total - filled;
+function capCards(filled, plants, readyPlants){
+  const total = effTotal(), empty = total - filled;
   const msg = !total ? "Set total trays" : (empty > 0 ? empty + " empty" : (empty === 0 ? "All filled" : (-empty) + " over"));
   let h = '<div class="nl-caps" style="grid-template-columns:repeat(3,minmax(0,1fr));">';
   h += '<div class="nl-cap ' + (total && empty === 0 ? "ok" : (empty < 0 ? "over" : "")) + '"><div class="nl-cap-row"><span class="nl-cap-title">Trays filled</span>' +
     '<span class="nl-cap-num"><b>' + filled + '</b>' + (total ? '/' + total : "") + '</span><span class="nl-cap-sub">' + msg + '</span></div>' + bar(filled, total) + '</div>';
   h += '<div class="nl-cap"><div class="nl-cap-row"><span class="nl-cap-title">Plants</span><span class="nl-cap-num"><b>' + plants + '</b></span>' +
     '<span class="nl-cap-sub">' + (state.plantsPerTray ? state.plantsPerTray + " per tray" : "") + '</span></div>' + bar(0, 0) + '</div>';
-  h += '<div class="nl-cap ' + (readyTrays ? "ok" : "") + '"><div class="nl-cap-row"><span class="nl-cap-title">Ready to harvest</span><span class="nl-cap-num"><b>' + readyTrays + '</b></span>' +
-    '<span class="nl-cap-sub">' + (filled - readyTrays) + ' not ready</span></div>' + bar(readyTrays, filled) + '</div>';
+  h += '<div class="nl-cap ' + (readyPlants ? "ok" : "") + '"><div class="nl-cap-row"><span class="nl-cap-title">Plants ready</span><span class="nl-cap-num"><b>' + readyPlants + '</b></span>' +
+    '<span class="nl-cap-sub">' + (plants - readyPlants) + ' not ready</span></div>' + bar(readyPlants, plants) + '</div>';
   return h + '</div>';
 }
 
@@ -131,18 +134,18 @@ function render(){
   if (!root) return;
   const stats = computeStats();
   const act = active().slice().sort((a, b) => (b.ready ? 1 : 0) - (a.ready ? 1 : 0) || (a.plantedDate || "9999").localeCompare(b.plantedDate || "9999"));
-  const filled = sumTrays(act), plants = sumPlants(act), readyTrays = sumTrays(act.filter(b => b.ready));
+  const filled = sumTrays(act), plants = sumPlants(act), readyPlants = sumPlants(act.filter(b => b.ready));
   let h = '<div class="section nl-root"><h2>Level 3 — Trays &amp; plants</h2>';
   h += '<p class="hint">Record how many trays are installed, how many are filled, and the plants in them. Tap a batch to harvest or remove it.</p>';
   if (loadError) h += '<div class="kiosk-message err">Couldn\'t load: ' + esc(loadError) + '</div>';
   if (!loaded && !loadError) h += '<p class="hint">Loading…</p>';
-  let capH = capCards(filled, plants, readyTrays);
-  if (loaded && state.totalTrays && filled > state.totalTrays) capH += '<div class="nl-alerts">Filled trays are over the total installed. Check the numbers or raise the total.</div>';
+  let capH = capCards(filled, plants, readyPlants);
+  if (loaded && effTotal() && filled > effTotal()) capH += '<div class="nl-alerts">Filled trays are over the total installed. Check the numbers or raise the total.</div>';
   h += blk("01", "Capacity", capH);
   if (isAdmin) h += blk("02", "Actions",
-    '<div class="nl-actions"><button class="btn primary" data-action="add">+ Add trays</button><button class="btn" data-action="settings">⚙ Total trays &amp; plants per tray</button></div>' + quickPanel());
+    '<div class="nl-actions"><button class="btn primary" data-action="add">+ Add trays</button><button class="btn" data-action="settings">⚙ Trays per crop &amp; plants per tray</button></div>' + quickPanel());
   h += blk("03", "Filled trays now", '<div class="nl-list">' + (act.length ? groupBatches(act).map(b => batchCard(b, stats)).join("") : '<div class="empty-state">No filled trays recorded yet.</div>') + '</div>',
-    '<span class="nl-count">' + filled + (state.totalTrays ? ' / ' + state.totalTrays : "") + ' trays</span>');
+    '<span class="nl-count">' + filled + (effTotal() ? ' / ' + effTotal() : "") + ' trays</span>');
   h += blk("04", "By variety", varietyTable(act, filled, plants));
   h += blk("05", "History", historySection(stats));
   h += '</div>';
@@ -186,12 +189,18 @@ function quickSub(i){
 }
 
 function varietyTable(act, filled, plants){
-  const names = [...new Set(act.map(b => b.variety))].sort((a, b) => a.localeCompare(b));
+  const vt = state.varietyTrays || {};
+  const names = [...new Set([...act.map(b => b.variety), ...Object.keys(vt).filter(v => num(vt[v]) > 0)])].sort((a, b) => a.localeCompare(b));
   if (!names.length) return '<div class="empty-state">No trays recorded yet.</div>';
-  let h = '<table class="nl-table"><thead><tr><th>Variety</th><th>Ready</th><th>Not ready</th><th>Total trays</th><th>Plants</th></tr></thead><tbody>';
-  names.forEach(v => { const l = act.filter(b => b.variety === v), r = sumTrays(l.filter(b => b.ready)); h += '<tr><td>' + esc(v) + '</td><td>' + r + '</td><td>' + (sumTrays(l) - r) + '</td><td>' + sumTrays(l) + '</td><td>' + (sumPlants(l) || "–") + '</td></tr>'; });
-  const rt = sumTrays(act.filter(b => b.ready));
-  return h + '<tr class="nl-total"><td>Total</td><td>' + rt + '</td><td>' + (filled - rt) + '</td><td>' + filled + '</td><td>' + (plants || "–") + '</td></tr></tbody></table>';
+  let h = '<table class="nl-table"><thead><tr><th>Variety</th><th>Trays filled</th><th>Plants ready</th><th>Plants not ready</th><th>Total plants</th></tr></thead><tbody>';
+  let tT = 0, tF = 0, tR = 0, tN = 0;
+  names.forEach(v => {
+    const l = act.filter(b => b.variety === v), f = sumTrays(l), t = num(vt[v]);
+    const rp = sumPlants(l.filter(b => b.ready)), np = sumPlants(l.filter(b => !b.ready));
+    tT += t; tF += f; tR += rp; tN += np;
+    h += '<tr><td>' + esc(v) + '</td><td' + (t && f > t ? ' style="color:#9a4a3a;font-weight:700;"' : "") + '>' + f + (t ? ' / ' + t : "") + '</td><td>' + rp + '</td><td>' + np + '</td><td>' + (rp + np) + '</td></tr>';
+  });
+  return h + '<tr class="nl-total"><td>Total</td><td>' + tF + (tT ? ' / ' + tT : "") + '</td><td>' + tR + '</td><td>' + tN + '</td><td>' + (tR + tN) + '</td></tr></tbody></table>';
 }
 
 function historySection(stats){
@@ -240,8 +249,8 @@ function saveAdd(){
   const variety = resolveVariety(), trays = parseInt(val("l3Trays"), 10), ppt = parseInt(val("l3Ppt"), 10) || 0, plantedDate = val("l3Planted") || null, ready = val("l3Ready") === "1";
   if (!variety){ alert("Pick or enter a variety."); return; }
   if (!(trays >= 1)){ alert("Enter the number of trays (1 or more)."); return; }
-  const filled = sumTrays(active());
-  if (state.totalTrays && filled + trays > state.totalTrays && !confirm("That puts filled trays at " + (filled + trays) + " of " + state.totalTrays + " (over the total). Add anyway?")) return;
+  const vt = num((state.varietyTrays || {})[variety]), vf = sumTrays(active().filter(b => b.variety === variety));
+  if (vt && vf + trays > vt && !confirm("That puts " + variety + " at " + (vf + trays) + " of " + vt + " trays (over the total). Add anyway?")) return;
   mutate(s => {
     if (!s.varieties.some(x => x.toLowerCase() === variety.toLowerCase())) s.varieties.push(variety);
     const name = s.varieties.find(x => x.toLowerCase() === variety.toLowerCase());
@@ -321,9 +330,10 @@ function saveEdit(id){
 }
 
 function openSettings(){
-  openModal('<h3>Level 3 setup</h3><div class="sub">Total trays is how many trays are installed on Level 3. Plants per tray is the default used by Quick count.</div>' +
-    '<div class="row2"><div class="field"><label>Total trays installed</label><input type="number" id="l3Total" min="0" step="1" value="' + (state.totalTrays || "") + '"></div>' +
-    '<div class="field"><label>Plants per tray</label><input type="number" id="l3PptSet" min="0" step="1" value="' + (state.plantsPerTray || "") + '"></div></div>' +
+  const vt = state.varietyTrays || {};
+  openModal('<h3>Level 3 setup</h3><div class="sub">Total trays per crop is how many trays that crop has on Level 3. Plants per tray is the default used by Quick count.</div>' +
+    '<div class="field"><label>Plants per tray</label><input type="number" id="l3PptSet" min="0" step="1" value="' + (state.plantsPerTray || "") + '"></div>' +
+    '<div class="nl-varlist">' + state.varieties.map((v, i) => '<div class="nl-varrow"><span>' + esc(v) + '</span><input type="number" min="0" step="1" style="width:84px;" data-vt="' + i + '" value="' + (num(vt[v]) || "") + '" placeholder="0"></div>').join("") + '</div>' +
     '<div class="modal-actions"><button class="btn" data-l3="cancel">Cancel</button><button class="btn primary" data-l3="saveSettings">Save</button></div>');
 }
 
@@ -343,8 +353,9 @@ function onClick(e){
       return mutate(s => { s.batches = s.batches.filter(x => x.id !== l3.dataset.id); }).then(ok => { if (ok) closeModal(); });
     }
     if (a === "saveSettings"){
-      const t = parseInt(val("l3Total"), 10) || 0, p = parseInt(val("l3PptSet"), 10) || 0;
-      return mutate(s => { s.totalTrays = t; s.plantsPerTray = p; }).then(ok => { if (ok) closeModal(); });
+      const p = parseInt(val("l3PptSet"), 10) || 0, vts = {};
+      document.querySelectorAll("#l3Modal [data-vt]").forEach(inp => { const n = parseInt(inp.value, 10) || 0; if (n > 0) vts[state.varieties[parseInt(inp.dataset.vt, 10)]] = n; });
+      return mutate(s => { s.plantsPerTray = p; s.varietyTrays = vts; }).then(ok => { if (ok) closeModal(); });
     }
     return;
   }
