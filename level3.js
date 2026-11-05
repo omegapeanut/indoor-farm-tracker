@@ -194,14 +194,15 @@ function varietyTable(act, filled, plants){
   const names = [...new Set([...act.map(b => b.variety), ...Object.keys(vt).filter(v => num(vt[v]) > 0)])].sort((a, b) => a.localeCompare(b));
   if (!names.length) return '<div class="empty-state">No trays recorded yet.</div>';
   let h = '<table class="nl-table"><thead><tr><th>Variety</th><th>Trays filled</th><th>Plants ready</th><th>Plants not ready</th><th>Total plants</th></tr></thead><tbody>';
-  let tT = 0, tF = 0, tR = 0, tN = 0;
+  let tT = 0, tF = 0, tR = 0, tN = 0, tM = 0;
   names.forEach(v => {
     const l = act.filter(b => b.variety === v), f = sumTrays(l), t = num(vt[v]);
     const rp = sumPlants(l.filter(b => b.ready)), np = sumPlants(l.filter(b => !b.ready));
-    tT += t; tF += f; tR += rp; tN += np;
-    h += '<tr><td>' + esc(v) + '</td><td' + (t && f > t ? ' style="color:#9a4a3a;font-weight:700;"' : "") + '>' + f + (t ? ' / ' + t : "") + '</td><td>' + rp + '</td><td>' + np + '</td><td>' + (rp + np) + '</td></tr>';
+    const mp = t * (v === "Ice Plant" ? 80 : 120);
+    tT += t; tF += f; tR += rp; tN += np; tM += mp;
+    h += '<tr><td>' + esc(v) + '</td><td' + (t && f > t ? ' style="color:#9a4a3a;font-weight:700;"' : "") + '>' + f + (t ? ' / ' + t : "") + '</td><td>' + rp + '</td><td>' + np + '</td><td' + (mp && rp + np > mp ? ' style="color:#9a4a3a;font-weight:700;"' : "") + '>' + (rp + np) + (mp ? ' / ' + mp : "") + '</td></tr>';
   });
-  return h + '<tr class="nl-total"><td>Total</td><td>' + tF + (tT ? ' / ' + tT : "") + '</td><td>' + tR + '</td><td>' + tN + '</td><td>' + (tR + tN) + '</td></tr></tbody></table>';
+  return h + '<tr class="nl-total"><td>Total</td><td>' + tF + (tT ? ' / ' + tT : "") + '</td><td>' + tR + '</td><td>' + tN + '</td><td>' + (tR + tN) + (tM ? ' / ' + tM : "") + '</td></tr></tbody></table>';
 }
 
 function historySection(stats){
