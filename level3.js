@@ -100,7 +100,7 @@ function capCards(filled, plants, readyPlants){
   const total = effTotal(), empty = total - filled;
   const msg = !total ? "Set total trays" : (empty > 0 ? empty + " empty" : (empty === 0 ? "All filled" : (-empty) + " over"));
   let h = '<div class="nl-caps" style="grid-template-columns:repeat(3,minmax(0,1fr));">';
-  h += '<div class="nl-cap ' + (total && empty === 0 ? "ok" : (empty < 0 ? "over" : "")) + '"><div class="nl-cap-row"><span class="nl-cap-title">Trays filled</span>' +
+  h += '<div class="nl-cap ' + (total && empty === 0 ? "ok" : (empty < 0 ? "over" : "")) + '"><div class="nl-cap-row"><span class="nl-cap-title">Trays with crops</span>' +
     '<span class="nl-cap-num"><b>' + filled + '</b>' + (total ? '/' + total : "") + '</span><span class="nl-cap-sub">' + msg + '</span></div>' + bar(filled, total) + '</div>';
   h += '<div class="nl-cap"><div class="nl-cap-row"><span class="nl-cap-title">Plants</span><span class="nl-cap-num"><b>' + plants + '</b></span>' +
     '<span class="nl-cap-sub">' + (state.plantsPerTray ? state.plantsPerTray + " per tray" : "") + '</span></div>' + bar(0, 0) + '</div>';
@@ -148,7 +148,7 @@ function render(){
   if (isAdmin) h += blk("02", "Actions",
     '<div class="nl-actions"><button class="btn primary" data-action="add">+ Add trays</button><button class="btn" data-action="settings">⚙ Trays per crop &amp; plants per tray</button></div>' + quickPanel());
   const filledBody = act.length ? '<div class="nl-list">' + groupBatches(act).map(b => batchCard(b, stats)).join("") + '</div>' : '<div class="empty-state">No filled trays recorded yet.</div>';
-  h += '<section class="nl-block"><div class="nl-bh nl-toggle" data-action="toggleFilled" style="cursor:pointer;"><span class="nl-no">03</span><span class="nl-bt">Filled trays now</span>' +
+  h += '<section class="nl-block"><div class="nl-bh nl-toggle" data-action="toggleFilled" style="cursor:pointer;"><span class="nl-no">03</span><span class="nl-bt">Trays with crops now</span>' +
     '<span class="nl-count">' + filled + (effTotal() ? ' / ' + effTotal() : "") + ' trays · ' + (showFilled ? "Hide ▴" : "Show ▾") + '</span></div>' + (showFilled ? filledBody : "") + '</section>';
   h += blk("04", "By variety", varietyTable(act, filled, plants));
   h += blk("05", "History", historySection(stats));
@@ -198,16 +198,18 @@ function varietyTable(act, filled, plants){
   const vt = state.varietyTrays || {};
   const names = [...new Set([...act.map(b => b.variety), ...Object.keys(vt).filter(v => num(vt[v]) > 0)])].sort((a, b) => a.localeCompare(b));
   if (!names.length) return '<div class="empty-state">No trays recorded yet.</div>';
-  let h = '<table class="nl-table"><thead><tr><th>Variety</th><th>Trays filled</th><th>Plants ready</th><th>Plants not ready</th><th>Total plants</th></tr></thead><tbody>';
-  let tT = 0, tF = 0, tR = 0, tN = 0, tM = 0;
+  let h = '<table class="nl-table"><thead><tr><th>Variety</th><th>Trays with crops</th><th>Before 1 Oct</th><th>From 1 Oct</th><th>Plants ready</th><th>Plants not ready</th><th>Total plants</th></tr></thead><tbody>';
+  let tT = 0, tF = 0, tR = 0, tN = 0, tM = 0, tB = 0, tA = 0;
+  const CUT = "2026-10-01";
   names.forEach(v => {
     const l = act.filter(b => b.variety === v), f = sumTrays(l), t = num(vt[v]);
     const rp = sumPlants(l.filter(b => b.ready)), np = sumPlants(l.filter(b => !b.ready));
     const mp = t * (v === "Ice Plant" ? 80 : 120);
-    tT += t; tF += f; tR += rp; tN += np; tM += mp;
-    h += '<tr><td>' + esc(v) + '</td><td' + (t && f > t ? ' style="color:#9a4a3a;font-weight:700;"' : "") + '>' + f + (t ? ' / ' + t : "") + '</td><td>' + rp + '</td><td>' + np + '</td><td' + (mp && rp + np > mp ? ' style="color:#9a4a3a;font-weight:700;"' : "") + '>' + (rp + np) + (mp ? ' / ' + mp : "") + '</td></tr>';
+    const fb = sumTrays(l.filter(b => b.plantedDate && b.plantedDate < CUT)), fa = sumTrays(l.filter(b => b.plantedDate && b.plantedDate >= CUT));
+    tT += t; tF += f; tR += rp; tN += np; tM += mp; tB += fb; tA += fa;
+    h += '<tr><td>' + esc(v) + '</td><td' + (t && f > t ? ' style="color:#9a4a3a;font-weight:700;"' : "") + '>' + f + (t ? ' / ' + t : "") + '</td><td>' + fb + '</td><td>' + fa + '</td><td>' + rp + '</td><td>' + np + '</td><td' + (mp && rp + np > mp ? ' style="color:#9a4a3a;font-weight:700;"' : "") + '>' + (rp + np) + (mp ? ' / ' + mp : "") + '</td></tr>';
   });
-  return h + '<tr class="nl-total"><td>Total</td><td>' + tF + (tT ? ' / ' + tT : "") + '</td><td>' + tR + '</td><td>' + tN + '</td><td>' + (tR + tN) + (tM ? ' / ' + tM : "") + '</td></tr></tbody></table>';
+  return h + '<tr class="nl-total"><td>Total</td><td>' + tF + (tT ? ' / ' + tT : "") + '</td><td>' + tB + '</td><td>' + tA + '</td><td>' + tR + '</td><td>' + tN + '</td><td>' + (tR + tN) + (tM ? ' / ' + tM : "") + '</td></tr></tbody></table>';
 }
 
 function historySection(stats){
