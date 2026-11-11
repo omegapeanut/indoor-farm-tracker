@@ -11,7 +11,7 @@
 // ============================================================================
 import { getApps, getApp, initializeApp } from "https://www.gstatic.com/firebasejs/10.13.2/firebase-app.js";
 import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.13.2/firebase-auth.js";
-import { getFirestore, doc, onSnapshot, setDoc } from "https://www.gstatic.com/firebasejs/10.13.2/firebase-firestore.js";
+import { getFirestore, doc, onSnapshot, setDoc, getDoc } from "https://www.gstatic.com/firebasejs/10.13.2/firebase-firestore.js";
 
 const app = getApps().length ? getApp() : initializeApp(window.FIREBASE_CONFIG);
 const auth = getAuth(app);
@@ -422,7 +422,28 @@ function openSettings(){
     '<div class="add-row"><input type="text" id="nlAddVariety" placeholder="Add a variety"><button data-nl="addVariety">Add</button></div>' +
     '<div class="row2" style="margin-top:12px;"><div class="field"><label>Germination capacity (trays)</label><input type="number" id="nlCapG" min="1" value="' + state.capGerm + '"></div>' +
     '<div class="field"><label>Nursery capacity (trays)</label><input type="number" id="nlCapN" min="1" value="' + state.capNursery + '"></div></div>' +
-    '<div class="modal-actions"><button class="btn" data-nl="cancel">Close</button><button class="btn primary" data-nl="saveCaps">Save capacity</button></div>');
+    '<div class="modal-actions"><button class="btn" data-nl="cancel">Close</button><button class="btn primary" data-nl="saveCaps">Save capacity</button></div>' +
+    '<div style="margin-top:18px;padding-top:14px;border-top:1px solid rgba(0,0,0,.12);"><div class="sub" style="margin-bottom:8px;">Start over: removes every Level 1 and Level 3 crop and tray record. Varieties, capacities and per-crop tray maximums are kept. A backup copy is saved first.</div>' +
+    '<button class="btn" style="color:#9a4a3a;border-color:#9a4a3a;" data-nl="clearAll">Clear all crops (Level 1 &amp; Level 3)</button></div>');
+}
+
+async function clearAll(){
+  if (!isAdmin) return alert("Log in as admin to make changes.");
+  if (!confirm("Clear ALL Level 1 and Level 3 crop and tray records?\n\nA backup is saved first, but this empties both trackers so you can recount.")) return;
+  if (!confirm("Really clear everything? This cannot be undone from the app.")) return;
+  try {
+    const stamp = new Date().toISOString().slice(0, 16).replace(/[-:T]/g, "");
+    for (const name of ["nurseryLog", "level3Log"]){
+      const r = doc(db, "meta", name);
+      const snap = await getDoc(r);
+      if (!snap.exists()) continue;
+      const d = snap.data();
+      await setDoc(doc(db, "meta", name + "_backup_" + stamp), d);
+      await setDoc(r, Object.assign({}, d, { batches: [] }));
+    }
+    closeModal();
+    alert("Cleared. Level 1 and Level 3 are now empty.");
+  } catch (e){ alert("Couldn't clear: " + e.message); }
 }
 
 // ---------------------------------------------------------------- events
@@ -431,6 +452,7 @@ function onClick(e){
   if (nl){
     const a = nl.dataset.nl;
     if (a === "cancel") return closeModal();
+    if (a === "clearAll") return clearAll();
     if (a === "saveAdd") return saveAdd();
     if (a === "toNursery") return toNursery(nl.closest("[data-id]").dataset.id);
     if (a === "exit") return exitBatch(nl.closest("[data-id]").dataset.id, nl.dataset.type);

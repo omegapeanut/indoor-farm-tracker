@@ -22,7 +22,7 @@ const DEFAULT_VARIETY_TRAYS = { "Crystal Green Lettuce": 11, "Garland Chrysanthe
 const EXIT_LABELS = { harvested: "Harvested", disposed: "Disposed" };
 
 let state = { batches: [], varieties: DEFAULT_VARIETIES.slice(), totalTrays: 0, plantsPerTray: 0, varietyTrays: Object.assign({}, DEFAULT_VARIETY_TRAYS) };
-let loaded = false, isAdmin = false, loadError = "", showHistory = false, quickReady = false, showFilled = false;
+let loaded = false, isAdmin = false, loadError = "", showHistory = false, quickReady = false, quickCrop = "new", showFilled = false;
 
 function esc(s){ return String(s == null ? "" : s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
 function uid(){ return Date.now().toString(36) + Math.random().toString(36).slice(2, 7); }
@@ -109,10 +109,13 @@ function capCards(filled, plants, readyPlants){
   return h + '</div>';
 }
 
+const cropOf = (b) => (b && b.crop === "old" ? "old" : "new");
+const cropSel = (id, v) => '<select id="' + id + '"><option value="new"' + (v !== "old" ? " selected" : "") + '>New crop</option><option value="old"' + (v === "old" ? " selected" : "") + '>Old crop</option></select>';
+
 function groupBatches(arr){
   const map = new Map();
   arr.forEach(b => {
-    const k = [b.variety, b.plantedDate || "", b.ready ? "r" : "n"].join("|");
+    const k = [b.variety, b.plantedDate || "", b.ready ? "r" : "n", cropOf(b)].join("|");
     if (!map.has(k)) map.set(k, Object.assign({}, b, { ids: [b.id], trays: 0, plants: 0 }));
     const g = map.get(k); g.trays += num(b.trays); g.plants += num(b.plants); if (!g.ids.includes(b.id)) g.ids.push(b.id);
   });
@@ -127,7 +130,7 @@ function batchCard(b, stats){
   const tag = isAdmin ? "button" : "div";
   return '<' + tag + ' class="nl-card' + (b.ready ? " ready" : (due ? " due" : "")) + '" data-action="open" data-id="' + esc(b.id) + '" data-ids="' + esc(b.ids.join(",")) + '">' +
     '<span class="nl-card-name">' + esc(b.variety) + '</span><span class="nl-trays">' + b.trays + '</span>' +
-    '<span class="nl-card-sub"><span class="nl-state ' + (b.ready ? "is-ready" : "not-ready") + '">' + (b.ready ? "Ready to harvest" : "Not ready") + '</span> ' + esc(sub) + (!b.ready && due ? ' <span class="nl-due">check?</span>' : "") + '</span></' + tag + '>';
+    '<span class="nl-card-sub"><span class="nl-state ' + (b.ready ? "is-ready" : "not-ready") + '">' + (b.ready ? "Ready to harvest" : "Not ready") + '</span> <span class="nl-state ' + (cropOf(b) === "old" ? "not-ready" : "is-ready") + '" style="opacity:.85;">' + (cropOf(b) === "old" ? "Old crop" : "New crop") + '</span> ' + esc(sub) + (!b.ready && due ? ' <span class="nl-due">check?</span>' : "") + '</span></' + tag + '>';
 }
 
 function render(){
@@ -155,10 +158,12 @@ function render(){
 
 function quickPanel(){
   const counts = {};
-  active().filter(b => !!b.ready === quickReady).forEach(b => { counts[b.variety] = (counts[b.variety] || 0) + num(b.trays); });
+  active().filter(b => !!b.ready === quickReady && cropOf(b) === quickCrop).forEach(b => { counts[b.variety] = (counts[b.variety] || 0) + num(b.trays); });
   let h = '<div class="nl-quick"><div class="nl-quick-head"><b>Quick count</b> — tap a crop for +1 tray, dated today' +
     '<span class="nl-seg"><button class="' + (!quickReady ? "on" : "") + '" data-action="qready" data-ready="0">Not ready</button>' +
-    '<button class="' + (quickReady ? "on" : "") + '" data-action="qready" data-ready="1">Ready to harvest</button></span></div><div class="nl-qgrid">';
+    '<button class="' + (quickReady ? "on" : "") + '" data-action="qready" data-ready="1">Ready to harvest</button></span>' +
+    '<span class="nl-seg" style="margin-left:6px;"><button class="' + (quickCrop === "new" ? "on" : "") + '" data-action="qcrop" data-crop="new">New crop</button>' +
+    '<button class="' + (quickCrop === "old" ? "on" : "") + '" data-action="qcrop" data-crop="old">Old crop</button></span></div><div class="nl-qgrid">';
   state.varieties.forEach((v, i) => {
     const n = counts[v] || 0;
     h += '<div class="nl-qc"><button class="nl-qc-add" data-action="qadd" data-i="' + i + '"><span class="nl-qc-name">' + esc(v) + '</span><span class="nl-qc-row"><span class="nl-qc-n">' + n + '</span><span class="nl-qc-plus">+1</span></span></button>' +
@@ -171,16 +176,16 @@ function quickAdd(i){
   const v = state.varieties[i]; if (v == null) return;
   const t = today(), ppt = state.plantsPerTray;
   mutate(s => {
-    let b = s.batches.find(x => !x.exitType && x.tally && x.variety === v && x.plantedDate === t && !!x.ready === quickReady);
+    let b = s.batches.find(x => !x.exitType && x.tally && x.variety === v && x.plantedDate === t && !!x.ready === quickReady && cropOf(x) === quickCrop);
     if (b){ b.trays = num(b.trays) + 1; b.plants = num(b.plants) + ppt; }
-    else s.batches.push({ id: uid(), variety: v, trays: 1, plants: ppt, plantedDate: t, ready: quickReady, readyDate: quickReady ? t : null, exitDate: null, exitType: null, note: "", tally: true });
+    else s.batches.push({ id: uid(), variety: v, trays: 1, plants: ppt, plantedDate: t, ready: quickReady, readyDate: quickReady ? t : null, crop: quickCrop, exitDate: null, exitType: null, note: "", tally: true });
   });
 }
 
 function quickSub(i){
   const v = state.varieties[i]; if (v == null) return;
   mutate(s => {
-    const list = s.batches.filter(x => !x.exitType && x.variety === v && !!x.ready === quickReady);
+    const list = s.batches.filter(x => !x.exitType && x.variety === v && !!x.ready === quickReady && cropOf(x) === quickCrop);
     if (!list.length) return;
     const b = list.find(x => x.tally && x.plantedDate === today()) || list[list.length - 1];
     const per = num(b.trays) ? num(b.plants) / num(b.trays) : 0;
@@ -243,12 +248,13 @@ function openAdd(){
     '<div class="field"><label>Plants per tray</label><input type="number" id="l3Ppt" min="0" step="1" value="' + (state.plantsPerTray || "") + '" placeholder="Optional"></div></div>' +
     '<div class="row2"><div class="field"><label>Date planted</label><input type="date" id="l3Planted" value="' + today() + '"></div>' +
     '<div class="field"><label>Status</label><select id="l3Ready"><option value="0">Not ready</option><option value="1">Ready to harvest</option></select></div></div>' +
+    '<div class="field"><label>New or old crop</label>' + cropSel("l3Crop", quickCrop) + '</div>' +
     '<div class="modal-actions"><button class="btn" data-l3="cancel">Cancel</button><button class="btn primary" data-l3="saveAdd">Add</button></div>');
   wireVariety();
 }
 
 function saveAdd(){
-  const variety = resolveVariety(), trays = parseInt(val("l3Trays"), 10), ppt = parseInt(val("l3Ppt"), 10) || 0, plantedDate = val("l3Planted") || null, ready = val("l3Ready") === "1";
+  const variety = resolveVariety(), trays = parseInt(val("l3Trays"), 10), ppt = parseInt(val("l3Ppt"), 10) || 0, plantedDate = val("l3Planted") || null, ready = val("l3Ready") === "1", crop = val("l3Crop") === "old" ? "old" : "new";
   if (!variety){ alert("Pick or enter a variety."); return; }
   if (!(trays >= 1)){ alert("Enter the number of trays (1 or more)."); return; }
   const vt = num((state.varietyTrays || {})[variety]), vf = sumTrays(active().filter(b => b.variety === variety));
@@ -256,7 +262,7 @@ function saveAdd(){
   mutate(s => {
     if (!s.varieties.some(x => x.toLowerCase() === variety.toLowerCase())) s.varieties.push(variety);
     const name = s.varieties.find(x => x.toLowerCase() === variety.toLowerCase());
-    s.batches.push({ id: uid(), variety: name, trays, plants: trays * ppt, plantedDate, ready, readyDate: ready ? today() : null, exitDate: null, exitType: null, note: "" });
+    s.batches.push({ id: uid(), variety: name, trays, plants: trays * ppt, plantedDate, ready, readyDate: ready ? today() : null, crop, exitDate: null, exitType: null, note: "" });
   }).then(ok => { if (ok) closeModal(); });
 }
 
@@ -265,7 +271,7 @@ function openBatch(id){
   if (!b || b.exitType) return;
   const age = daysBetween(b.plantedDate, today());
   openModal('<h3>' + esc(b.variety) + ' — ' + plural(b.trays, "tray") + '</h3>' +
-    '<div class="sub">' + (b.ready ? "Ready to harvest" : "Not ready") + ' · planted ' + fmt(b.plantedDate) + (age != null ? " · day " + age : "") + (b.plants ? " · " + b.plants + " plants" : "") + '</div>' +
+    '<div class="sub">' + (b.ready ? "Ready to harvest" : "Not ready") + ' · ' + (cropOf(b) === "old" ? "Old crop" : "New crop") + ' · planted ' + fmt(b.plantedDate) + (age != null ? " · day " + age : "") + (b.plants ? " · " + b.plants + " plants" : "") + '</div>' +
     '<div class="row2"><div class="field"><label>Trays (status change or leaving)</label><input type="number" id="l3MoveTrays" min="1" max="' + b.trays + '" step="1" value="' + b.trays + '"></div>' +
     '<div class="field"><label>Date</label><input type="date" id="l3MoveDate" value="' + today() + '"></div></div>' +
     '<div class="field"><label>Note (optional)</label><input type="text" id="l3MoveNote" placeholder="e.g. reason if removing"></div>' +
@@ -314,7 +320,8 @@ function openEdit(id){
     '<div class="field"><label>Variety</label><select id="l3Variety">' + varietyOptions(b.variety) + '</select><input type="text" id="l3NewVariety" placeholder="New variety name" style="display:none;margin-top:6px;"></div>' +
     '<div class="row2"><div class="field"><label>Number of trays</label><input type="number" id="l3Trays" min="1" step="1" value="' + b.trays + '"></div>' +
     '<div class="field"><label>Total plants</label><input type="number" id="l3Plants" min="0" step="1" value="' + num(b.plants) + '"></div></div>' +
-    '<div class="field"><label>Date planted</label><input type="date" id="l3Planted" value="' + esc(b.plantedDate || "") + '"></div>' +
+    '<div class="row2"><div class="field"><label>Date planted</label><input type="date" id="l3Planted" value="' + esc(b.plantedDate || "") + '"></div>' +
+    '<div class="field"><label>New or old crop</label>' + cropSel("l3Crop", cropOf(b)) + '</div></div>' +
     '<div class="modal-actions"><button class="btn" data-l3="cancel">Cancel</button><button class="btn primary" data-l3="saveEdit" data-id="' + esc(id) + '">Save</button></div>');
   wireVariety();
 }
@@ -327,7 +334,7 @@ function saveEdit(id){
     if (!s.varieties.some(x => x.toLowerCase() === variety.toLowerCase())) s.varieties.push(variety);
     const b = s.batches.find(x => x.id === id);
     b.variety = s.varieties.find(x => x.toLowerCase() === variety.toLowerCase());
-    b.trays = trays; b.plants = plants; b.plantedDate = plantedDate;
+    b.trays = trays; b.plants = plants; b.plantedDate = plantedDate; b.crop = val("l3Crop") === "old" ? "old" : "new";
   }).then(ok => { if (ok) closeModal(); });
 }
 
@@ -380,6 +387,7 @@ function onClick(e){
   else if (a === "qadd" && isAdmin) quickAdd(parseInt(t.dataset.i, 10));
   else if (a === "qsub" && isAdmin) quickSub(parseInt(t.dataset.i, 10));
   else if (a === "qready"){ quickReady = t.dataset.ready === "1"; render(); }
+  else if (a === "qcrop"){ quickCrop = t.dataset.crop === "old" ? "old" : "new"; render(); }
   else if (a === "add") openAdd();
   else if (a === "settings") openSettings();
   else if (a === "toggleFilled"){ showFilled = !showFilled; render(); }
