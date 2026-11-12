@@ -424,7 +424,7 @@ function openSettings(){
     '<div class="field"><label>Nursery capacity (trays)</label><input type="number" id="nlCapN" min="1" value="' + state.capNursery + '"></div></div>' +
     '<div class="modal-actions"><button class="btn" data-nl="cancel">Close</button><button class="btn primary" data-nl="saveCaps">Save capacity</button></div>' +
     '<div style="margin-top:18px;padding-top:14px;border-top:1px solid rgba(0,0,0,.12);"><div class="sub" style="margin-bottom:8px;">Start over: removes every Level 1 and Level 3 crop and tray record. Varieties, capacities and per-crop tray maximums are kept. A backup copy is saved first.</div>' +
-    '<button class="btn" style="color:#9a4a3a;border-color:#9a4a3a;" data-nl="clearAll">Clear all crops (Level 1 &amp; Level 3)</button></div>');
+    '<button class="btn" style="color:#9a4a3a;border-color:#9a4a3a;" data-nl="clearAll">Clear all crops (Level 1, Level 3 &amp; AHU)</button></div>');
 }
 
 async function clearAll(){
@@ -433,7 +433,7 @@ async function clearAll(){
   if (!confirm("Really clear everything? This cannot be undone from the app.")) return;
   try {
     const stamp = new Date().toISOString().slice(0, 16).replace(/[-:T]/g, "");
-    for (const name of ["nurseryLog", "level3Log"]){
+    for (const name of ["nurseryLog", "level3Log", "ahuLog"]){
       const r = doc(db, "meta", name);
       const snap = await getDoc(r);
       if (!snap.exists()) continue;
