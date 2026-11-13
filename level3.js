@@ -133,6 +133,27 @@ function batchCard(b, stats){
     '<span class="nl-card-sub"><span class="nl-state ' + (b.ready ? "is-ready" : "not-ready") + '">' + (b.ready ? "Ready to harvest" : "Not ready") + '</span> <span class="nl-state ' + (cropOf(b) === "old" ? "not-ready" : "is-ready") + '" style="opacity:.85;">' + (cropOf(b) === "old" ? "Old crop" : "New crop") + '</span> ' + esc(sub) + (!b.ready && due ? ' <span class="nl-due">check?</span>' : "") + '</span></' + tag + '>';
 }
 
+function fmtFull(key){ if (!key) return "No date"; const d = toDate(key); return d.getDate() + " " + MONTHS[d.getMonth()] + " " + d.getFullYear(); }
+
+// Every tray group with its date, grouped by crop and sorted oldest first.
+function datesTable(groups){
+  const sorted = groups.slice().sort((a, b) => a.variety.localeCompare(b.variety) || (a.plantedDate || "9999").localeCompare(b.plantedDate || "9999") || (a.ready ? 0 : 1) - (b.ready ? 0 : 1));
+  const totals = {}; sorted.forEach(g => { totals[g.variety] = (totals[g.variety] || 0) + g.trays; });
+  let h = '<div style="overflow-x:auto;"><table class="nl-table"><thead><tr><th>Crop</th><th>Date planted</th><th>Day</th><th>Trays</th><th>Plants</th><th>Status</th><th>Type</th></tr></thead><tbody>';
+  let prev = null;
+  sorted.forEach(g => {
+    const first = g.variety !== prev; prev = g.variety;
+    const age = g.plantedDate ? daysBetween(g.plantedDate, today()) : null;
+    const attrs = (isAdmin ? ' data-action="open" data-id="' + esc(g.id) + '" data-ids="' + esc(g.ids.join(",")) + '"' : "") +
+      ' style="' + (isAdmin ? "cursor:pointer;" : "") + (first ? "border-top:2px solid rgba(0,0,0,.12);" : "") + '"';
+    h += '<tr' + attrs + '><td>' + (first ? '<b>' + esc(g.variety) + '</b> <span class="nl-n">' + totals[g.variety] + (totals[g.variety] === 1 ? " tray" : " trays") + '</span>' : "") + '</td>' +
+      '<td>' + fmtFull(g.plantedDate) + '</td><td>' + (age != null ? age : "–") + '</td><td>' + g.trays + '</td><td>' + (num(g.plants) || "–") + '</td>' +
+      '<td><span class="nl-state ' + (g.ready ? "is-ready" : "not-ready") + '">' + (g.ready ? "Ready" : "Not ready") + '</span></td>' +
+      '<td>' + (cropOf(g) === "old" ? "Old crop" : "New crop") + '</td></tr>';
+  });
+  return h + '</tbody></table></div>';
+}
+
 function render(){
   if (!root) return;
   const stats = computeStats();
@@ -147,7 +168,7 @@ function render(){
   h += blk("01", "Capacity", capH);
   if (isAdmin) h += blk("02", "Actions",
     '<div class="nl-actions"><button class="btn primary" data-action="add">+ Add trays</button><button class="btn" data-action="settings">⚙ Trays per crop &amp; plants per tray</button></div>' + quickPanel());
-  const filledBody = act.length ? '<div class="nl-list">' + groupBatches(act).map(b => batchCard(b, stats)).join("") + '</div>' : '<div class="empty-state">No filled trays recorded yet.</div>';
+  const filledBody = act.length ? datesTable(groupBatches(act)) : '<div class="empty-state">No filled trays recorded yet.</div>';
   h += '<section class="nl-block"><div class="nl-bh nl-toggle" data-action="toggleFilled" style="cursor:pointer;"><span class="nl-no">03</span><span class="nl-bt">Trays with crops now</span>' +
     '<span class="nl-count">' + filled + (effTotal() ? ' / ' + effTotal() : "") + ' trays · ' + (showFilled ? "Hide ▴" : "Show ▾") + '</span></div>' + (showFilled ? filledBody : "") + '</section>';
   h += blk("04", "By variety", varietyTable(act, filled, plants));
