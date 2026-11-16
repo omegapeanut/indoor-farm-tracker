@@ -30,8 +30,8 @@ const TOTAL = TIERS.length * (11 + 13);
 
 const cropAt = (r, t) => RACKS.find(x => x.id === r).tiers[t];
 const ppt = (crop) => (crop === "Ice Plant" ? 80 : 120);
-// Ice Plant tiers (North T1, T2): trays 1-4 and 8-11 are on the salted tank 3N1, trays 5-7 on the normal nutrient tank 3N2.
-const isSalted = (r, t, p) => r === "N" && (t === 1 || t === 2) && (p <= 4 || p >= 8);
+// Ice Plant tiers (North T1, T2): trays 1-3 and 9-11 are on the salted tank 3N1, the middle trays 4-8 on the normal nutrient tank 3N2.
+const isSalted = (r, t, p) => r === "N" && (t === 1 || t === 2) && (p <= 3 || p >= 9);
 const keyOf = (r, t, p) => r + t + "-" + p;
 function parseKey(k){ const m = /^([NS])(\d)-(\d+)$/.exec(k); return m ? { r: m[1], t: +m[2], p: +m[3] } : null; }
 const cropOfKey = (k) => { const q = parseKey(k); return q ? cropAt(q.r, q.t) : ""; };
@@ -188,7 +188,7 @@ function rackHtml(rk){
     for (let p = 1; p <= posOf(rk.id); p++){ const tr = state.trays[keyOf(rk.id, t, p)]; if (tr){ used.push(p); if (tr.ready) ready.push(p); } }
     h += '<div class="l3m-tier"><div class="l3m-th"><span class="t" data-action="tier" data-r="' + rk.id + '" data-t="' + t + '">T' + t + '</span><span class="c">' + esc(rk.tiers[t]) + '</span>' +
       '<span class="n">' + used.length + '/' + posOf(rk.id) + (ready.length ? ' · ' + ready.length + ' ready' : '') + '</span>' +
-      (rk.id === "N" && t <= 2 ? '<span class="salt">dashed = salted tank 3N1 (trays 1-4, 8-11) · plain = normal tank 3N2 (trays 5-7)</span>' : '') +
+      (rk.id === "N" && t <= 2 ? '<span class="salt">dashed = salted tank 3N1 (trays 1-3, 9-11) · plain = normal tank 3N2 (trays 4-8)</span>' : '') +
       (isAdmin ? '<button class="btn" data-action="fillTier" data-r="' + rk.id + '" data-t="' + t + '">+ Transplant</button>' + (ready.length ? '<button class="btn" data-action="harvestTier" data-r="' + rk.id + '" data-t="' + t + '">Harvest ready</button>' : '') : '') +
       '</div><div class="l3m-cells" style="grid-template-columns:repeat(' + posOf(rk.id) + ',minmax(40px,1fr));">';
     for (let p = 1; p <= posOf(rk.id); p++) h += cellHtml(rk.id, t, p);
@@ -250,68 +250,73 @@ function varietyTable(list){
   return h + '<tr class="nl-total"><td>Total</td><td>' + tF + ' / ' + tT + '</td><td>' + tB + '</td><td>' + tA + '</td><td>' + tR + '</td><td>' + tN + '</td><td>' + (tR + tN) + ' / ' + tM + '</td></tr></tbody></table>';
 }
 
-// Floor plan: both racks with their water tanks, showing which trays are free.
+// Floor plan: both racks with their water tanks, laid out like the plant's tank diagram.
+// North: T6..T3 and the Ice Plant "middle slot" (trays 4-8 of T1 and T2) are on the normal tank 3N2;
+// Ice Plant T2 and T1 (trays 1-3 and 9-11) are on the salted tank 3N1. South: 3S2 (T6-T4), 3S1 (T3-T1), Buffer for slot 1.
 const SHORT = { "Mini Red Romaine Lettuce": "Red Romaine", "Crystal Green Lettuce": "Crystal Green", "Red Coral Lettuce": "Red Coral", "Garland Chrysanthemum": "Garland", "Ice Plant": "Ice Plant", "Perilla": "Perilla", "Mustard": "Mustard", "Sorrel": "Sorrel", "Mizuna": "Mizuna", "Swiss Chard": "Swiss Chard", "Kale": "Kale" };
 function floorPlan(){
-  const BW = 140, BH = 100, GAP = 14, X0 = 45;
+  const BW = 124, BH = 104, GAP = 12, X0 = 30, SQ = 7, SG = 1.6;
   const cx = (i) => X0 + i * (BW + GAP) + BW / 2;
-  const stat = (r, t) => { let u = 0, rd = 0; const n = posOf(r); for (let p = 1; p <= n; p++){ const tr = state.trays[keyOf(r, t, p)]; if (tr){ u++; if (tr.ready) rd++; } } return { u, rd, n, free: n - u }; };
-  let s = '<svg viewBox="0 0 1000 600" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:auto;min-width:760px;font-family:Inter,system-ui,sans-serif;">';
+  const range = (a, b) => { const o = []; for (let p = a; p <= b; p++) o.push(p); return o; };
+  const N = RACKS[0], S = RACKS[1];
+  const rowsOf = (rk, t) => [{ r: rk.id, t, ps: range(1, posOf(rk.id)), lab: "T" + t }];
+  const count = (rows) => { let u = 0, rd = 0, n = 0; rows.forEach(rw => rw.ps.forEach(p => { n++; const tr = state.trays[keyOf(rw.r, rw.t, p)]; if (tr){ u++; if (tr.ready) rd++; } })); return { u, rd, n, free: n - u }; };
   const text = (x, y, str, size, weight, fill, anchor) => '<text x="' + x + '" y="' + y + '" font-size="' + size + '" font-weight="' + (weight || 400) + '" fill="' + (fill || "#2c3a30") + '" text-anchor="' + (anchor || "middle") + '">' + str + '</text>';
-  const line = (x1, y1, x2, y2, dash) => '<line x1="' + x1 + '" y1="' + y1 + '" x2="' + x2 + '" y2="' + y2 + '" stroke="#35473a" stroke-width="2.5"' + (dash ? ' stroke-dasharray="7 5"' : "") + '/>';
-  const tierBox = (rk, t, i, y) => {
-    const st = stat(rk.id, t), x = X0 + i * (BW + GAP), crop = rk.tiers[t];
-    const tip = rk.name + " T" + t + " · " + crop + " · " + st.u + " of " + st.n + " trays used, " + st.free + " free, " + st.rd + " ready";
-    let g = '<g data-action="jump" data-r="' + rk.id + '" data-t="' + t + '" style="cursor:pointer"><title>' + esc(tip) + '</title>' +
-      '<rect x="' + x + '" y="' + y + '" width="' + BW + '" height="' + BH + '" rx="10" fill="#f1ebe4" stroke="#35473a" stroke-width="2"/>' +
-      text(x + BW / 2, y + 18, "T" + t + " · " + esc(SHORT[crop] || crop), 12, 700) +
-      text(x + BW / 2, y + 38, "free " + st.free + " / " + st.n, 14, 700, st.free === 0 ? "#9a4a3a" : "#35473a") +
-      text(x + BW / 2, y + 53, st.rd + " ready · " + (st.u - st.rd) + " growing", 10, 400, "#555");
-    const sq = 8, gap = 1.9, w0 = st.n * sq + (st.n - 1) * gap, sx = x + (BW - w0) / 2;
-    for (let p = 1; p <= st.n; p++){
-      const tr = state.trays[keyOf(rk.id, t, p)];
-      g += '<rect x="' + (sx + (p - 1) * (sq + gap)).toFixed(1) + '" y="' + (y + 62) + '" width="' + sq + '" height="' + sq + '" rx="1.5" fill="' + (tr ? (tr.ready ? "#b9c9b3" : "#ecd6cb") : "#ffffff") + '" stroke="' + (tr ? (tr.ready ? "#6d8f6a" : "#c3836b") : "#9aa59c") + '" stroke-width="1"/>';
-    }
-    g += text(sx, y + 85, rk.id + "1", 9, 400, "#555", "start") + text(sx + w0, y + 85, rk.id + st.n, 9, 400, "#555", "end");
-    if (rk.id === "N" && t <= 2) g += text(x + BW / 2, y + 96, "salted 1-4, 8-11 · normal 5-7", 8.5, 400, "#3d6a94");
-    g += '</g>';
+  const line = (x1, y1, x2, y2, dash, thin) => '<line x1="' + x1 + '" y1="' + y1 + '" x2="' + x2 + '" y2="' + y2 + '" stroke="#35473a" stroke-width="' + (thin ? 1.5 : 2.5) + '"' + (dash ? ' stroke-dasharray="7 5"' : "") + (thin ? ' opacity=".5"' : "") + '/>';
+  const box = (def, i, y) => {
+    const st = count(def.rows), x = X0 + i * (BW + GAP);
+    const tip = def.title + " · " + st.u + " of " + st.n + " trays used, " + st.free + " free, " + st.rd + " ready";
+    let g = '<g data-action="jump" data-r="' + def.rows[0].r + '" data-t="' + def.rows[0].t + '" style="cursor:pointer"><title>' + esc(tip) + '</title>' +
+      '<rect x="' + x + '" y="' + y + '" width="' + BW + '" height="' + BH + '" rx="10" fill="#f1ebe4" stroke="#35473a" stroke-width="2"' + (def.salted ? ' stroke-dasharray="6 4"' : "") + '/>' +
+      text(x + BW / 2, y + 17, esc(def.title), 11.5, 700) +
+      text(x + BW / 2, y + 36, "free " + st.free + " / " + st.n, 14, 700, st.free === 0 ? "#9a4a3a" : "#35473a") +
+      text(x + BW / 2, y + 50, st.rd + " ready · " + (st.u - st.rd) + " growing", 9.5, 400, "#555");
+    def.rows.forEach((rw, ri) => {
+      const ry = y + 58 + ri * 12, w0 = rw.ps.length * SQ + (rw.ps.length - 1) * SG, multi = def.rows.length > 1, sx = multi ? x + 40 : x + (BW - w0) / 2;
+      if (multi) g += text(x + 10, ry + 7, rw.lab, 9, 600, "#555", "start");
+      rw.ps.forEach((p, k) => {
+        const tr = state.trays[keyOf(rw.r, rw.t, p)];
+        g += '<rect x="' + (sx + k * (SQ + SG)).toFixed(1) + '" y="' + ry + '" width="' + SQ + '" height="' + SQ + '" rx="1.5" fill="' + (tr ? (tr.ready ? "#b9c9b3" : "#ecd6cb") : "#ffffff") + '" stroke="' + (tr ? (tr.ready ? "#6d8f6a" : "#c3836b") : "#9aa59c") + '" stroke-width="1"/>';
+      });
+    });
+    g += text(x + BW / 2, y + BH - 7, def.note, 8.5, 400, "#555") + '</g>';
     return g;
   };
-  const tank = (xc, y, name, sub, share, ids, dashed, blue) => {
-    let free = 0, total = 0;
-    ids.forEach(([r, t, mode]) => { for (let p = 1; p <= posOf(r); p++){ if (mode === "salt" && !isSalted(r, t, p)) continue; if (mode === "norm" && isSalted(r, t, p)) continue; total++; if (!state.trays[keyOf(r, t, p)]) free++; } });
-    const w = 150, x = xc - w / 2;
+  const tank = (xc, y, w, name, sub, share, rows, dashed, blue) => {
+    let free = 0, total = 0; rows.forEach(rw => rw.ps.forEach(p => { total++; if (!state.trays[keyOf(rw.r, rw.t, p)]) free++; }));
+    const x = xc - w / 2;
     return '<rect x="' + x + '" y="' + y + '" width="' + w + '" height="66" rx="6" fill="' + (blue ? "#2f5fc4" : "#ffffff") + '" stroke="#35473a" stroke-width="2.5"' + (dashed ? ' stroke-dasharray="7 5"' : "") + '/>' +
       text(xc, y + 17, name, 15, 700, blue ? "#fff" : "#2c3a30") + text(xc, y + 30, sub, 9.5, 400, blue ? "#dbe6ff" : "#555") + text(xc, y + 42, share, 9.5, 400, blue ? "#dbe6ff" : "#555") +
-      (ids.length ? text(xc, y + 58, "free " + free + " of " + total + " trays", 11, 700, blue ? "#fff" : "#35473a") : text(xc, y + 58, "backup for slot 1", 10, 600, "#fff"));
+      (rows.length ? text(xc, y + 58, "free " + free + " of " + total + " trays", 11, 700, "#35473a") : text(xc, y + 58, "backup for slot 1", 10, 600, "#fff"));
   };
-  const N = RACKS[0], S = RACKS[1];
-  s += text(40, 20, "NORTH RACK", 11, 600, "#777", "start");
-  // north tiers, tanks and pipes
-  TIERS.forEach((t, i) => { s += tierBox(N, t, i, 30); });
-  const pipe = (from, to, yBoxEdge, yBus, yTank, tcx, dashed) => {
-    let o = ""; for (let i = from; i <= to; i++) o += line(cx(i), yBoxEdge, cx(i), yBus, dashed);
-    o += line(cx(from), yBus, cx(to), yBus, dashed) + line(tcx, yBus, tcx, yTank, dashed); return o;
-  };
-  s += pipe(0, 3, 130, 146, 172, (cx(0) + cx(3)) / 2, false);
-  s += line(cx(3), 146, cx(5) - 28, 146, false) + line(cx(4) - 28, 130, cx(4) - 28, 146, false) + line(cx(5) - 28, 130, cx(5) - 28, 146, false);
-  s += line(cx(4) + 22, 130, cx(4) + 22, 160, true) + line(cx(5) + 22, 130, cx(5) + 22, 160, true) + line(cx(4) + 22, 160, cx(5) + 22, 160, true) + line((cx(4) + cx(5)) / 2 + 22, 160, (cx(4) + cx(5)) / 2 + 22, 172, true);
-  s += tank((cx(0) + cx(3)) / 2, 172, "3N2", "L3 North side tank-2", "5 tanks sharing", [["N", 6], ["N", 5], ["N", 4], ["N", 3], ["N", 2, "norm"], ["N", 1, "norm"]], false, false);
-  s += tank((cx(4) + cx(5)) / 2 + 22, 172, "3N1", "L3 North side tank-1", "2 tanks sharing · salted", [["N", 2, "salt"], ["N", 1, "salt"]], true, false);
-  // rails, AGV
-  s += line(45, 262, 955, 262, true).replace('stroke-width="2.5"', 'stroke-width="1.5" opacity=".5"') + text(50, 255, "Robot rail (north)", 10, 400, "#777", "start") +
-    '<rect x="45" y="278" width="200" height="50" rx="6" fill="#fff" stroke="#35473a" stroke-width="2.5"/>' + text(145, 299, "AGV TROLLEY", 13, 700) + text(145, 316, "MAIN ENTRANCE", 11, 600) +
-    line(45, 346, 955, 346, true).replace('stroke-width="2.5"', 'stroke-width="1.5" opacity=".5"') + text(50, 339, "Robot rail (south)", 10, 400, "#777", "start");
-  // south tanks, pipes, tiers
-  s += tank(115, 368, "Buffer", "Slot 1", "2 tanks sharing", [], false, true);
-  s += tank((cx(0) + cx(2)) / 2, 368, "3S2", "L3 South side tank-2", "3 tanks sharing", [["S", 6], ["S", 5], ["S", 4]], false, false);
-  s += tank((cx(3) + cx(5)) / 2, 368, "3S1", "L3 South side tank-1", "3 tanks sharing", [["S", 3], ["S", 2], ["S", 1]], true, false);
-  const pipeS = (from, to, tcx, dashed) => { let o = ""; for (let i = from; i <= to; i++) o += line(cx(i), 452, cx(i), 476, dashed); return o + line(cx(from), 452, cx(to), 452, dashed) + line(tcx, 434, tcx, 452, dashed); };
-  s += pipeS(0, 2, (cx(0) + cx(2)) / 2, false) + pipeS(3, 5, (cx(3) + cx(5)) / 2, true);
-  TIERS.forEach((t, i) => { s += tierBox(S, t, i, 476); });
-  s += text(40, 596, "SOUTH RACK", 11, 600, "#777", "start");
+  const NY = 30, NB = NY + BH, NBUS = 156, NTK = 176, RAILN = 268, STK = 376, SBUS = 460, SY = 484;
+  let s = '<svg viewBox="0 0 1000 612" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:auto;min-width:760px;font-family:Inter,system-ui,sans-serif;">';
+  s += text(X0, 20, "NORTH RACK", 11, 600, "#777", "start");
+  const nDefs = [6, 5, 4, 3].map(t => ({ title: "T" + t + " · " + SHORT[N.tiers[t]], rows: rowsOf(N, t), note: "N1–N" + posOf("N") })).concat([
+    { title: "Ice Plant · Middle", rows: [{ r: "N", t: 2, ps: range(4, 8), lab: "T2" }, { r: "N", t: 1, ps: range(4, 8), lab: "T1" }], note: "N4–N8 · both tiers · normal" },
+    { title: "Ice Plant · T2 salted", salted: true, rows: [{ r: "N", t: 2, ps: [1, 2, 3, 9, 10, 11], lab: "T2" }], note: "N1–N3 · N9–N11" },
+    { title: "Ice Plant · T1 salted", salted: true, rows: [{ r: "N", t: 1, ps: [1, 2, 3, 9, 10, 11], lab: "T1" }], note: "N1–N3 · N9–N11" }
+  ]);
+  nDefs.forEach((d, i) => { s += box(d, i, NY); });
+  const pipeN = (from, to, tcx, dashed) => { let o = ""; for (let i = from; i <= to; i++) o += line(cx(i), NB, cx(i), NBUS, dashed); return o + line(cx(from), NBUS, cx(to), NBUS, dashed) + line(tcx, NBUS, tcx, NTK, dashed); };
+  const n2c = (cx(0) + cx(4)) / 2, n1c = (cx(5) + cx(6)) / 2;
+  s += pipeN(0, 4, n2c, false) + pipeN(5, 6, n1c, true);
+  const n2rows = [6, 5, 4, 3].map(t => rowsOf(N, t)[0]).concat([{ r: "N", t: 2, ps: range(4, 8) }, { r: "N", t: 1, ps: range(4, 8) }]);
+  s += tank(n2c, NTK, 150, "3N2", "L3 North side tank-2", "5 tanks sharing", n2rows, false, false);
+  s += tank(n1c, NTK, 150, "3N1", "L3 North side tank-1", "2 tanks sharing · salted", [{ r: "N", t: 2, ps: [1, 2, 3, 9, 10, 11] }, { r: "N", t: 1, ps: [1, 2, 3, 9, 10, 11] }], true, false);
+  s += line(X0, RAILN, 970, RAILN, true, true) + text(X0 + 5, RAILN - 7, "Robot rail (north)", 10, 400, "#777", "start") +
+    '<rect x="' + X0 + '" y="' + (RAILN + 18) + '" width="200" height="50" rx="6" fill="#fff" stroke="#35473a" stroke-width="2.5"/>' + text(X0 + 100, RAILN + 39, "AGV TROLLEY", 13, 700) + text(X0 + 100, RAILN + 56, "MAIN ENTRANCE", 11, 600) +
+    line(X0, RAILN + 84, 970, RAILN + 84, true, true) + text(X0 + 5, RAILN + 77, "Robot rail (south)", 10, 400, "#777", "start");
+  const s2c = (cx(0) + cx(2)) / 2, s1c = (cx(3) + cx(5)) / 2;
+  s += tank(90, STK, 120, "Buffer", "Slot 1", "2 tanks sharing", [], false, true);
+  s += tank(s2c, STK, 140, "3S2", "L3 South side tank-2", "3 tanks sharing", [6, 5, 4].map(t => rowsOf(S, t)[0]), false, false);
+  s += tank(s1c, STK, 140, "3S1", "L3 South side tank-1", "3 tanks sharing", [3, 2, 1].map(t => rowsOf(S, t)[0]), true, false);
+  const pipeS = (from, to, tcx, dashed) => { let o = ""; for (let i = from; i <= to; i++) o += line(cx(i), SBUS, cx(i), SY, dashed); return o + line(cx(from), SBUS, cx(to), SBUS, dashed) + line(tcx, STK + 66, tcx, SBUS, dashed); };
+  s += pipeS(0, 2, s2c, false) + pipeS(3, 5, s1c, true);
+  TIERS.forEach((t, i) => { s += box({ title: "T" + t + " · " + SHORT[S.tiers[t]], rows: rowsOf(S, t), note: "S1–S" + posOf("S") }, i, SY); });
+  s += text(X0, 608, "SOUTH RACK", 11, 600, "#777", "start");
   s += '</svg>';
-  return '<div style="overflow-x:auto;">' + s + '</div><p class="hint" style="margin-top:6px;">Each box is one tier (one crop). The small squares are its trays, numbered from 1; white = free, pink = growing, green = ready. Dashed pipes are the salted tank (3N1) and the south tank 3S1; Ice Plant trays 1-4 and 8-11 use the salted tank, trays 5-7 use the normal tank 3N2. Tap a box to jump to that tier in the tray map.</p>';
+  return '<div style="overflow-x:auto;">' + s + '</div><p class="hint" style="margin-top:6px;">Laid out like the tank diagram. Each box is one crop on one tank. Small squares are its trays: white = free, pink = growing, green = ready. Dashed = salted tank 3N1 (Ice Plant trays 1-3 and 9-11 of T1 and T2) and south tank 3S1. The Ice Plant middle trays (4-8 of both tiers) use the normal tank 3N2. Tap a box to jump to it in the tray map.</p>';
 }
 
 // Crops consolidated by planting period: before 1 Oct vs from 1 Oct, with the dates and totals.
