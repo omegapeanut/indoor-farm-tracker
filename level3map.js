@@ -357,7 +357,7 @@ function historySection(){
   h += '<div style="overflow-x:auto;"><table class="nl-table"><thead><tr><th>Left</th><th>Crop</th><th>Tray</th><th>Planted</th><th>Plants</th><th>Type</th><th>Result</th></tr></thead><tbody>';
   h0.slice(0, 200).forEach(x => {
     const q = parseKey(x.k);
-    h += '<tr><td>' + fmtFull(x.exitDate) + '</td><td>' + esc(x.crop) + '</td><td>' + (q ? label(q.r, q.t, q.p) : esc(x.k)) + '</td><td>' + fmtFull(x.date) + '</td><td>' + (x.plants || "") + '</td><td>' + (x.type === "old" ? "Old crop" : "New crop") + '</td><td>' + (x.exitType === "harvested" ? "Harvested" : "Disposed") + '</td></tr>';
+    h += '<tr><td>' + fmtFull(x.exitDate) + '</td><td>' + esc(x.crop) + '</td><td>' + (q ? label(q.r, q.t, q.p) : esc(x.k)) + '</td><td>' + fmtFull(x.date) + '</td><td>' + (x.plants || "") + '</td><td>' + (x.type === "old" ? "Old crop" : "New crop") + '</td><td>' + (x.exitType === "harvested" ? "Harvested" : "Disposed") + (x.note && /^partial/.test(x.note) ? " · " + esc(x.note) : "") + '</td></tr>';
   });
   return h + '</tbody></table></div>';
 }
@@ -410,6 +410,7 @@ function openTray(k){
   const age = daysBetween(tr.date, today());
   openModal(head + '<div class="sub">' + plural(1, "tray") + ' · ' + plOf(tr, crop) + ' plants · planted ' + fmtFull(tr.date) + (age != null ? " (day " + age + ")" : "") + '</div>' +
     '<div class="row2"><div class="field"><label>Date planted</label><input type="date" id="l3mDate" value="' + esc(tr.date || "") + '"></div><div class="field"><label>New or old crop</label>' + typeSel(tr.type === "old" ? "old" : "new") + '</div></div>' + plantsField(crop, tr.plants && plOf(tr, crop) !== ppt(crop) ? plOf(tr, crop) : "") + status +
+    '<div class="field"><label>Plants to harvest or dispose (blank = whole tray, ' + plOf(tr, crop) + ')</label><input type="number" inputmode="numeric" id="l3mOut" min="1" step="1" placeholder="whole tray"></div>' +
     '<div class="nl-btnrow"><button class="btn primary" data-m="trayExit" data-kind="harvested" data-k="' + k + '">Harvested</button><button class="btn danger" data-m="trayExit" data-kind="disposed" data-k="' + k + '">Dispose</button></div>' +
     '<div class="modal-actions"><div style="display:flex;gap:6px;"><button class="btn danger" data-m="trayRemove" data-k="' + k + '">Entered by mistake — empty it</button></div><div style="display:flex;gap:6px;"><button class="btn" data-m="cancel">Cancel</button><button class="btn primary" data-m="saveTray" data-k="' + k + '">Save</button></div></div>');
 }
@@ -479,6 +480,17 @@ function saveExit(kind, keys){
       delete s.trays[k];
     });
   }).then(ok => { if (ok){ sel.clear(); closeModal(); render(); } });
+}
+
+function partialExit(k, kind, out){
+  const crop = cropOfKey(k), date = today(), word = kind === "harvested" ? "Harvest" : "Dispose";
+  const have = plOf(state.trays[k], crop);
+  if (!confirm(word + " " + out + " of " + have + " plants from " + label(parseKey(k).r, parseKey(k).t, parseKey(k).p) + "? " + (have - out) + " stay in the tray.")) return;
+  mutate(s => {
+    const tr = s.trays[k]; if (!tr) return;
+    s.history.push({ k, crop, plants: out, date: tr.date, readyDate: tr.readyDate || null, type: tr.type === "old" ? "old" : "new", exitType: kind, exitDate: date, note: "partial (" + out + " of " + have + ")" });
+    tr.plants = have - out;
+  }).then(ok => { if (ok) closeModal(); });
 }
 
 function setReady(flag){
@@ -667,7 +679,11 @@ function onClick(e){
     const a = m.dataset.m;
     if (a === "cancel") return closeModal();
     if (a === "saveTray") return saveTray(m.dataset.k);
-    if (a === "trayExit"){ sel.clear(); sel.add(m.dataset.k); return openExit(m.dataset.kind); }
+    if (a === "trayExit"){
+      const k = m.dataset.k, tr = state.trays[k], crop = cropOfKey(k), out = parsePl(val("l3mOut")), have = plOf(tr, crop);
+      if (tr && out && out < have) return partialExit(k, m.dataset.kind, out);
+      sel.clear(); sel.add(k); return openExit(m.dataset.kind);
+    }
     if (a === "trayRemove"){
       if (!confirm("Empty this tray without recording it in the history? Use this for a mistaken entry.")) return;
       return mutate(s => { delete s.trays[m.dataset.k]; }).then(ok => { if (ok) closeModal(); });
