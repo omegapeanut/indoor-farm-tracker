@@ -218,6 +218,27 @@ function varietyTable(list){
   return h + '<tr class="nl-total"><td>Total</td><td>' + tF + ' / ' + tT + '</td><td>' + tB + '</td><td>' + tA + '</td><td>' + tR + '</td><td>' + tN + '</td><td>' + (tR + tN) + ' / ' + tM + '</td></tr></tbody></table>';
 }
 
+// Crops consolidated by planting period: before 1 Oct vs from 1 Oct, with the dates and totals.
+function consolidation(list){
+  const names = [...new Set(list.map(x => x.crop))].sort((a, b) => a.localeCompare(b));
+  if (!names.length) return '<div class="empty-state">No trays recorded yet.</div>';
+  const dateLines = (l) => {
+    const m = {}; l.forEach(x => { const d = x.date || ""; m[d] = (m[d] || 0) + 1; });
+    return Object.keys(m).sort().map(d => (d ? fmtFull(d) : "No date") + " <b>×" + m[d] + "</b>").join("<br>") || "–";
+  };
+  let h = '<div style="overflow-x:auto;"><table class="nl-table"><thead><tr><th rowspan="2">Crop</th><th colspan="3" style="text-align:center;">Before 1 Oct</th><th colspan="3" style="text-align:center;">From 1 Oct</th><th colspan="2" style="text-align:center;">Total</th></tr>' +
+    '<tr><th>Dates planted (×trays)</th><th>Trays</th><th>Plants</th><th>Dates planted (×trays)</th><th>Trays</th><th>Plants</th><th>Trays</th><th>Plants</th></tr></thead><tbody>';
+  const T = { bt: 0, bp: 0, at: 0, ap: 0 };
+  names.forEach(c => {
+    const l = list.filter(x => x.crop === c);
+    const b = l.filter(x => x.date && x.date < CUT), a = l.filter(x => !(x.date && x.date < CUT));
+    const bp = b.length * ppt(c), ap = a.length * ppt(c);
+    T.bt += b.length; T.bp += bp; T.at += a.length; T.ap += ap;
+    h += '<tr style="vertical-align:top;"><td><b>' + esc(c) + '</b></td><td>' + dateLines(b) + '</td><td>' + b.length + '</td><td>' + bp + '</td><td>' + dateLines(a) + '</td><td>' + a.length + '</td><td>' + ap + '</td><td><b>' + l.length + '</b></td><td><b>' + (bp + ap) + '</b></td></tr>';
+  });
+  return h + '<tr class="nl-total"><td>Total</td><td></td><td>' + T.bt + '</td><td>' + T.bp + '</td><td></td><td>' + T.at + '</td><td>' + T.ap + '</td><td>' + (T.bt + T.at) + '</td><td>' + (T.bp + T.ap) + '</td></tr></tbody></table></div>';
+}
+
 function historySection(){
   const h0 = state.history.slice().sort((a, b) => (b.exitDate || "").localeCompare(a.exitDate || ""));
   let h = '<p class="hint nl-toggle" data-action="history">' + (showHistory ? "Hide" : "Show") + ' trays that have left (' + h0.length + ')</p>';
@@ -248,8 +269,9 @@ function render(){
     '<div class="l3m-leg"><span><u></u>Empty</span><span><u style="background:var(--blush,#ecd6cb)"></u>Growing</span><span><u style="background:var(--sage,#d3dccf)"></u>Ready</span><span><u style="border-style:dashed;border-color:#5b8db8"></u>Salted water</span><span>Number = tray position · small text = date planted</span></div>' +
     '<div class="' + (isAdmin ? "l3m-adm" : "") + '">' + rackHtml(RACKS[0]) + rackHtml(RACKS[1]) + '</div>' + selBar());
   h += '<section class="nl-block"><div class="nl-bh nl-toggle" data-action="toggleDates" style="cursor:pointer;"><span class="nl-no">03</span><span class="nl-bt">Dates by crop</span><span class="nl-count">' + plural(list.length, "tray") + ' · ' + (showDates ? "Hide ▴" : "Show ▾") + '</span></div>' + (showDates ? datesTable(list) : "") + '</section>';
-  h += blk("04", "By variety", varietyTable(list));
-  h += blk("05", "History", historySection());
+  h += blk("04", "Consolidation — before 1 Oct vs from 1 Oct", consolidation(list));
+  h += blk("05", "By variety", varietyTable(list));
+  h += blk("06", "History", historySection());
   h += '</div>';
   root.innerHTML = h;
 }
