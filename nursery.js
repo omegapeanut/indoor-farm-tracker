@@ -433,13 +433,13 @@ async function clearAll(){
   if (!confirm("Really clear everything? This cannot be undone from the app.")) return;
   try {
     const stamp = new Date().toISOString().slice(0, 16).replace(/[-:T]/g, "");
-    for (const name of ["nurseryLog", "level3Log", "ahuLog"]){
+    for (const name of ["nurseryLog", "level3Log", "level3Map", "ahuLog"]){
       const r = doc(db, "meta", name);
       const snap = await getDoc(r);
       if (!snap.exists()) continue;
       const d = snap.data();
       await setDoc(doc(db, "meta", name + "_backup_" + stamp), d);
-      await setDoc(r, Object.assign({}, d, { batches: [] }));
+      await setDoc(r, name === "level3Map" ? Object.assign({}, d, { trays: {}, history: [] }) : Object.assign({}, d, { batches: [] }));
     }
     closeModal();
     alert("Cleared. Level 1 and Level 3 are now empty.");
