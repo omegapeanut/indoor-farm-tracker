@@ -316,7 +316,7 @@ function floorPlan(){
   s += tank(n1c, NTK, 150, "3N1", "L3 North side tank-1", "2 tanks sharing · salted", [{ r: "N", t: 2, ps: [1, 2, 3, 9, 10, 11] }, { r: "N", t: 1, ps: [1, 2, 3, 9, 10, 11] }], true, false);
   s += line(X0, RAILN, 970, RAILN, true, true) + text(X0 + 5, RAILN - 7, "Robot rail (north)", 10, 400, "#777", "start") +
     '<rect x="' + X0 + '" y="' + (RAILN + 18) + '" width="200" height="50" rx="6" fill="#fff" stroke="#35473a" stroke-width="2.5"/>' + text(X0 + 100, RAILN + 39, "AGV TROLLEY", 13, 700) + text(X0 + 100, RAILN + 56, "MAIN ENTRANCE", 11, 600) +
-    line(X0, RAILN + 84, 970, RAILN + 84, true, true) + text(X0 + 5, RAILN + 77, "Robot rail (south)", 10, 400, "#777", "start");
+    line(X0, RAILN + 84, 970, RAILN + 84, true, true) + text(X0 + 5, RAILN + 98, "Robot rail (south)", 10, 400, "#777", "start");
   const bfc = cx(0), s2c = (cx(1) + cx(3)) / 2, s1c = (cx(4) + cx(6)) / 2;
   const sRows = (t) => [{ r: "S", t, ps: range(3, posOf("S")) }];
   const bufRows = TIERS.map(t => ({ r: "S", t, ps: [1, 2], lab: "T" + t }));
