@@ -310,13 +310,13 @@ function floorPlan(){
   const s2c = (cx(0) + cx(2)) / 2, s1c = (cx(3) + cx(5)) / 2;
   s += tank(90, STK, 120, "Buffer", "Slot 1", "2 tanks sharing", [], false, true);
   s += tank(s2c, STK, 140, "3S2", "L3 South side tank-2", "3 tanks sharing", [6, 5, 4].map(t => rowsOf(S, t)[0]), false, false);
-  s += tank(s1c, STK, 140, "3S1", "L3 South side tank-1", "3 tanks sharing", [3, 2, 1].map(t => rowsOf(S, t)[0]), true, false);
+  s += tank(s1c, STK, 140, "3S1", "L3 South side tank-1", "3 tanks sharing", [3, 2, 1].map(t => rowsOf(S, t)[0]), false, false);
   const pipeS = (from, to, tcx, dashed) => { let o = ""; for (let i = from; i <= to; i++) o += line(cx(i), SBUS, cx(i), SY, dashed); return o + line(cx(from), SBUS, cx(to), SBUS, dashed) + line(tcx, STK + 66, tcx, SBUS, dashed); };
-  s += pipeS(0, 2, s2c, false) + pipeS(3, 5, s1c, true);
+  s += pipeS(0, 2, s2c, false) + pipeS(3, 5, s1c, false);
   TIERS.forEach((t, i) => { s += box({ title: "T" + t + " · " + SHORT[S.tiers[t]], rows: rowsOf(S, t), note: "S1–S" + posOf("S") }, i, SY); });
   s += text(X0, 608, "SOUTH RACK", 11, 600, "#777", "start");
   s += '</svg>';
-  return '<div style="overflow-x:auto;">' + s + '</div><p class="hint" style="margin-top:6px;">Laid out like the tank diagram. Each box is one crop on one tank. Small squares are its trays: white = free, pink = growing, green = ready. Dashed = salted tank 3N1 (Ice Plant trays 1-3 and 9-11 of T1 and T2) and south tank 3S1. The Ice Plant middle trays (4-8 of both tiers) use the normal tank 3N2. Tap a box to jump to it in the tray map.</p>';
+  return '<div style="overflow-x:auto;">' + s + '</div><p class="hint" style="margin-top:6px;">Laid out like the tank diagram. Each box is one crop on one tank. Small squares are its trays: white = free, pink = growing, green = ready. Dashed = salted tank 3N1 (Ice Plant trays 1-3 and 9-11 of T1 and T2). The Ice Plant middle trays (4-8 of both tiers) use the normal tank 3N2. Tap a box to jump to it in the tray map.</p>';
 }
 
 // Crops consolidated by planting period: before 1 Oct vs from 1 Oct, with the dates and totals.
