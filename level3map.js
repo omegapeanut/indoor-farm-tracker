@@ -268,11 +268,12 @@ function floorPlan(){
     const tip = def.title + " · " + st.u + " of " + st.n + " trays used, " + st.free + " free, " + st.rd + " ready";
     let g = '<g data-action="jump" data-r="' + def.rows[0].r + '" data-t="' + def.rows[0].t + '" style="cursor:pointer"><title>' + esc(tip) + '</title>' +
       '<rect x="' + x + '" y="' + y + '" width="' + BW + '" height="' + BH + '" rx="10" fill="#f1ebe4" stroke="#35473a" stroke-width="2"' + (def.salted ? ' stroke-dasharray="6 4"' : "") + '/>' +
-      text(x + BW / 2, y + 17, esc(def.title), 11.5, 700) +
-      text(x + BW / 2, y + 36, "free " + st.free + " / " + st.n, 14, 700, st.free === 0 ? "#9a4a3a" : "#35473a") +
-      text(x + BW / 2, y + 50, st.rd + " ready · " + (st.u - st.rd) + " growing", 9.5, 400, "#555");
+      text(x + BW / 2, y + (def.sub ? 15 : 17), esc(def.title), 11.5, 700) +
+      (def.sub ? text(x + BW / 2, y + 27, esc(def.sub), 9.5, 600, "#35473a") : "") +
+      text(x + BW / 2, y + (def.sub ? 43 : 36), "free " + st.free + " / " + st.n, 14, 700, st.free === 0 ? "#9a4a3a" : "#35473a") +
+      text(x + BW / 2, y + (def.sub ? 55 : 50), st.rd + " ready · " + (st.u - st.rd) + " growing", 9.5, 400, "#555");
     def.rows.forEach((rw, ri) => {
-      const ry = y + 58 + ri * 12, w0 = rw.ps.length * SQ + (rw.ps.length - 1) * SG, multi = def.rows.length > 1, sx = multi ? x + 40 : x + (BW - w0) / 2;
+      const ry = y + (def.sub ? 62 : 58) + ri * 12, w0 = rw.ps.length * SQ + (rw.ps.length - 1) * SG, multi = def.rows.length > 1, sx = multi ? x + 40 : x + (BW - w0) / 2;
       if (multi) g += text(x + 10, ry + 7, rw.lab, 9, 600, "#555", "start");
       rw.ps.forEach((p, k) => {
         const tr = state.trays[keyOf(rw.r, rw.t, p)];
@@ -293,9 +294,9 @@ function floorPlan(){
   let s = '<svg viewBox="0 0 1000 612" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:auto;min-width:760px;font-family:Inter,system-ui,sans-serif;">';
   s += text(X0, 20, "NORTH RACK", 11, 600, "#777", "start");
   const nDefs = [6, 5, 4, 3].map(t => ({ title: "T" + t + " · " + SHORT[N.tiers[t]], rows: rowsOf(N, t), note: "N1–N" + posOf("N") })).concat([
-    { title: "Ice Plant · Middle", rows: [{ r: "N", t: 2, ps: range(4, 8), lab: "T2" }, { r: "N", t: 1, ps: range(4, 8), lab: "T1" }], note: "N4–N8 · both tiers · normal" },
-    { title: "Ice Plant · T2 salted", salted: true, rows: [{ r: "N", t: 2, ps: [1, 2, 3, 9, 10, 11], lab: "T2" }], note: "N1–N3 · N9–N11" },
-    { title: "Ice Plant · T1 salted", salted: true, rows: [{ r: "N", t: 1, ps: [1, 2, 3, 9, 10, 11], lab: "T1" }], note: "N1–N3 · N9–N11" }
+    { title: "Ice Plant · T1 & T2", sub: "Tray 4, 5, 6, 7, 8", rows: [{ r: "N", t: 2, ps: range(4, 8), lab: "T2" }, { r: "N", t: 1, ps: range(4, 8), lab: "T1" }], note: "N4–N8 · both tiers · normal" },
+    { title: "Ice Plant T2", sub: "Tray 1, 2, 3, 9, 10, 11", salted: true, rows: [{ r: "N", t: 2, ps: [1, 2, 3, 9, 10, 11], lab: "T2" }], note: "N1–N3 · N9–N11" },
+    { title: "Ice Plant T1", sub: "Tray 1, 2, 3, 9, 10, 11", salted: true, rows: [{ r: "N", t: 1, ps: [1, 2, 3, 9, 10, 11], lab: "T1" }], note: "N1–N3 · N9–N11" }
   ]);
   nDefs.forEach((d, i) => { s += box(d, i, NY); });
   const pipeN = (from, to, tcx, dashed) => { let o = ""; for (let i = from; i <= to; i++) o += line(cx(i), NB, cx(i), NBUS, dashed); return o + line(cx(from), NBUS, cx(to), NBUS, dashed) + line(tcx, NBUS, tcx, NTK, dashed); };
