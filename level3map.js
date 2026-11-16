@@ -74,6 +74,33 @@ const STYLE = `
 .l3m-bar{position:sticky;bottom:64px;z-index:5;display:flex;gap:6px;flex-wrap:wrap;align-items:center;background:var(--card,#f7f3ee);border:1.5px solid var(--green,#35473a);border-radius:14px;padding:8px 10px;margin:8px 0;box-shadow:0 4px 14px rgba(0,0,0,.12)}
 .l3m-bar .cnt{font-weight:600;margin-right:6px}
 .l3m-leg{display:flex;gap:12px;flex-wrap:wrap;font-size:12px;margin:4px 0 10px}
+.l3r{position:fixed;inset:0;z-index:2000;background:var(--bg,#eee8e2);overflow:auto;display:none;-webkit-overflow-scrolling:touch;touch-action:manipulation}
+.l3r.on{display:block}
+.l3r-in{max-width:920px;margin:0 auto;padding:16px 18px 140px}
+.l3r h2{font-family:'Cormorant Garamond',serif;font-size:38px;margin:14px 0 6px}
+.l3r h3{font-size:22px;margin:22px 0 8px}
+.l3r .sub{font-size:19px;opacity:.75;margin:0 0 10px}
+.l3r button{font:inherit;font-size:22px;min-height:72px;padding:10px 18px;border-radius:18px;border:2.5px solid var(--green,#35473a);background:var(--card,#f7f3ee);color:var(--ink,#2c3a30);cursor:pointer}
+.l3r button:active{transform:scale(.97)}
+.l3r button[disabled]{opacity:.35}
+.l3r button.on{background:var(--green,#35473a);color:#fff}
+.l3r button.go{background:var(--green,#35473a);color:#fff;font-size:26px;font-weight:700;min-height:84px;width:100%}
+.l3r-top{display:flex;justify-content:space-between;gap:10px}
+.l3r-top button{min-width:140px}
+.l3r-grid{display:grid;gap:12px;grid-template-columns:repeat(auto-fill,minmax(210px,1fr))}
+.l3r-grid button{display:flex;flex-direction:column;align-items:flex-start;gap:4px;text-align:left;min-height:96px}
+.l3r-grid button b{font-size:24px}
+.l3r-grid button span{font-size:17px;opacity:.8}
+.l3r-nums{display:grid;gap:10px;grid-template-columns:repeat(5,1fr)}
+.l3r-nums button{font-size:30px;font-weight:700;min-height:84px}
+.l3r-two{display:grid;gap:12px;grid-template-columns:1fr 1fr}
+.l3r-date{display:grid;grid-template-columns:84px 1fr 84px;gap:10px;align-items:center}
+.l3r-date .d{font-size:26px;font-weight:700;text-align:center}
+.l3r-quick{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:10px}
+.l3r-quick input{font:inherit;font-size:20px;min-height:72px;border-radius:18px;border:2.5px solid var(--green,#35473a);padding:8px 12px;background:var(--card,#f7f3ee);width:100%}
+.l3r-msg{background:var(--sage,#d3dccf);border-radius:16px;padding:14px 18px;font-size:22px;font-weight:700;margin:12px 0}
+.l3r-save{position:fixed;left:0;right:0;bottom:0;padding:12px 18px 18px;background:linear-gradient(transparent,var(--bg,#eee8e2) 30%)}
+.l3r-save .in{max-width:920px;margin:0 auto}
 .l3m-leg span{display:inline-flex;align-items:center;gap:5px}
 .l3m-leg u{display:inline-block;width:14px;height:14px;border-radius:4px;border:1.5px solid rgba(0,0,0,.25);text-decoration:none}
 `;
@@ -87,6 +114,8 @@ function init(){
   document.body.appendChild(ov);
   root.addEventListener("click", onClick);
   ov.addEventListener("click", onClick);
+  const ro = document.createElement("div"); ro.className = "l3r"; ro.id = "l3rOverlay"; document.body.appendChild(ro);
+  ro.addEventListener("click", onRecClick); ro.addEventListener("change", onRecChange);
   onAuthStateChanged(auth, (user) => { isAdmin = !!user; if (!isAdmin) sel.clear(); render(); });
   onSnapshot(REF, (snap) => {
     if (snap.exists()){
@@ -318,6 +347,7 @@ function render(){
   const list = occ();
   let h = '<div class="section nl-root"><h2>Level 3 — Tray map</h2>';
   h += '<p class="hint">North rack 11 trays per tier, South rack 13, 6 tiers each. Tap a tray to see and change its details. Use Select many to update several at once. Each tier grows one crop.</p>';
+  if (isAdmin) h += '<button class="btn primary" style="font-size:19px;padding:16px 24px;margin:4px 0 10px;" data-action="recOpen">📋 Record crops — big buttons (iPad mode)</button>';
   if (loadError) h += '<div class="kiosk-message err">Couldn\'t load: ' + esc(loadError) + '</div>';
   if (!loaded && !loadError) h += '<p class="hint">Loading…</p>';
   h += blk("01", "Capacity", capCards(list));
@@ -336,6 +366,7 @@ function render(){
   h += blk("07", "History", historySection());
   h += '</div>';
   root.innerHTML = h;
+  if (rec) renderRec();
 }
 
 // ---------------------------------------------------------------- modals
@@ -460,6 +491,145 @@ async function importOld(){
   } catch (e){ alert("Couldn't import: " + e.message); }
 }
 
+// ---------------------------------------------------------------- big-button recording mode (iPad)
+let rec = null;
+const CROP_ORDER = [...new Set(RACKS.flatMap(rk => [1, 2, 3, 4, 5, 6].map(t => rk.tiers[t])))];
+const addDays = (key, n) => { const d = toDate(key); d.setDate(d.getDate() + n); return toKey(d); };
+const dateLong = (key) => toDate(key).toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short", year: "numeric" });
+
+function slotsFor(crop, trays){
+  const out = [];
+  RACKS.forEach(rk => [1, 2, 3, 4, 5, 6].forEach(t => { if (rk.tiers[t] !== crop) return; for (let p = 1; p <= posOf(rk.id); p++){ const k = keyOf(rk.id, t, p); if (!trays[k]) out.push(k); } }));
+  return out;
+}
+function cropStats(crop){
+  const list = occ().filter(x => x.crop === crop);
+  let cap = 0; RACKS.forEach(rk => [1, 2, 3, 4, 5, 6].forEach(t => { if (rk.tiers[t] === crop) cap += posOf(rk.id); }));
+  const ready = list.filter(x => x.ready).length;
+  return { cap, used: list.length, free: cap - list.length, ready, growing: list.length - ready };
+}
+function groupsFor(crop){
+  const m = new Map();
+  occ().filter(x => x.crop === crop).sort((a, b) => (a.r === b.r ? 0 : a.r === "N" ? -1 : 1) || a.t - b.t || a.p - b.p).forEach(x => {
+    const id = [x.date || "", x.ready ? "r" : "n", x.type === "old" ? "old" : "new"].join("|");
+    if (!m.has(id)) m.set(id, { id, date: x.date, ready: !!x.ready, type: x.type === "old" ? "old" : "new", keys: [] });
+    m.get(id).keys.push(x.k);
+  });
+  return [...m.values()].sort((a, b) => (a.date || "9999").localeCompare(b.date || "9999"));
+}
+function keysSummary(keys){
+  const by = {}; keys.forEach(k => { const q = parseKey(k); const g = q.r + q.t; (by[g] = by[g] || { r: q.r, t: q.t, ps: [] }).ps.push(q.p); });
+  return Object.values(by).map(g => "T" + g.t + " " + g.r + ranges(g.ps).replace(/(, )(\d)/g, "$1" + g.r + "$2").replace(/–(\d)/g, "–" + g.r + "$1")).join(" · ");
+}
+
+function dateCtl(){
+  const t = today();
+  return '<h3>Date</h3><div class="l3r-date"><button data-r="dd" data-d="-1">◀</button><div class="d">' + esc(dateLong(rec.date)) + '</div><button data-r="dd" data-d="1">▶</button></div>' +
+    '<div class="l3r-quick"><button data-r="dset" data-v="' + t + '" class="' + (rec.date === t ? "on" : "") + '">Today</button><button data-r="dset" data-v="' + addDays(t, -1) + '" class="' + (rec.date === addDays(t, -1) ? "on" : "") + '">Yesterday</button><input type="date" id="l3rDate" value="' + esc(rec.date) + '"></div>';
+}
+function numGrid(max){
+  let h = '<div class="l3r-nums">'; for (let i = 1; i <= max; i++) h += '<button data-r="n" data-v="' + i + '" class="' + (rec.n === i ? "on" : "") + '">' + i + '</button>'; return h + '</div>';
+}
+
+function recHtml(){
+  const r = rec;
+  let h = '<div class="l3r-in"><div class="l3r-top"><button data-r="back">← Back</button><button data-r="close">✕ Done</button></div>';
+  if (r.msg) h += '<div class="l3r-msg">✓ ' + esc(r.msg) + '</div>';
+  if (!r.crop){
+    h += '<h2>Which crop?</h2><p class="sub">Record one crop at a time. Tap a crop.</p><div class="l3r-grid">';
+    CROP_ORDER.forEach(c => { const s = cropStats(c); h += '<button data-r="crop" data-c="' + esc(c) + '"><b>' + esc(c) + '</b><span>' + s.free + ' free · ' + s.growing + ' growing · ' + s.ready + ' ready</span></button>'; });
+    return h + '</div></div>';
+  }
+  const st = cropStats(r.crop);
+  h += '<h2>' + esc(r.crop) + '</h2><p class="sub">' + st.used + ' of ' + st.cap + ' trays used · ' + st.free + ' free · ' + st.growing + ' growing · ' + st.ready + ' ready</p>';
+  if (!r.action){
+    h += '<h3>What do you want to do?</h3><div class="l3r-two">' +
+      '<button data-r="action" data-a="transplant"' + (st.free ? "" : " disabled") + '>＋ Transplant<br><small>add trays</small></button>' +
+      '<button data-r="action" data-a="ready"' + (st.growing ? "" : " disabled") + '>Mark ready<br><small>' + st.growing + ' growing</small></button>' +
+      '<button data-r="action" data-a="harvest"' + (st.used ? "" : " disabled") + '>Harvest<br><small>remove trays</small></button>' +
+      '<button data-r="action" data-a="dispose"' + (st.used ? "" : " disabled") + '>Dispose<br><small>remove trays</small></button></div>';
+    return h + '</div></div>';
+  }
+  if (r.action === "transplant"){
+    const slots = slotsFor(r.crop, state.trays), max = Math.min(slots.length, 13);
+    if (r.n > max) r.n = max;
+    h += '<h3>How many trays?</h3>' + numGrid(max) + dateCtl() +
+      '<h3>New or old crop?</h3><div class="l3r-two"><button data-r="type" data-v="new" class="' + (r.type === "new" ? "on" : "") + '">New crop</button><button data-r="type" data-v="old" class="' + (r.type === "old" ? "on" : "") + '">Old crop</button></div>' +
+      '<h3>Status</h3><div class="l3r-two"><button data-r="status" data-v="0" class="' + (!r.ready ? "on" : "") + '">Not ready</button><button data-r="status" data-v="1" class="' + (r.ready ? "on" : "") + '">Ready</button></div>' +
+      '<p class="sub" style="margin-top:14px;">Goes into: ' + esc(keysSummary(slots.slice(0, r.n))) + '</p>' +
+      '<div class="l3r-save"><div class="in"><button class="go" data-r="saveTransplant">Save ' + r.n + ' ' + (r.n === 1 ? "tray" : "trays") + '</button></div></div>';
+    return h + '</div></div>';
+  }
+  // ready / harvest / dispose: choose a group of trays, then how many
+  const verb = { ready: "Mark ready", harvest: "Harvest", dispose: "Dispose" }[r.action];
+  let groups = groupsFor(r.crop); if (r.action === "ready") groups = groups.filter(g => !g.ready);
+  h += '<h3>' + verb + ' — which trays?</h3><p class="sub">Tap the batch (grouped by date planted).</p><div class="l3r-grid">';
+  groups.forEach(g => { h += '<button data-r="grp" data-g="' + esc(g.id) + '" class="' + (r.grp === g.id ? "on" : "") + '"><b>' + esc(fmtFull(g.date)) + '</b><span>' + g.keys.length + ' ' + (g.keys.length === 1 ? "tray" : "trays") + ' · ' + (g.ready ? "Ready" : "Not ready") + ' · ' + (g.type === "old" ? "Old crop" : "New crop") + '</span></button>'; });
+  h += '</div>';
+  const g = groups.find(x => x.id === r.grp);
+  if (g){
+    if (r.n > g.keys.length || r.n < 1) r.n = g.keys.length;
+    h += '<h3>How many of these trays?</h3>' + numGrid(Math.min(g.keys.length, 13));
+    if (g.keys.length > 13) h += '<div class="l3r-two" style="margin-top:10px;"><button data-r="n" data-v="' + g.keys.length + '" class="' + (r.n === g.keys.length ? "on" : "") + '">All ' + g.keys.length + '</button></div>';
+    if (r.action !== "ready") h += dateCtl();
+    h += '<p class="sub" style="margin-top:14px;">Trays: ' + esc(keysSummary(g.keys.slice(0, r.n))) + '</p>' +
+      '<div class="l3r-save"><div class="in"><button class="go" data-r="saveAct">' + verb + ' ' + r.n + ' ' + (r.n === 1 ? "tray" : "trays") + '</button></div></div>';
+  }
+  return h + '</div></div>';
+}
+
+function renderRec(){
+  const ov = document.getElementById("l3rOverlay"); if (!ov) return;
+  if (!rec){ ov.classList.remove("on"); ov.innerHTML = ""; return; }
+  ov.innerHTML = recHtml(); ov.classList.add("on");
+}
+
+function recDone(msg){ rec.msg = msg; rec.action = null; rec.grp = null; rec.n = 1; renderRec(); document.getElementById("l3rOverlay").scrollTop = 0; }
+
+function onRecChange(e){
+  if (e.target && e.target.id === "l3rDate" && rec && e.target.value){ rec.date = e.target.value; renderRec(); }
+}
+
+function onRecClick(e){
+  const b = e.target.closest("[data-r]"); if (!b || !rec) return;
+  const a = b.dataset.r;
+  if (a !== "back" && a !== "close") rec.msg = "";
+  if (a === "close"){ rec = null; renderRec(); return; }
+  if (a === "back"){
+    rec.msg = "";
+    if (rec.grp) rec.grp = null; else if (rec.action) rec.action = null; else if (rec.crop) rec.crop = null; else { rec = null; renderRec(); return; }
+  }
+  else if (a === "crop"){ rec.crop = b.dataset.c; rec.action = null; rec.grp = null; }
+  else if (a === "action"){ rec.action = b.dataset.a; rec.grp = null; rec.n = 1; rec.date = today(); rec.type = "new"; rec.ready = false; }
+  else if (a === "n") rec.n = +b.dataset.v;
+  else if (a === "dd") rec.date = addDays(rec.date, +b.dataset.d);
+  else if (a === "dset") rec.date = b.dataset.v;
+  else if (a === "type") rec.type = b.dataset.v === "old" ? "old" : "new";
+  else if (a === "status") rec.ready = b.dataset.v === "1";
+  else if (a === "grp"){ rec.grp = b.dataset.g; const g = groupsFor(rec.crop).find(x => x.id === rec.grp); rec.n = g ? g.keys.length : 1; rec.date = today(); }
+  else if (a === "saveTransplant"){
+    const n = rec.n, crop = rec.crop, date = rec.date, type = rec.type, ready = rec.ready, d0 = today();
+    if (!(n >= 1)) return;
+    mutate(s => { slotsFor(crop, s.trays).slice(0, n).forEach(k => { s.trays[k] = { date, ready, readyDate: ready ? d0 : null, type }; }); })
+      .then(ok => { if (ok && rec) recDone("Saved " + n + " × " + crop + " (" + fmtFull(date) + ")"); });
+    return;
+  }
+  else if (a === "saveAct"){
+    const crop = rec.crop, act = rec.action, g = groupsFor(crop).find(x => x.id === rec.grp); if (!g) return;
+    const keys = g.keys.slice(0, rec.n), date = rec.date, d0 = today();
+    mutate(s => {
+      keys.forEach(k => {
+        const tr = s.trays[k]; if (!tr) return;
+        if (act === "ready"){ tr.ready = true; tr.readyDate = d0; return; }
+        s.history.push({ k, crop, plants: ppt(crop), date: tr.date, readyDate: tr.readyDate || null, type: tr.type === "old" ? "old" : "new", exitType: act === "harvest" ? "harvested" : "disposed", exitDate: date, note: "" });
+        delete s.trays[k];
+      });
+    }).then(ok => { if (ok && rec) recDone({ ready: "Marked ", harvest: "Harvested ", dispose: "Disposed " }[act] + keys.length + " × " + crop); });
+    return;
+  }
+  renderRec();
+}
+
 // ---------------------------------------------------------------- events
 function onClick(e){
   const m = e.target.closest("[data-m]");
@@ -506,6 +676,7 @@ function onClick(e){
     const el = root.querySelector('.l3m-th .t[data-r="' + t.dataset.r + '"][data-t="' + t.dataset.t + '"]');
     if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
   }
+  else if (a === "recOpen" && isAdmin){ rec = { crop: null, action: null, n: 1, date: today(), type: "new", ready: false, grp: null, msg: "" }; renderRec(); }
   else if (a === "undo") undo();
   else if (a === "import") importOld();
   else if (a === "toggleDates"){ showDates = !showDates; render(); }
