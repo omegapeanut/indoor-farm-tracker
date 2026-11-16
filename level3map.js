@@ -258,6 +258,7 @@ function varietyTable(list){
   return h + '<tr class="nl-total"><td>Total</td><td>' + tF + ' / ' + tT + '</td><td>' + tB + '</td><td>' + tA + '</td><td>' + tR + '</td><td>' + tN + '</td><td>' + (tR + tN) + ' / ' + tM + '</td></tr></tbody></table>';
 }
 
+// South: trays 3-13 of T6-T4 on 3S2, T3-T1 on 3S1; trays 1-2 of all tiers on the Buffer tank.
 // Floor plan: both racks with their water tanks, laid out like the plant's tank diagram.
 // North: T6..T3 and the Ice Plant "middle slot" (trays 4-8 of T1 and T2) are on the normal tank 3N2;
 // Ice Plant T2 and T1 (trays 1-3 and 9-11) are on the salted tank 3N1. South: 3S2 (T6-T4), 3S1 (T3-T1), Buffer for slot 1.
@@ -272,23 +273,23 @@ function floorPlan(){
   const text = (x, y, str, size, weight, fill, anchor) => '<text x="' + x + '" y="' + y + '" font-size="' + size + '" font-weight="' + (weight || 400) + '" fill="' + (fill || "#2c3a30") + '" text-anchor="' + (anchor || "middle") + '">' + str + '</text>';
   const line = (x1, y1, x2, y2, dash, thin) => '<line x1="' + x1 + '" y1="' + y1 + '" x2="' + x2 + '" y2="' + y2 + '" stroke="#35473a" stroke-width="' + (thin ? 1.5 : 2.5) + '"' + (dash ? ' stroke-dasharray="7 5"' : "") + (thin ? ' opacity=".5"' : "") + '/>';
   const box = (def, i, y) => {
-    const st = count(def.rows), x = X0 + i * (BW + GAP);
+    const st = count(def.rows), x = X0 + i * (BW + GAP), bh = def.bh || BH, gap = def.rowGap || 12;
     const tip = def.title + " · " + st.u + " of " + st.n + " trays used, " + st.free + " free, " + st.rd + " ready";
     let g = '<g data-action="jump" data-r="' + def.rows[0].r + '" data-t="' + def.rows[0].t + '" style="cursor:pointer"><title>' + esc(tip) + '</title>' +
-      '<rect x="' + x + '" y="' + y + '" width="' + BW + '" height="' + BH + '" rx="10" fill="#f1ebe4" stroke="#35473a" stroke-width="2"' + (def.salted ? ' stroke-dasharray="6 4"' : "") + '/>' +
+      '<rect x="' + x + '" y="' + y + '" width="' + BW + '" height="' + bh + '" rx="10" fill="#f1ebe4" stroke="#35473a" stroke-width="2"' + (def.salted ? ' stroke-dasharray="6 4"' : "") + '/>' +
       text(x + BW / 2, y + (def.sub ? 15 : 17), esc(def.title), 11.5, 700) +
       (def.sub ? text(x + BW / 2, y + 27, esc(def.sub), 9.5, 600, "#35473a") : "") +
       text(x + BW / 2, y + (def.sub ? 43 : 36), "free " + st.free + " / " + st.n, 14, 700, st.free === 0 ? "#9a4a3a" : "#35473a") +
       text(x + BW / 2, y + (def.sub ? 55 : 50), st.rd + " ready · " + (st.u - st.rd) + " growing", 9.5, 400, "#555");
     def.rows.forEach((rw, ri) => {
-      const ry = y + (def.sub ? 62 : 58) + ri * 12, w0 = rw.ps.length * SQ + (rw.ps.length - 1) * SG, multi = def.rows.length > 1, sx = multi ? x + 40 : x + (BW - w0) / 2;
+      const ry = y + (def.sub ? 62 : 58) + ri * gap, w0 = rw.ps.length * SQ + (rw.ps.length - 1) * SG, multi = def.rows.length > 1, sx = multi ? x + 40 : x + (BW - w0) / 2;
       if (multi) g += text(x + 10, ry + 7, rw.lab, 9, 600, "#555", "start");
       rw.ps.forEach((p, k) => {
         const tr = state.trays[keyOf(rw.r, rw.t, p)];
         g += '<rect x="' + (sx + k * (SQ + SG)).toFixed(1) + '" y="' + ry + '" width="' + SQ + '" height="' + SQ + '" rx="1.5" fill="' + (tr ? (tr.ready ? "#b9c9b3" : "#ecd6cb") : "#ffffff") + '" stroke="' + (tr ? (tr.ready ? "#6d8f6a" : "#c3836b") : "#9aa59c") + '" stroke-width="1"/>';
       });
     });
-    g += text(x + BW / 2, y + BH - 7, def.note, 8.5, 400, "#555") + '</g>';
+    g += text(x + BW / 2, y + bh - 7, def.note, 8.5, 400, "#555") + '</g>';
     return g;
   };
   const tank = (xc, y, w, name, sub, share, rows, dashed, blue) => {
@@ -299,7 +300,7 @@ function floorPlan(){
       (rows.length ? text(xc, y + 58, "free " + free + " of " + total + " trays", 11, 700, "#35473a") : text(xc, y + 58, "backup for slot 1", 10, 600, "#fff"));
   };
   const NY = 30, NB = NY + BH, NBUS = 156, NTK = 176, RAILN = 268, STK = 376, SBUS = 460, SY = 484;
-  let s = '<svg viewBox="0 0 1000 612" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:auto;min-width:760px;font-family:Inter,system-ui,sans-serif;">';
+  let s = '<svg viewBox="0 0 1000 640" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:auto;min-width:760px;font-family:Inter,system-ui,sans-serif;">';
   s += text(X0, 20, "NORTH RACK", 11, 600, "#777", "start");
   const nDefs = [6, 5, 4, 3].map(t => ({ title: "T" + t + " · " + SHORT[N.tiers[t]], rows: rowsOf(N, t), note: "N1–N" + posOf("N") })).concat([
     { title: "Ice Plant · T1 & T2", sub: "Tray 4, 5, 6, 7, 8", rows: [{ r: "N", t: 2, ps: range(4, 8), lab: "T2" }, { r: "N", t: 1, ps: range(4, 8), lab: "T1" }], note: "N4–N8 · both tiers · normal" },
@@ -316,16 +317,19 @@ function floorPlan(){
   s += line(X0, RAILN, 970, RAILN, true, true) + text(X0 + 5, RAILN - 7, "Robot rail (north)", 10, 400, "#777", "start") +
     '<rect x="' + X0 + '" y="' + (RAILN + 18) + '" width="200" height="50" rx="6" fill="#fff" stroke="#35473a" stroke-width="2.5"/>' + text(X0 + 100, RAILN + 39, "AGV TROLLEY", 13, 700) + text(X0 + 100, RAILN + 56, "MAIN ENTRANCE", 11, 600) +
     line(X0, RAILN + 84, 970, RAILN + 84, true, true) + text(X0 + 5, RAILN + 77, "Robot rail (south)", 10, 400, "#777", "start");
-  const s2c = (cx(0) + cx(2)) / 2, s1c = (cx(3) + cx(5)) / 2;
-  s += tank(90, STK, 120, "Buffer", "Slot 1", "2 tanks sharing", [], false, true);
-  s += tank(s2c, STK, 140, "3S2", "L3 South side tank-2", "3 tanks sharing", [6, 5, 4].map(t => rowsOf(S, t)[0]), false, false);
-  s += tank(s1c, STK, 140, "3S1", "L3 South side tank-1", "3 tanks sharing", [3, 2, 1].map(t => rowsOf(S, t)[0]), false, false);
+  const s2c = (cx(0) + cx(2)) / 2, s1c = (cx(3) + cx(5)) / 2, bfc = cx(6);
+  const sRows = (t) => [{ r: "S", t, ps: range(3, posOf("S")) }];
+  const bufRows = TIERS.map(t => ({ r: "S", t, ps: [1, 2], lab: "T" + t }));
+  s += tank(s2c, STK, 140, "3S2", "L3 South side tank-2", "3 tanks sharing", [6, 5, 4].map(sRows).flat(), false, false);
+  s += tank(s1c, STK, 140, "3S1", "L3 South side tank-1", "3 tanks sharing", [3, 2, 1].map(sRows).flat(), false, false);
+  s += tank(bfc, STK, 124, "Buffer", "Slot 1", "2 tanks sharing", bufRows, false, false);
   const pipeS = (from, to, tcx, dashed) => { let o = ""; for (let i = from; i <= to; i++) o += line(cx(i), SBUS, cx(i), SY, dashed); return o + line(cx(from), SBUS, cx(to), SBUS, dashed) + line(tcx, STK + 66, tcx, SBUS, dashed); };
-  s += pipeS(0, 2, s2c, false) + pipeS(3, 5, s1c, false);
-  TIERS.forEach((t, i) => { s += box({ title: "T" + t + " · " + SHORT[S.tiers[t]], rows: rowsOf(S, t), note: "S1–S" + posOf("S") }, i, SY); });
-  s += text(X0, 608, "SOUTH RACK", 11, 600, "#777", "start");
+  s += pipeS(0, 2, s2c, false) + pipeS(3, 5, s1c, false) + pipeS(6, 6, bfc, false);
+  TIERS.forEach((t, i) => { s += box({ title: "T" + t + " · " + SHORT[S.tiers[t]], rows: [{ r: "S", t, ps: range(3, posOf("S")), lab: "T" + t }], note: "S3–S" + posOf("S") }, i, SY); });
+  s += box({ title: "Buffer · T1–T6", sub: "Tray 1, 2 of every tier", bh: 132, rowGap: 9, rows: bufRows, note: "S1–S2 · all tiers" }, 6, SY);
+  s += text(X0, 636, "SOUTH RACK", 11, 600, "#777", "start");
   s += '</svg>';
-  return '<div style="overflow-x:auto;">' + s + '</div><p class="hint" style="margin-top:6px;">Laid out like the tank diagram. Each box is one crop on one tank. Small squares are its trays: white = free, pink = growing, green = ready. Dashed = salted tank 3N1 (Ice Plant trays 1-3 and 9-11 of T1 and T2). The Ice Plant middle trays (4-8 of both tiers) use the normal tank 3N2. Tap a box to jump to it in the tray map.</p>';
+  return '<div style="overflow-x:auto;">' + s + '</div><p class="hint" style="margin-top:6px;">Laid out like the tank diagram. Each box is one crop on one tank. Small squares are its trays: white = free, pink = growing, green = ready. Dashed = salted tank 3N1 (Ice Plant trays 1-3 and 9-11 of T1 and T2). The Ice Plant middle trays (4-8 of both tiers) use the normal tank 3N2. South trays S3–S13 of each tier are on 3S2 (T6–T4) and 3S1 (T3–T1); trays S1–S2 of every tier are on the Buffer tank. Tap a box to jump to it in the tray map.</p>';
 }
 
 // Crops consolidated by planting period: before 1 Oct vs from 1 Oct, with the dates and totals.
