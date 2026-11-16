@@ -30,7 +30,8 @@ const TOTAL = TIERS.length * (11 + 13);
 
 const cropAt = (r, t) => RACKS.find(x => x.id === r).tiers[t];
 const ppt = (crop) => (crop === "Ice Plant" ? 80 : 120);
-const isSalted = (r, t) => r === "N" && (t === 1 || t === 2);
+// Ice Plant tiers (North T1, T2): trays 1-4 and 8-11 are on the salted tank 3N1, trays 5-7 on the normal nutrient tank 3N2.
+const isSalted = (r, t, p) => r === "N" && (t === 1 || t === 2) && (p <= 4 || p >= 8);
 const keyOf = (r, t, p) => r + t + "-" + p;
 function parseKey(k){ const m = /^([NS])(\d)-(\d+)$/.exec(k); return m ? { r: m[1], t: +m[2], p: +m[3] } : null; }
 const cropOfKey = (k) => { const q = parseKey(k); return q ? cropAt(q.r, q.t) : ""; };
@@ -171,8 +172,8 @@ function capCards(list){
 
 function cellHtml(r, t, p){
   const k = keyOf(r, t, p), tr = state.trays[k];
-  let cls = "l3m-cell" + (isSalted(r, t) ? " salt" : "") + (tr ? (tr.ready ? " ready" : " grow") : "") + (sel.has(k) ? " sel" : "");
-  let title = label(r, t, p) + " · " + cropAt(r, t);
+  let cls = "l3m-cell" + (isSalted(r, t, p) ? " salt" : "") + (tr ? (tr.ready ? " ready" : " grow") : "") + (sel.has(k) ? " sel" : "");
+  let title = label(r, t, p) + " · " + cropAt(r, t) + (r === "N" && t <= 2 ? (isSalted(r, t, p) ? " · salted tank 3N1" : " · normal tank 3N2") : "");
   if (tr){
     const age = daysBetween(tr.date, today());
     title += " · planted " + fmtFull(tr.date) + (age != null ? " (day " + age + ")" : "") + " · " + (tr.ready ? "ready" : "not ready") + " · " + (tr.type === "old" ? "old crop" : "new crop");
@@ -187,7 +188,7 @@ function rackHtml(rk){
     for (let p = 1; p <= posOf(rk.id); p++){ const tr = state.trays[keyOf(rk.id, t, p)]; if (tr){ used.push(p); if (tr.ready) ready.push(p); } }
     h += '<div class="l3m-tier"><div class="l3m-th"><span class="t" data-action="tier" data-r="' + rk.id + '" data-t="' + t + '">T' + t + '</span><span class="c">' + esc(rk.tiers[t]) + '</span>' +
       '<span class="n">' + used.length + '/' + posOf(rk.id) + (ready.length ? ' · ' + ready.length + ' ready' : '') + '</span>' +
-      (rk.id === "N" && t <= 2 ? '<span class="salt">salted water tank (3N1)</span>' : '') +
+      (rk.id === "N" && t <= 2 ? '<span class="salt">dashed = salted tank 3N1 (trays 1-4, 8-11) · plain = normal tank 3N2 (trays 5-7)</span>' : '') +
       (isAdmin ? '<button class="btn" data-action="fillTier" data-r="' + rk.id + '" data-t="' + t + '">+ Transplant</button>' + (ready.length ? '<button class="btn" data-action="harvestTier" data-r="' + rk.id + '" data-t="' + t + '">Harvest ready</button>' : '') : '') +
       '</div><div class="l3m-cells" style="grid-template-columns:repeat(' + posOf(rk.id) + ',minmax(40px,1fr));">';
     for (let p = 1; p <= posOf(rk.id); p++) h += cellHtml(rk.id, t, p);
@@ -271,11 +272,14 @@ function floorPlan(){
       const tr = state.trays[keyOf(rk.id, t, p)];
       g += '<rect x="' + (sx + (p - 1) * (sq + gap)).toFixed(1) + '" y="' + (y + 62) + '" width="' + sq + '" height="' + sq + '" rx="1.5" fill="' + (tr ? (tr.ready ? "#b9c9b3" : "#ecd6cb") : "#ffffff") + '" stroke="' + (tr ? (tr.ready ? "#6d8f6a" : "#c3836b") : "#9aa59c") + '" stroke-width="1"/>';
     }
-    g += text(sx, y + 88, rk.id + "1", 9, 400, "#555", "start") + text(sx + w0, y + 88, rk.id + st.n, 9, 400, "#555", "end") + '</g>';
+    g += text(sx, y + 85, rk.id + "1", 9, 400, "#555", "start") + text(sx + w0, y + 85, rk.id + st.n, 9, 400, "#555", "end");
+    if (rk.id === "N" && t <= 2) g += text(x + BW / 2, y + 96, "salted 1-4, 8-11 · normal 5-7", 8.5, 400, "#3d6a94");
+    g += '</g>';
     return g;
   };
   const tank = (xc, y, name, sub, share, ids, dashed, blue) => {
-    let free = 0, total = 0; ids.forEach(([r, t]) => { const st = stat(r, t); free += st.free; total += st.n; });
+    let free = 0, total = 0;
+    ids.forEach(([r, t, mode]) => { for (let p = 1; p <= posOf(r); p++){ if (mode === "salt" && !isSalted(r, t, p)) continue; if (mode === "norm" && isSalted(r, t, p)) continue; total++; if (!state.trays[keyOf(r, t, p)]) free++; } });
     const w = 150, x = xc - w / 2;
     return '<rect x="' + x + '" y="' + y + '" width="' + w + '" height="66" rx="6" fill="' + (blue ? "#2f5fc4" : "#ffffff") + '" stroke="#35473a" stroke-width="2.5"' + (dashed ? ' stroke-dasharray="7 5"' : "") + '/>' +
       text(xc, y + 17, name, 15, 700, blue ? "#fff" : "#2c3a30") + text(xc, y + 30, sub, 9.5, 400, blue ? "#dbe6ff" : "#555") + text(xc, y + 42, share, 9.5, 400, blue ? "#dbe6ff" : "#555") +
@@ -289,9 +293,11 @@ function floorPlan(){
     let o = ""; for (let i = from; i <= to; i++) o += line(cx(i), yBoxEdge, cx(i), yBus, dashed);
     o += line(cx(from), yBus, cx(to), yBus, dashed) + line(tcx, yBus, tcx, yTank, dashed); return o;
   };
-  s += pipe(0, 3, 130, 152, 172, (cx(0) + cx(3)) / 2, false) + pipe(4, 5, 130, 152, 172, (cx(4) + cx(5)) / 2, true);
-  s += tank((cx(0) + cx(3)) / 2, 172, "3N2", "L3 North side tank-2", "5 tanks sharing", [["N", 6], ["N", 5], ["N", 4], ["N", 3]], false, false);
-  s += tank((cx(4) + cx(5)) / 2, 172, "3N1", "L3 North side tank-1", "2 tanks sharing · salted", [["N", 2], ["N", 1]], true, false);
+  s += pipe(0, 3, 130, 146, 172, (cx(0) + cx(3)) / 2, false);
+  s += line(cx(3), 146, cx(5) - 28, 146, false) + line(cx(4) - 28, 130, cx(4) - 28, 146, false) + line(cx(5) - 28, 130, cx(5) - 28, 146, false);
+  s += line(cx(4) + 22, 130, cx(4) + 22, 160, true) + line(cx(5) + 22, 130, cx(5) + 22, 160, true) + line(cx(4) + 22, 160, cx(5) + 22, 160, true) + line((cx(4) + cx(5)) / 2 + 22, 160, (cx(4) + cx(5)) / 2 + 22, 172, true);
+  s += tank((cx(0) + cx(3)) / 2, 172, "3N2", "L3 North side tank-2", "5 tanks sharing", [["N", 6], ["N", 5], ["N", 4], ["N", 3], ["N", 2, "norm"], ["N", 1, "norm"]], false, false);
+  s += tank((cx(4) + cx(5)) / 2 + 22, 172, "3N1", "L3 North side tank-1", "2 tanks sharing · salted", [["N", 2, "salt"], ["N", 1, "salt"]], true, false);
   // rails, AGV
   s += line(45, 262, 955, 262, true).replace('stroke-width="2.5"', 'stroke-width="1.5" opacity=".5"') + text(50, 255, "Robot rail (north)", 10, 400, "#777", "start") +
     '<rect x="45" y="278" width="200" height="50" rx="6" fill="#fff" stroke="#35473a" stroke-width="2.5"/>' + text(145, 299, "AGV TROLLEY", 13, 700) + text(145, 316, "MAIN ENTRANCE", 11, 600) +
@@ -305,7 +311,7 @@ function floorPlan(){
   TIERS.forEach((t, i) => { s += tierBox(S, t, i, 476); });
   s += text(40, 596, "SOUTH RACK", 11, 600, "#777", "start");
   s += '</svg>';
-  return '<div style="overflow-x:auto;">' + s + '</div><p class="hint" style="margin-top:6px;">Each box is one tier (one crop). The small squares are its trays, numbered from 1; white = free, pink = growing, green = ready. Dashed pipes are the salted / shared tanks. Tap a box to jump to that tier in the tray map.</p>';
+  return '<div style="overflow-x:auto;">' + s + '</div><p class="hint" style="margin-top:6px;">Each box is one tier (one crop). The small squares are its trays, numbered from 1; white = free, pink = growing, green = ready. Dashed pipes are the salted tank (3N1) and the south tank 3S1; Ice Plant trays 1-4 and 8-11 use the salted tank, trays 5-7 use the normal tank 3N2. Tap a box to jump to that tier in the tray map.</p>';
 }
 
 // Crops consolidated by planting period: before 1 Oct vs from 1 Oct, with the dates and totals.
