@@ -471,20 +471,32 @@ function openExit(kind){
   openModal('<h3>' + (harvest ? "Harvest " : "Dispose ") + plural(keys.length, "tray") + '</h3><div class="sub">' + esc(summarize(keys)) + '. They become empty and move to the history.</div>' +
     '<div class="row2"><div class="field"><label>Date</label><input type="date" id="l3mDate" value="' + today() + '"></div>' +
     '<div class="field"><label>Note (optional)</label><input type="text" id="l3mNote" placeholder="e.g. reason"></div></div>' +
+    '<div class="field"><label>Plants to take in total (blank = everything, ' + plantsIn(keys) + ' plants). Any balance stays in the tray.</label><input type="number" inputmode="numeric" id="l3mOut" min="1" step="1" placeholder="all ' + plantsIn(keys) + '"></div>' +
     '<div class="modal-actions"><button class="btn" data-m="cancel">Cancel</button><button class="btn ' + (harvest ? "primary" : "danger") + '" data-m="saveExit" data-kind="' + kind + '" data-keys="' + esc(keys.join(",")) + '">' + (harvest ? "Harvest" : "Dispose") + '</button></div>');
 }
 
 function saveExit(kind, keys){
-  const date = val("l3mDate") || today(), note = val("l3mNote").trim();
-  mutate(s => {
-    keys.forEach(k => {
-      const tr = s.trays[k]; if (!tr) return;
-      const crop = cropOfKey(k);
-      s.history.push({ k, crop, plants: plOf(tr, crop), date: tr.date, readyDate: tr.readyDate || null, type: tr.type === "old" ? "old" : "new", exitType: kind, exitDate: date, note });
-      delete s.trays[k];
-    });
-  }).then(ok => { if (ok){ sel.clear(); closeModal(); render(); } });
+  const date = val("l3mDate") || today(), note = val("l3mNote").trim(), amt = parsePl(val("l3mOut"));
+  if (amt && amt > plantsIn(keys)) return alert("Only " + plantsIn(keys) + " plants are in the selected trays.");
+  mutate(s => { takePlants(s, keys, amt, kind, date, note); }).then(ok => { if (ok){ sel.clear(); closeModal(); render(); } });
 }
+
+// Take `amt` plants (or everything when amt is empty) out of the given trays, in order.
+// Trays emptied completely leave the map; a tray only partly used keeps the balance.
+function takePlants(s, keys, amt, kind, date, note){
+  let left = amt || Infinity, took = 0;
+  for (const k of keys){
+    if (left <= 0) break;
+    const tr = s.trays[k]; if (!tr) continue;
+    const crop = cropOfKey(k), have = plOf(tr, crop), take = Math.min(have, left);
+    const base = { k, crop, date: tr.date, readyDate: tr.readyDate || null, type: tr.type === "old" ? "old" : "new", exitType: kind, exitDate: date };
+    if (take >= have){ s.history.push(Object.assign(base, { plants: have, note: note || "" })); delete s.trays[k]; }
+    else { s.history.push(Object.assign(base, { plants: take, note: "partial (" + take + " of " + have + ")" + (note ? " · " + note : "") })); tr.plants = have - take; }
+    left -= take; took += take;
+  }
+  return took;
+}
+const plantsIn = (keys) => keys.reduce((a, k) => a + plOf(state.trays[k], cropOfKey(k)), 0);
 
 function partialExit(k, kind, out){
   const crop = cropOfKey(k), date = today(), word = kind === "harvested" ? "Harvest" : "Dispose";
@@ -615,9 +627,14 @@ function recHtml(){
     if (r.n > g.keys.length || r.n < 1) r.n = g.keys.length;
     h += '<h3>How many of these trays?</h3>' + numGrid(Math.min(g.keys.length, 13));
     if (g.keys.length > 13) h += '<div class="l3r-two" style="margin-top:10px;"><button data-r="n" data-v="' + g.keys.length + '" class="' + (r.n === g.keys.length ? "on" : "") + '">All ' + g.keys.length + '</button></div>';
-    if (r.action !== "ready") h += dateCtl();
-    h += '<p class="sub" style="margin-top:14px;">Trays: ' + esc(keysSummary(g.keys.slice(0, r.n))) + '</p>' +
-      '<div class="l3r-save"><div class="in"><button class="go" data-r="saveAct">' + verb + ' ' + r.n + ' ' + (r.n === 1 ? "tray" : "trays") + '</button></div></div>';
+    if (r.action !== "ready"){
+      const tot = plantsIn(g.keys);
+      h += '<h3>Or an exact number of plants</h3><p class="sub">Whole trays are taken first, the rest stays as balance. Group has ' + tot + ' plants.</p><div class="l3r-quick" style="grid-template-columns:1fr;"><input type="number" inputmode="numeric" id="l3rAmt" min="1" max="' + tot + '" placeholder="Number of plants (leave blank for whole trays)" value="' + (r.amt || "") + '"></div>';
+      h += dateCtl();
+    }
+    const amtOn = r.action !== "ready" && r.amt > 0;
+    h += '<p class="sub" style="margin-top:14px;">Trays: ' + esc(keysSummary(g.keys.slice(0, amtOn ? g.keys.length : r.n))) + '</p>' +
+      '<div class="l3r-save"><div class="in"><button class="go" data-r="saveAct">' + verb + ' ' + (amtOn ? r.amt + ' plants' : r.n + ' ' + (r.n === 1 ? "tray" : "trays")) + '</button></div></div>';
   }
   return h + '</div></div>';
 }
@@ -633,6 +650,7 @@ function recDone(msg){ rec.msg = msg; rec.action = null; rec.grp = null; rec.n =
 function onRecChange(e){
   if (e.target && e.target.id === "l3rDate" && rec && e.target.value){ rec.date = e.target.value; renderRec(); }
   else if (e.target && e.target.id === "l3rPl" && rec){ rec.plants = parsePl(e.target.value); renderRec(); }
+  else if (e.target && e.target.id === "l3rAmt" && rec){ rec.amt = parsePl(e.target.value); renderRec(); }
 }
 
 function onRecClick(e){
@@ -645,14 +663,14 @@ function onRecClick(e){
     if (rec.grp) rec.grp = null; else if (rec.action) rec.action = null; else if (rec.crop) rec.crop = null; else { rec = null; renderRec(); return; }
   }
   else if (a === "crop"){ rec.crop = b.dataset.c; rec.action = null; rec.grp = null; }
-  else if (a === "action"){ rec.action = b.dataset.a; rec.grp = null; rec.n = 1; rec.date = today(); rec.type = "new"; rec.ready = false; rec.plants = null; }
-  else if (a === "n") rec.n = +b.dataset.v;
+  else if (a === "action"){ rec.action = b.dataset.a; rec.grp = null; rec.n = 1; rec.date = today(); rec.type = "new"; rec.ready = false; rec.plants = null; rec.amt = null; }
+  else if (a === "n"){ rec.n = +b.dataset.v; rec.amt = null; }
   else if (a === "dd") rec.date = addDays(rec.date, +b.dataset.d);
   else if (a === "dset") rec.date = b.dataset.v;
   else if (a === "type") rec.type = b.dataset.v === "old" ? "old" : "new";
   else if (a === "status") rec.ready = b.dataset.v === "1";
   else if (a === "pl") rec.plants = +b.dataset.v;
-  else if (a === "grp"){ rec.grp = b.dataset.g; const g = groupsFor(rec.crop).find(x => x.id === rec.grp); rec.n = g ? g.keys.length : 1; rec.date = today(); }
+  else if (a === "grp"){ rec.amt = null; rec.grp = b.dataset.g; const g = groupsFor(rec.crop).find(x => x.id === rec.grp); rec.n = g ? g.keys.length : 1; rec.date = today(); }
   else if (a === "saveTransplant"){
     const n = rec.n, crop = rec.crop, date = rec.date, type = rec.type, ready = rec.ready, d0 = today(), pl = rec.plants;
     if (!(n >= 1)) return;
@@ -662,15 +680,12 @@ function onRecClick(e){
   }
   else if (a === "saveAct"){
     const crop = rec.crop, act = rec.action, g = groupsFor(crop).find(x => x.id === rec.grp); if (!g) return;
-    const keys = g.keys.slice(0, rec.n), date = rec.date, d0 = today();
+    const amt = act !== "ready" && rec.amt > 0 ? rec.amt : null, keys = amt ? g.keys : g.keys.slice(0, rec.n), date = rec.date, d0 = today();
+    if (amt && amt > plantsIn(g.keys)) return alert("This group only has " + plantsIn(g.keys) + " plants.");
     mutate(s => {
-      keys.forEach(k => {
-        const tr = s.trays[k]; if (!tr) return;
-        if (act === "ready"){ tr.ready = true; tr.readyDate = d0; return; }
-        s.history.push({ k, crop, plants: plOf(tr, crop), date: tr.date, readyDate: tr.readyDate || null, type: tr.type === "old" ? "old" : "new", exitType: act === "harvest" ? "harvested" : "disposed", exitDate: date, note: "" });
-        delete s.trays[k];
-      });
-    }).then(ok => { if (ok && rec) recDone({ ready: "Marked ", harvest: "Harvested ", dispose: "Disposed " }[act] + keys.length + " × " + crop); });
+      if (act === "ready"){ keys.forEach(k => { const tr = s.trays[k]; if (tr){ tr.ready = true; tr.readyDate = d0; } }); return; }
+      takePlants(s, keys, amt, act === "harvest" ? "harvested" : "disposed", date, "");
+    }).then(ok => { if (ok && rec) recDone({ ready: "Marked ", harvest: "Harvested ", dispose: "Disposed " }[act] + (amt ? amt + " plants of " : keys.length + " × ") + crop); });
     return;
   }
   renderRec();
