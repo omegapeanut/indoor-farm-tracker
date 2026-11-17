@@ -34,7 +34,8 @@ const ppt = (crop) => (crop === "Ice Plant" ? 80 : 120);
 const isSalted = (r, t, p) => r === "N" && (t === 1 || t === 2) && (p <= 3 || p >= 9);
 const keyOf = (r, t, p) => r + t + "-" + p;
 function parseKey(k){ const m = /^([NS])(\d)-(\d+)$/.exec(k); return m ? { r: m[1], t: +m[2], p: +m[3] } : null; }
-const cropOfKey = (k) => { const q = parseKey(k); return q ? cropAt(q.r, q.t) : ""; };
+const cropOfKey = (k, trays) => { const q = parseKey(k); if (!q) return ""; const tr = (trays || state.trays)[k]; return (tr && tr.crop) || cropAt(q.r, q.t); };
+const tierCropOfKey = (k) => { const q = parseKey(k); return q ? cropAt(q.r, q.t) : ""; };
 
 let state = { trays: {}, history: [] };
 let multi = false;
@@ -103,6 +104,12 @@ const STYLE = `
 .l3r-save{position:fixed;left:0;right:0;bottom:0;padding:12px 18px 18px;background:linear-gradient(transparent,var(--bg,#eee8e2) 30%)}
 .l3r-save .in{max-width:920px;margin:0 auto}
 .l3m-cell{position:relative}.l3m-cell em{position:absolute;top:0;right:2px;font-size:9px;font-style:normal;font-weight:800;color:#9a4a3a}
+.l3m-cell.off{background:#f7d9a6;border-color:#d4871c;border-width:2px}
+.l3m-cell s.cr{display:block;text-decoration:none;font-size:8.5px;font-weight:800;color:#8a4b00;line-height:1.05;overflow:hidden;white-space:nowrap}
+.l3m-cell{-webkit-touch-callout:none;-webkit-user-select:none;user-select:none}
+.l3m-cell.lp{transform:scale(.94);opacity:.7}
+.l3m-cell.drop{outline:3px solid #2e7d32;outline-offset:1px;background:#d9efd5}
+.l3m-ghost{position:fixed;z-index:3000;pointer-events:none;background:#35473a;color:#fff;border-radius:12px;padding:8px 12px;font:700 14px Inter,system-ui,sans-serif;box-shadow:0 6px 18px rgba(0,0,0,.35);transform:translate(-50%,-130%)}
 .l3-swipe{display:none}
 @media (max-width:640px){
   .nl-table{display:block;overflow-x:auto;max-width:100%;-webkit-overflow-scrolling:touch}
@@ -170,7 +177,7 @@ async function undo(){
   try { await setDoc(REF, prev); } catch (e){ alert("Couldn't save: " + e.message); }
 }
 
-const occ = () => Object.keys(state.trays).map(k => Object.assign({ k }, parseKey(k), state.trays[k])).filter(x => x.r && x.p >= 1 && x.p <= posOf(x.r)).map(x => Object.assign(x, { crop: cropAt(x.r, x.t) }));
+const occ = () => Object.keys(state.trays).map(k => Object.assign({ k }, parseKey(k), state.trays[k])).filter(x => x.r && x.p >= 1 && x.p <= posOf(x.r)).map(x => Object.assign(x, { tierCrop: cropAt(x.r, x.t), crop: x.crop || cropAt(x.r, x.t) }));
 const plOf = (tr, crop) => (tr && Number(tr.plants) > 0 ? Math.round(Number(tr.plants)) : ppt(crop));
 const trayPlants = (x) => plOf(x, x.crop);
 const parsePl = (v) => { const n = Math.round(Number(v)); return n >= 1 ? n : null; };
@@ -197,13 +204,14 @@ function capCards(list){
 
 function cellHtml(r, t, p){
   const k = keyOf(r, t, p), tr = state.trays[k];
-  let cls = "l3m-cell" + (isSalted(r, t, p) ? " salt" : "") + (tr ? (tr.ready ? " ready" : " grow") : "") + (sel.has(k) ? " sel" : "");
+  const tierCrop = cropAt(r, t), cropHere = (tr && tr.crop) || tierCrop, off = !!(tr && tr.crop && tr.crop !== tierCrop);
+  let cls = "l3m-cell" + (isSalted(r, t, p) ? " salt" : "") + (tr ? (tr.ready ? " ready" : " grow") : "") + (off ? " off" : "") + (sel.has(k) ? " sel" : "");
   let title = label(r, t, p) + " · " + cropAt(r, t) + (r === "N" && t <= 2 ? (isSalted(r, t, p) ? " · salted tank 3N1" : " · normal tank 3N2") : "");
   if (tr){
     const age = daysBetween(tr.date, today());
-    title += " · planted " + fmtFull(tr.date) + (age != null ? " (day " + age + ")" : "") + " · " + plOf(tr, cropAt(r, t)) + " plants · " + (tr.ready ? "ready" : "not ready") + " · " + (tr.type === "old" ? "old crop" : "new crop");
+    title += " · " + (off ? "HOLDS " + cropHere + " (wrong tier)" : cropHere) + " · planted " + fmtFull(tr.date) + (age != null ? " (day " + age + ")" : "") + " · " + plOf(tr, cropHere) + " plants · " + (tr.ready ? "ready" : "not ready") + " · " + (tr.type === "old" ? "old crop" : "new crop");
   } else title += " · empty";
-  return '<button type="button" class="' + cls + '" data-action="cell" data-k="' + k + '" title="' + esc(title) + '"><b>' + p + '</b><i>' + (tr ? esc(fmtShort(tr.date)) : "&nbsp;") + '</i>' + (tr && plOf(tr, cropAt(r, t)) !== ppt(cropAt(r, t)) ? '<em>' + plOf(tr, cropAt(r, t)) + '</em>' : "") + '</button>';
+  return '<button type="button" class="' + cls + '" data-action="cell" data-k="' + k + '" title="' + esc(title) + '"><b>' + p + '</b><i>' + (tr ? esc(fmtShort(tr.date)) : "&nbsp;") + '</i>' + (off ? '<s class="cr">' + esc(SHORT[cropHere] || cropHere) + '</s>' : "") + (tr && plOf(tr, cropHere) !== ppt(cropHere) ? '<em>' + plOf(tr, cropHere) + '</em>' : "") + '</button>';
 }
 
 function rackHtml(rk){
@@ -245,7 +253,7 @@ function datesTable(list){
   const g = new Map();
   list.forEach(x => {
     const k = [x.crop, x.r, x.t, x.date || "", x.ready ? "r" : "n", x.type === "old" ? "old" : "new"].join("|");
-    if (!g.has(k)) g.set(k, { crop: x.crop, r: x.r, t: x.t, date: x.date, ready: !!x.ready, type: x.type === "old" ? "old" : "new", ps: [], pls: [] });
+    if (!g.has(k)) g.set(k, { crop: x.crop, off: x.tierCrop !== x.crop, r: x.r, t: x.t, date: x.date, ready: !!x.ready, type: x.type === "old" ? "old" : "new", ps: [], pls: [] });
     g.get(k).ps.push(x.p); g.get(k).pls.push(trayPlants(x));
   });
   const order = (r, t) => (r === "N" ? 0 : 100) + t;
@@ -256,7 +264,7 @@ function datesTable(list){
     const first = r.crop !== prev; prev = r.crop;
     const age = r.date ? daysBetween(r.date, today()) : null;
     h += '<tr style="' + (first ? "border-top:2px solid rgba(0,0,0,.12);" : "") + '"><td>' + (first ? '<b>' + esc(r.crop) + '</b> <span class="nl-n">' + plural(totals[r.crop], "tray") + '</span>' : "") + '</td>' +
-      '<td>' + fmtFull(r.date) + '</td><td>' + (age != null ? age : "–") + '</td><td>T' + r.t + ' · ' + r.r + ranges(r.ps).replace(/(, )(\d)/g, "$1" + r.r + "$2").replace(/–(\d)/g, "–" + r.r + "$1") + '</td><td>' + r.ps.length + '</td><td>' + r.pls.reduce((a, b) => a + b, 0) + '</td><td>' + perTray(r.pls) + '</td>' +
+      '<td>' + fmtFull(r.date) + '</td><td>' + (age != null ? age : "–") + '</td><td>T' + r.t + (r.off ? ' <span style="color:#b3640a;font-weight:700;">(wrong tier)</span>' : '') + ' · ' + r.r + ranges(r.ps).replace(/(, )(\d)/g, "$1" + r.r + "$2").replace(/–(\d)/g, "–" + r.r + "$1") + '</td><td>' + r.ps.length + '</td><td>' + r.pls.reduce((a, b) => a + b, 0) + '</td><td>' + perTray(r.pls) + '</td>' +
       '<td><span class="nl-state ' + (r.ready ? "is-ready" : "not-ready") + '">' + (r.ready ? "Ready" : "Not ready") + '</span></td><td>' + (r.type === "old" ? "Old crop" : "New crop") + '</td></tr>';
   });
   return h + '</tbody></table></div>';
@@ -402,7 +410,7 @@ function render(){
   }
   h += blk("02", "Floor plan — what is free", floorPlan());
   h += blk("03", "Tray map", actions +
-    '<div class="l3m-leg"><span><u></u>Empty</span><span><u style="background:var(--blush,#ecd6cb)"></u>Growing</span><span><u style="background:var(--sage,#d3dccf)"></u>Ready</span><span><u style="border-style:dashed;border-color:#5b8db8"></u>Salted water</span><span>Number = tray position · small text = date planted</span></div>' +
+    '<div class="l3m-leg"><span><u></u>Empty</span><span><u style="background:var(--blush,#ecd6cb)"></u>Growing</span><span><u style="background:var(--sage,#d3dccf)"></u>Ready</span><span><u style="border-style:dashed;border-color:#5b8db8"></u>Salted water</span><span><u style="background:#f7d9a6;border-color:#d4871c"></u>Wrong tier (shift back later)</span><span>Number = tray position · small text = date planted</span></div>' +
     '<div class="' + (isAdmin ? "l3m-adm" : "") + '">' + rackHtml(RACKS[0]) + rackHtml(RACKS[1]) + '</div>' + selBar());
   h += '<section class="nl-block"><div class="nl-bh nl-toggle" data-action="toggleDates" style="cursor:pointer;"><span class="nl-no">04</span><span class="nl-bt">Dates by crop</span><span class="nl-count">' + plural(list.length, "tray") + ' · ' + (showDates ? "Hide ▴" : "Show ▾") + '</span></div>' + (showDates ? datesTable(list) : "") + '</section>';
   h += blk("05", "Consolidation — before 1 Oct vs from 1 Oct", consolidation(list));
@@ -420,31 +428,33 @@ function closeModal(){ const o = document.getElementById("l3mOverlay"); if (o) o
 const val = (id) => document.getElementById(id).value;
 const typeSel = (v) => '<select id="l3mType"><option value="new"' + (v !== "old" ? " selected" : "") + '>New crop</option><option value="old"' + (v === "old" ? " selected" : "") + '>Old crop</option></select>';
 
+const cropSel = (tierCrop, cur) => '<div class="field"><label>Crop in this tray' + '</label><select id="l3mCrop">' + CROP_ORDER.map(c => '<option value="' + esc(c) + '"' + (c === cur ? " selected" : "") + '>' + esc(c) + (c === tierCrop ? " (this tier)" : "") + '</option>').join("") + '</select><div class="hint" style="margin:4px 0 0;font-size:12px;">Pick a different crop if this tray is sitting in the wrong tier. It turns orange so you can shift it back later (press and hold to drag).</div></div>';
+
 function openTray(k){
   const q = parseKey(k); if (!q) return;
-  const tr = state.trays[k], crop = cropAt(q.r, q.t);
+  const tr = state.trays[k], tierCrop = cropAt(q.r, q.t), crop = (tr && tr.crop) || tierCrop;
   const head = '<h3>' + label(q.r, q.t, q.p) + ' · ' + esc(crop) + '</h3>';
   const status = '<div class="field"><label>Status</label><select id="l3mStatus"><option value="0"' + (!tr || !tr.ready ? " selected" : "") + '>Not ready</option><option value="1"' + (tr && tr.ready ? " selected" : "") + '>Ready to harvest</option></select></div>';
   if (!tr){
     openModal(head + '<div class="sub">Empty tray (' + (q.r === "N" ? "North" : "South") + ' rack, tier ' + q.t + ', position ' + q.p + '). Transplant a crop into it.</div>' +
-      '<div class="row2"><div class="field"><label>Date planted</label><input type="date" id="l3mDate" value="' + today() + '"></div><div class="field"><label>New or old crop</label>' + typeSel("new") + '</div></div>' + plantsField(crop, "") + status +
+      '<div class="row2"><div class="field"><label>Date planted</label><input type="date" id="l3mDate" value="' + today() + '"></div><div class="field"><label>New or old crop</label>' + typeSel("new") + '</div></div>' + cropSel(tierCrop, tierCrop) + plantsField(crop, "") + status +
       '<div class="modal-actions"><button class="btn" data-m="cancel">Cancel</button><button class="btn primary" data-m="saveTray" data-k="' + k + '">Transplant</button></div>');
     return;
   }
   const age = daysBetween(tr.date, today());
   openModal(head + '<div class="sub">' + plural(1, "tray") + ' · ' + plOf(tr, crop) + ' plants · planted ' + fmtFull(tr.date) + (age != null ? " (day " + age + ")" : "") + '</div>' +
-    '<div class="row2"><div class="field"><label>Date planted</label><input type="date" id="l3mDate" value="' + esc(tr.date || "") + '"></div><div class="field"><label>New or old crop</label>' + typeSel(tr.type === "old" ? "old" : "new") + '</div></div>' + plantsField(crop, tr.plants && plOf(tr, crop) !== ppt(crop) ? plOf(tr, crop) : "") + status +
+    '<div class="row2"><div class="field"><label>Date planted</label><input type="date" id="l3mDate" value="' + esc(tr.date || "") + '"></div><div class="field"><label>New or old crop</label>' + typeSel(tr.type === "old" ? "old" : "new") + '</div></div>' + cropSel(tierCrop, crop) + plantsField(crop, tr.plants && plOf(tr, crop) !== ppt(crop) ? plOf(tr, crop) : "") + status +
     '<div class="field"><label>Plants to harvest or dispose (blank = whole tray, ' + plOf(tr, crop) + ')</label><input type="number" inputmode="numeric" id="l3mOut" min="1" step="1" placeholder="whole tray"></div>' +
     '<div class="nl-btnrow"><button class="btn primary" data-m="trayExit" data-kind="harvested" data-k="' + k + '">Harvested</button><button class="btn danger" data-m="trayExit" data-kind="disposed" data-k="' + k + '">Dispose</button></div>' +
     '<div class="modal-actions"><div style="display:flex;gap:6px;"><button class="btn danger" data-m="trayRemove" data-k="' + k + '">Entered by mistake — empty it</button></div><div style="display:flex;gap:6px;"><button class="btn" data-m="cancel">Cancel</button><button class="btn primary" data-m="saveTray" data-k="' + k + '">Save</button></div></div>');
 }
 
 function saveTray(k){
-  const date = val("l3mDate") || today(), type = val("l3mType") === "old" ? "old" : "new", ready = val("l3mStatus") === "1", d = today(), pl = parsePl(val("l3mPl")), crop = cropOfKey(k);
+  const date = val("l3mDate") || today(), type = val("l3mType") === "old" ? "old" : "new", ready = val("l3mStatus") === "1", d = today(), pl = parsePl(val("l3mPl")), tierCrop = tierCropOfKey(k), crop = val("l3mCrop") || tierCrop;
   mutate(s => {
     const tr = s.trays[k];
-    if (tr){ setPl(tr, pl, crop); const was = !!tr.ready; tr.date = date; tr.type = type; tr.ready = ready; if (ready && !was) tr.readyDate = d; if (!ready) tr.readyDate = null; }
-    else { s.trays[k] = { date, ready, readyDate: ready ? d : null, type }; setPl(s.trays[k], pl, crop); }
+    if (tr){ if (crop !== tierCrop) tr.crop = crop; else delete tr.crop; setPl(tr, pl, crop); const was = !!tr.ready; tr.date = date; tr.type = type; tr.ready = ready; if (ready && !was) tr.readyDate = d; if (!ready) tr.readyDate = null; }
+    else { s.trays[k] = { date, ready, readyDate: ready ? d : null, type }; if (crop !== tierCrop) s.trays[k].crop = crop; setPl(s.trays[k], pl, crop); }
   }).then(ok => { if (ok) closeModal(); });
 }
 
@@ -508,7 +518,7 @@ function takePlants(s, keys, amt, kind, date, note){
   for (const k of keys){
     if (left <= 0) break;
     const tr = s.trays[k]; if (!tr) continue;
-    const crop = cropOfKey(k), have = plOf(tr, crop), take = Math.min(have, left);
+    const crop = cropOfKey(k, s.trays), have = plOf(tr, crop), take = Math.min(have, left);
     const base = { k, crop, date: tr.date, readyDate: tr.readyDate || null, type: tr.type === "old" ? "old" : "new", exitType: kind, exitDate: date };
     if (take >= have){ s.history.push(Object.assign(base, { plants: have, note: note || "" })); delete s.trays[k]; }
     else { s.history.push(Object.assign(base, { plants: take, note: "partial (" + take + " of " + have + ")" + (note ? " · " + note : "") })); tr.plants = have - take; }
@@ -573,8 +583,8 @@ function slotsFor(crop, trays){
 function cropStats(crop){
   const list = occ().filter(x => x.crop === crop);
   let cap = 0; RACKS.forEach(rk => [1, 2, 3, 4, 5, 6].forEach(t => { if (rk.tiers[t] === crop) cap += posOf(rk.id); }));
-  const ready = list.filter(x => x.ready).length;
-  return { cap, used: list.length, free: cap - list.length, ready, growing: list.length - ready };
+  const ready = list.filter(x => x.ready).length, free = slotsFor(crop, state.trays).length;
+  return { cap, used: cap - free, free, ready, growing: list.length - ready };
 }
 function groupsFor(crop){
   const m = new Map();
@@ -736,7 +746,7 @@ function onClick(e){
   const t = e.target.closest("[data-action]");
   if (!t) return;
   const a = t.dataset.action;
-  if (a === "cell"){ if (!isAdmin) return; const k = t.dataset.k; if (multi){ sel.has(k) ? sel.delete(k) : sel.add(k); render(); } else openTray(k); }
+  if (a === "cell"){ if (!isAdmin || Date.now() - suppressClick < 400) return; const k = t.dataset.k; if (multi){ sel.has(k) ? sel.delete(k) : sel.add(k); render(); } else openTray(k); }
   else if (a === "multi"){ multi = !multi; if (!multi) sel.clear(); render(); }
   else if (a === "tier"){
     if (!isAdmin) return;
@@ -766,6 +776,80 @@ function onClick(e){
   else if (a === "import") importOld();
   else if (a === "toggleDates"){ showDates = !showDates; render(); }
   else if (a === "history"){ showHistory = !showHistory; render(); }
+}
+
+// ---------------------------------------------------------------- press-and-hold to drag a tray to another slot
+const HOLD_MS = 450;
+let dnd = null, suppressClick = 0;
+function dndCellAt(x, y){ const el = document.elementFromPoint(x, y); return el ? el.closest('.l3m-cell[data-k]') : null; }
+function dndClear(){
+  if (!dnd) return;
+  clearTimeout(dnd.timer);
+  if (dnd.ghost) dnd.ghost.remove();
+  if (dnd.src) dnd.src.classList.remove("lp");
+  if (dnd.over) dnd.over.classList.remove("drop");
+  dnd = null;
+}
+function dndStart(e){
+  if (!isAdmin || multi || (e.pointerType === "mouse" && e.button !== 0)) return;
+  const cell = e.target.closest('.l3m-cell[data-k]'); if (!cell) return;
+  const k = cell.dataset.k; if (!state.trays[k]) return;
+  dnd = { k, src: cell, x: e.clientX, y: e.clientY, active: false, over: null, ghost: null, timer: null };
+  dnd.timer = setTimeout(() => {
+    if (!dnd) return;
+    dnd.active = true; cell.classList.add("lp");
+    const g = document.createElement("div"); g.className = "l3m-ghost";
+    const q = parseKey(k); g.textContent = "Move " + label(q.r, q.t, q.p) + " · " + cropOfKey(k);
+    g.style.left = dnd.x + "px"; g.style.top = dnd.y + "px"; document.body.appendChild(g); dnd.ghost = g;
+    if (navigator.vibrate) navigator.vibrate(30);
+  }, HOLD_MS);
+}
+function dndMove(e){
+  if (!dnd) return;
+  if (!dnd.active){ if (Math.abs(e.clientX - dnd.x) > 10 || Math.abs(e.clientY - dnd.y) > 10) dndClear(); return; }
+  dnd.x = e.clientX; dnd.y = e.clientY;
+  dnd.ghost.style.left = e.clientX + "px"; dnd.ghost.style.top = e.clientY + "px";
+  const c = dndCellAt(e.clientX, e.clientY);
+  if (dnd.over && dnd.over !== c) dnd.over.classList.remove("drop");
+  dnd.over = c && c !== dnd.src ? c : null;
+  if (dnd.over) dnd.over.classList.add("drop");
+  if (e.clientY < 70) window.scrollBy(0, -14); else if (e.clientY > window.innerHeight - 70) window.scrollBy(0, 14);
+}
+function moveTray(from, to){
+  const toTier = tierCropOfKey(to);
+  mutate(s => {
+    const a = s.trays[from], b = s.trays[to]; if (!a) return;
+    const ca = cropOfKey(from, s.trays), cb = b ? cropOfKey(to, s.trays) : null;
+    delete s.trays[from];
+    if (b){
+      if (cb !== tierCropOfKey(from)) b.crop = cb; else delete b.crop;
+      s.trays[from] = b;
+    }
+    if (ca !== toTier) a.crop = ca; else delete a.crop;
+    s.trays[to] = a;
+  });
+}
+function dndEnd(e){
+  if (!dnd) return;
+  const was = dnd.active, from = dnd.k, over = dnd.over;
+  dndClear();
+  if (!was) return;
+  suppressClick = Date.now();
+  if (!over) return;
+  const to = over.dataset.k;
+  if (state.trays[to]){
+    const q = parseKey(to), f = parseKey(from);
+    if (!confirm("Swap " + label(f.r, f.t, f.p) + " with " + label(q.r, q.t, q.p) + "?")) return;
+  }
+  moveTray(from, to);
+}
+if (root){
+  root.addEventListener("pointerdown", dndStart);
+  document.addEventListener("pointermove", dndMove);
+  document.addEventListener("pointerup", dndEnd);
+  document.addEventListener("pointercancel", () => { if (dnd && dnd.active) suppressClick = Date.now(); dndClear(); });
+  document.addEventListener("touchmove", (e) => { if (dnd && dnd.active) e.preventDefault(); }, { passive: false });
+  root.addEventListener("contextmenu", (e) => { if (e.target.closest(".l3m-cell")) e.preventDefault(); });
 }
 
 if (root) init();
