@@ -104,6 +104,9 @@ const STYLE = `
 .l3r-save{position:fixed;left:0;right:0;bottom:0;padding:12px 18px 18px;background:linear-gradient(transparent,var(--bg,#eee8e2) 30%)}
 .l3r-save .in{max-width:920px;margin:0 auto}
 .l3m-cell{position:relative}.l3m-cell em{position:absolute;top:0;right:2px;font-size:9px;font-style:normal;font-weight:800;color:#9a4a3a}
+.l3m-cell.smp{background:#ddd5f3;border-color:#6b5bb0;border-width:2px}
+.l3m-cell.smp s.cr{color:#4a3a94}
+.l3m-cell strong.pp{position:absolute;left:3px;top:0;font-size:12px;font-weight:900;color:#1f9d3a;line-height:1.1}
 .l3m-cell.off{background:#f7d9a6;border-color:#d4871c;border-width:2px}
 .l3m-cell s.cr{display:block;text-decoration:none;font-size:8.5px;font-weight:800;color:#8a4b00;line-height:1.05;overflow:hidden;white-space:nowrap}
 .l3m-cell{-webkit-touch-callout:none;-webkit-user-select:none;user-select:none}
@@ -143,6 +146,7 @@ function init(){
   document.body.appendChild(ov);
   root.addEventListener("click", onClick);
   ov.addEventListener("click", onClick);
+  ov.addEventListener("change", (e) => { if (e.target && e.target.id === "l3mCrop"){ const n = document.getElementById("l3mCropNew"); if (n){ n.style.display = e.target.value === "__new__" ? "" : "none"; if (e.target.value === "__new__") n.focus(); } } });
   const ro = document.createElement("div"); ro.className = "l3r"; ro.id = "l3rOverlay"; document.body.appendChild(ro);
   ro.addEventListener("click", onRecClick); ro.addEventListener("change", onRecChange);
   onAuthStateChanged(auth, (user) => { isAdmin = !!user; if (!isAdmin) sel.clear(); render(); });
@@ -204,14 +208,15 @@ function capCards(list){
 
 function cellHtml(r, t, p){
   const k = keyOf(r, t, p), tr = state.trays[k];
-  const tierCrop = cropAt(r, t), cropHere = (tr && tr.crop) || tierCrop, off = !!(tr && tr.crop && tr.crop !== tierCrop);
-  let cls = "l3m-cell" + (isSalted(r, t, p) ? " salt" : "") + (tr ? (tr.ready ? " ready" : " grow") : "") + (off ? " off" : "") + (sel.has(k) ? " sel" : "");
+  const tierCrop = cropAt(r, t), cropHere = (tr && tr.crop) || tierCrop;
+  const smp = !!(tr && tr.crop && !CROP_ORDER.includes(tr.crop)), off = !!(tr && tr.crop && tr.crop !== tierCrop && !smp);
+  let cls = "l3m-cell" + (isSalted(r, t, p) ? " salt" : "") + (tr ? (tr.ready ? " ready" : " grow") : "") + (off ? " off" : "") + (smp ? " smp" : "") + (sel.has(k) ? " sel" : "");
   let title = label(r, t, p) + " · " + cropAt(r, t) + (r === "N" && t <= 2 ? (isSalted(r, t, p) ? " · salted tank 3N1" : " · normal tank 3N2") : "");
   if (tr){
     const age = daysBetween(tr.date, today());
-    title += " · " + (off ? "HOLDS " + cropHere + " (wrong tier)" : cropHere) + " · planted " + fmtFull(tr.date) + (age != null ? " (day " + age + ")" : "") + " · " + plOf(tr, cropHere) + " plants · " + (tr.ready ? "ready" : "not ready") + " · " + (tr.type === "old" ? "old crop" : "new crop");
+    title += " · " + (smp ? "SAMPLE: " + cropHere : off ? "HOLDS " + cropHere + " (wrong tier)" : cropHere) + " · planted " + fmtFull(tr.date) + (age != null ? " (day " + age + ")" : "") + " · " + plOf(tr, cropHere) + " plants · " + (tr.ready ? "ready" : "not ready") + " · " + (tr.type === "old" ? "old crop" : "new crop") + (isAdmin && tr.pest ? " · pest (P)" : "");
   } else title += " · empty";
-  return '<button type="button" class="' + cls + '" data-action="cell" data-k="' + k + '" title="' + esc(title) + '"><b>' + p + '</b><i>' + (tr ? esc(fmtShort(tr.date)) : "&nbsp;") + '</i>' + (off ? '<s class="cr">' + esc(SHORT[cropHere] || cropHere) + '</s>' : "") + (tr && plOf(tr, cropHere) !== ppt(cropHere) ? '<em>' + plOf(tr, cropHere) + '</em>' : "") + '</button>';
+  return '<button type="button" class="' + cls + '" data-action="cell" data-k="' + k + '" title="' + esc(title) + '"><b>' + p + '</b><i>' + (tr ? esc(fmtShort(tr.date)) : "&nbsp;") + '</i>' + ((off || smp) ? '<s class="cr">' + esc(SHORT[cropHere] || cropHere) + '</s>' : "") + (tr && tr.pest ? '<strong class="pp">P</strong>' : "") + (tr && plOf(tr, cropHere) !== ppt(cropHere) ? '<em>' + plOf(tr, cropHere) + '</em>' : "") + '</button>';
 }
 
 function rackHtml(rk){
@@ -273,6 +278,7 @@ function datesTable(list){
 function varietyTable(list){
   const crops = {};
   RACKS.forEach(rk => TIERS.forEach(t => { const c = rk.tiers[t]; crops[c] = (crops[c] || 0) + posOf(rk.id); }));
+  list.forEach(x => { if (!(x.crop in crops)) crops[x.crop] = 0; });
   const names = Object.keys(crops).sort((a, b) => a.localeCompare(b));
   let h = '<table class="nl-table"><thead><tr><th>Variety</th><th>Trays with crops</th><th>Before 1 Oct</th><th>From 1 Oct</th><th>Plants ready</th><th>Plants not ready</th><th>Total plants</th></tr></thead><tbody>';
   let tT = 0, tF = 0, tB = 0, tA = 0, tR = 0, tN = 0, tM = 0;
@@ -281,7 +287,7 @@ function varietyTable(list){
     const rp = sumPl(l.filter(x => x.ready)), np = sumPl(l.filter(x => !x.ready));
     const fb = l.filter(x => x.date && x.date < CUT).length, fa = l.filter(x => x.date && x.date >= CUT).length;
     tT += maxT; tF += l.length; tB += fb; tA += fa; tR += rp; tN += np; tM += mp;
-    h += '<tr><td>' + esc(v) + '</td><td>' + l.length + ' / ' + maxT + '</td><td>' + fb + '</td><td>' + fa + '</td><td>' + rp + '</td><td>' + np + '</td><td>' + (rp + np) + ' / ' + mp + '</td></tr>';
+    h += '<tr><td>' + esc(v) + (maxT ? "" : ' <span class="nl-n">(sample)</span>') + '</td><td>' + l.length + (maxT ? ' / ' + maxT : "") + '</td><td>' + fb + '</td><td>' + fa + '</td><td>' + rp + '</td><td>' + np + '</td><td>' + (rp + np) + (maxT ? ' / ' + mp : "") + '</td></tr>';
   });
   return h + '<tr class="nl-total"><td>Total</td><td>' + tF + ' / ' + tT + '</td><td>' + tB + '</td><td>' + tA + '</td><td>' + tR + '</td><td>' + tN + '</td><td>' + (tR + tN) + ' / ' + tM + '</td></tr></tbody></table>';
 }
@@ -410,7 +416,7 @@ function render(){
   }
   h += blk("02", "Floor plan — what is free", floorPlan());
   h += blk("03", "Tray map", actions +
-    '<div class="l3m-leg"><span><u></u>Empty</span><span><u style="background:var(--blush,#ecd6cb)"></u>Growing</span><span><u style="background:var(--sage,#d3dccf)"></u>Ready</span><span><u style="border-style:dashed;border-color:#5b8db8"></u>Salted water</span><span><u style="background:#f7d9a6;border-color:#d4871c"></u>Wrong tier (shift back later)</span><span>Number = tray position · small text = date planted</span></div>' +
+    '<div class="l3m-leg"><span><u></u>Empty</span><span><u style="background:var(--blush,#ecd6cb)"></u>Growing</span><span><u style="background:var(--sage,#d3dccf)"></u>Ready</span><span><u style="border-style:dashed;border-color:#5b8db8"></u>Salted water</span><span><u style="background:#f7d9a6;border-color:#d4871c"></u>Wrong tier (shift back later)</span><span><u style="background:#ddd5f3;border-color:#6b5bb0"></u>Sample / test crop</span><span>Number = tray position · small text = date planted</span></div>' +
     '<div class="' + (isAdmin ? "l3m-adm" : "") + '">' + rackHtml(RACKS[0]) + rackHtml(RACKS[1]) + '</div>' + selBar());
   h += '<section class="nl-block"><div class="nl-bh nl-toggle" data-action="toggleDates" style="cursor:pointer;"><span class="nl-no">04</span><span class="nl-bt">Dates by crop</span><span class="nl-count">' + plural(list.length, "tray") + ' · ' + (showDates ? "Hide ▴" : "Show ▾") + '</span></div>' + (showDates ? datesTable(list) : "") + '</section>';
   h += blk("05", "Consolidation — before 1 Oct vs from 1 Oct", consolidation(list));
@@ -428,7 +434,17 @@ function closeModal(){ const o = document.getElementById("l3mOverlay"); if (o) o
 const val = (id) => document.getElementById(id).value;
 const typeSel = (v) => '<select id="l3mType"><option value="new"' + (v !== "old" ? " selected" : "") + '>New crop</option><option value="old"' + (v === "old" ? " selected" : "") + '>Old crop</option></select>';
 
-const cropSel = (tierCrop, cur) => '<div class="field"><label>Crop in this tray' + '</label><select id="l3mCrop">' + CROP_ORDER.map(c => '<option value="' + esc(c) + '"' + (c === cur ? " selected" : "") + '>' + esc(c) + (c === tierCrop ? " (this tier)" : "") + '</option>').join("") + '</select><div class="hint" style="margin:4px 0 0;font-size:12px;">Pick a different crop if this tray is sitting in the wrong tier. It turns orange so you can shift it back later (press and hold to drag).</div></div>';
+const sampleNames = () => [...new Set(Object.values(state.trays).map(t => t && t.crop).filter(c => c && !CROP_ORDER.includes(c)))].sort();
+const cropSel = (tierCrop, cur, pest) => {
+  const samples = sampleNames(); if (cur && !CROP_ORDER.includes(cur) && !samples.includes(cur)) samples.push(cur);
+  return '<div class="field"><label>Crop in this tray</label><select id="l3mCrop">' +
+    CROP_ORDER.map(c => '<option value="' + esc(c) + '"' + (c === cur ? " selected" : "") + '>' + esc(c) + (c === tierCrop ? " (this tier)" : "") + '</option>').join("") +
+    samples.map(c => '<option value="' + esc(c) + '"' + (c === cur ? " selected" : "") + '>' + esc(c) + ' (sample)</option>').join("") +
+    '<option value="__new__">Other — type a new name…</option></select>' +
+    '<input type="text" id="l3mCropNew" maxlength="40" placeholder="Name of the sample / test crop" style="display:none;margin-top:6px;">' +
+    '<div class="hint" style="margin:4px 0 0;font-size:12px;">Wrong tier turns orange. A typed-in sample crop turns purple. Press and hold a tray to drag it to another slot.</div></div>' +
+    '<div class="field"><label style="display:flex;align-items:center;gap:8px;text-transform:none;letter-spacing:0;font-size:14px;"><input type="checkbox" id="l3mPest" style="width:20px;height:20px;"' + (pest ? " checked" : "") + '> Mark this tray with a green P</label></div>';
+};
 
 function openTray(k){
   const q = parseKey(k); if (!q) return;
@@ -437,24 +453,27 @@ function openTray(k){
   const status = '<div class="field"><label>Status</label><select id="l3mStatus"><option value="0"' + (!tr || !tr.ready ? " selected" : "") + '>Not ready</option><option value="1"' + (tr && tr.ready ? " selected" : "") + '>Ready to harvest</option></select></div>';
   if (!tr){
     openModal(head + '<div class="sub">Empty tray (' + (q.r === "N" ? "North" : "South") + ' rack, tier ' + q.t + ', position ' + q.p + '). Transplant a crop into it.</div>' +
-      '<div class="row2"><div class="field"><label>Date planted</label><input type="date" id="l3mDate" value="' + today() + '"></div><div class="field"><label>New or old crop</label>' + typeSel("new") + '</div></div>' + cropSel(tierCrop, tierCrop) + plantsField(crop, "") + status +
+      '<div class="row2"><div class="field"><label>Date planted</label><input type="date" id="l3mDate" value="' + today() + '"></div><div class="field"><label>New or old crop</label>' + typeSel("new") + '</div></div>' + cropSel(tierCrop, tierCrop, false) + plantsField(crop, "") + status +
       '<div class="modal-actions"><button class="btn" data-m="cancel">Cancel</button><button class="btn primary" data-m="saveTray" data-k="' + k + '">Transplant</button></div>');
     return;
   }
   const age = daysBetween(tr.date, today());
   openModal(head + '<div class="sub">' + plural(1, "tray") + ' · ' + plOf(tr, crop) + ' plants · planted ' + fmtFull(tr.date) + (age != null ? " (day " + age + ")" : "") + '</div>' +
-    '<div class="row2"><div class="field"><label>Date planted</label><input type="date" id="l3mDate" value="' + esc(tr.date || "") + '"></div><div class="field"><label>New or old crop</label>' + typeSel(tr.type === "old" ? "old" : "new") + '</div></div>' + cropSel(tierCrop, crop) + plantsField(crop, tr.plants && plOf(tr, crop) !== ppt(crop) ? plOf(tr, crop) : "") + status +
+    '<div class="row2"><div class="field"><label>Date planted</label><input type="date" id="l3mDate" value="' + esc(tr.date || "") + '"></div><div class="field"><label>New or old crop</label>' + typeSel(tr.type === "old" ? "old" : "new") + '</div></div>' + cropSel(tierCrop, crop, tr.pest) + plantsField(crop, tr.plants && plOf(tr, crop) !== ppt(crop) ? plOf(tr, crop) : "") + status +
     '<div class="field"><label>Plants to harvest or dispose (blank = whole tray, ' + plOf(tr, crop) + ')</label><input type="number" inputmode="numeric" id="l3mOut" min="1" step="1" placeholder="whole tray"></div>' +
     '<div class="nl-btnrow"><button class="btn primary" data-m="trayExit" data-kind="harvested" data-k="' + k + '">Harvested</button><button class="btn danger" data-m="trayExit" data-kind="disposed" data-k="' + k + '">Dispose</button></div>' +
     '<div class="modal-actions"><div style="display:flex;gap:6px;"><button class="btn danger" data-m="trayRemove" data-k="' + k + '">Entered by mistake — empty it</button></div><div style="display:flex;gap:6px;"><button class="btn" data-m="cancel">Cancel</button><button class="btn primary" data-m="saveTray" data-k="' + k + '">Save</button></div></div>');
 }
 
 function saveTray(k){
-  const date = val("l3mDate") || today(), type = val("l3mType") === "old" ? "old" : "new", ready = val("l3mStatus") === "1", d = today(), pl = parsePl(val("l3mPl")), tierCrop = tierCropOfKey(k), crop = val("l3mCrop") || tierCrop;
+  const date = val("l3mDate") || today(), type = val("l3mType") === "old" ? "old" : "new", ready = val("l3mStatus") === "1", d = today(), pl = parsePl(val("l3mPl")), tierCrop = tierCropOfKey(k);
+  let crop = val("l3mCrop") || tierCrop;
+  if (crop === "__new__"){ crop = val("l3mCropNew").trim(); if (!crop) return alert("Type a name for the new crop."); }
+  const pest = document.getElementById("l3mPest") && document.getElementById("l3mPest").checked;
   mutate(s => {
     const tr = s.trays[k];
-    if (tr){ if (crop !== tierCrop) tr.crop = crop; else delete tr.crop; setPl(tr, pl, crop); const was = !!tr.ready; tr.date = date; tr.type = type; tr.ready = ready; if (ready && !was) tr.readyDate = d; if (!ready) tr.readyDate = null; }
-    else { s.trays[k] = { date, ready, readyDate: ready ? d : null, type }; if (crop !== tierCrop) s.trays[k].crop = crop; setPl(s.trays[k], pl, crop); }
+    if (tr){ if (crop !== tierCrop) tr.crop = crop; else delete tr.crop; if (pest) tr.pest = true; else delete tr.pest; setPl(tr, pl, crop); const was = !!tr.ready; tr.date = date; tr.type = type; tr.ready = ready; if (ready && !was) tr.readyDate = d; if (!ready) tr.readyDate = null; }
+    else { s.trays[k] = { date, ready, readyDate: ready ? d : null, type }; if (crop !== tierCrop) s.trays[k].crop = crop; if (pest) s.trays[k].pest = true; setPl(s.trays[k], pl, crop); }
   }).then(ok => { if (ok) closeModal(); });
 }
 
