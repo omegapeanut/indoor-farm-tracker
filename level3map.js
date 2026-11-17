@@ -37,7 +37,7 @@ function parseKey(k){ const m = /^([NS])(\d)-(\d+)$/.exec(k); return m ? { r: m[
 const cropOfKey = (k, trays) => { const q = parseKey(k); if (!q) return ""; const tr = (trays || state.trays)[k]; return (tr && tr.crop) || cropAt(q.r, q.t); };
 const tierCropOfKey = (k) => { const q = parseKey(k); return q ? cropAt(q.r, q.t) : ""; };
 
-let state = { trays: {}, history: [] };
+let state = { trays: {}, history: [], empties: {} };
 let multi = false;
 let loaded = false, isAdmin = false, loadError = "", showHistory = false, showDates = true, last = null;
 const sel = new Set();
@@ -104,6 +104,10 @@ const STYLE = `
 .l3r-save{position:fixed;left:0;right:0;bottom:0;padding:12px 18px 18px;background:linear-gradient(transparent,var(--bg,#eee8e2) 30%)}
 .l3r-save .in{max-width:920px;margin:0 auto}
 .l3m-cell{position:relative}.l3m-cell em{position:absolute;top:0;right:2px;font-size:9px;font-style:normal;font-weight:800;color:#9a4a3a}
+.l3m-cell.dirty{background:#dcc7ab;border-color:#8a5a2b;border-width:2px}
+.l3m-cell.dirty i{opacity:1;font-weight:800;color:#6b3f12;font-size:10px}
+.l3m-cell.clean{background:#e1f0fa}
+.l3m-cell.clean i{opacity:1;font-weight:700;color:#2a6a96;font-size:10px}
 .l3m-cell.smp{background:#ddd5f3;border-color:#6b5bb0;border-width:2px}
 .l3m-cell.smp s.cr{color:#4a3a94}
 .l3m-cell strong.pp{position:absolute;left:3px;top:0;font-size:12px;font-weight:900;color:#1f9d3a;line-height:1.1}
@@ -153,7 +157,7 @@ function init(){
   onSnapshot(REF, (snap) => {
     if (snap.exists()){
       const d = snap.data();
-      state = { trays: d.trays && typeof d.trays === "object" ? d.trays : {}, history: Array.isArray(d.history) ? d.history : [] };
+      state = { trays: d.trays && typeof d.trays === "object" ? d.trays : {}, history: Array.isArray(d.history) ? d.history : [], empties: d.empties && typeof d.empties === "object" ? d.empties : {} };
     }
     loaded = true; loadError = "";
     render();
@@ -167,6 +171,8 @@ async function mutate(fn){
   last = clone(state);
   const next = clone(state);
   fn(next);
+  next.empties = next.empties || {};
+  Object.keys(next.empties).forEach(k => { if (next.trays[k]) delete next.empties[k]; });
   state = next;
   render();
   try { await setDoc(REF, next); return true; }
@@ -203,20 +209,27 @@ function capCards(list){
   h += '<div class="nl-cap ' + (empty === 0 ? "ok" : "") + '"><div class="nl-cap-row"><span class="nl-cap-title">Trays with crops</span><span class="nl-cap-num"><b>' + filled + '</b>/' + TOTAL + '</span><span class="nl-cap-sub">' + empty + ' empty</span></div>' + bar(filled, TOTAL) + '</div>';
   h += '<div class="nl-cap"><div class="nl-cap-row"><span class="nl-cap-title">Plants</span><span class="nl-cap-num"><b>' + plants + '</b></span><span class="nl-cap-sub">full tray 120 · Ice Plant 80 · partial trays counted as recorded</span></div>' + bar(0, 0) + '</div>';
   h += '<div class="nl-cap ' + (rp ? "ok" : "") + '"><div class="nl-cap-row"><span class="nl-cap-title">Plants ready</span><span class="nl-cap-num"><b>' + rp + '</b></span><span class="nl-cap-sub">' + (plants - rp) + ' not ready</span></div>' + bar(rp, plants) + '</div>';
-  return h + '</div>';
+  h += '</div>';
+  const em = state.empties || {}, dirty = Object.keys(em).filter(k => em[k] === "dirty" && !state.trays[k] && parseKey(k)), clean = Object.keys(em).filter(k => em[k] === "clean" && !state.trays[k] && parseKey(k));
+  const ord = (k) => { const q = parseKey(k); return (q.r === "N" ? 0 : 100) + q.t * 1000 + q.p; };
+  dirty.sort((a, b) => ord(a) - ord(b));
+  h += '<div class="nl-cap" style="margin-top:8px;border-color:#8a5a2b;"><div class="nl-cap-row"><span class="nl-cap-title">Trays to clean</span><span class="nl-cap-num"><b>' + dirty.length + '</b></span><span class="nl-cap-sub">' + clean.length + ' empty trays marked clean</span></div>' +
+    (dirty.length ? '<div style="font-size:12.5px;line-height:1.5;margin-top:4px;">' + esc(keysSummary(dirty)) + '</div>' : '<div style="font-size:12.5px;opacity:.7;">No dirty trays marked. Harvested trays are marked dirty automatically.</div>') + '</div>';
+  return h;
 }
 
 function cellHtml(r, t, p){
   const k = keyOf(r, t, p), tr = state.trays[k];
   const tierCrop = cropAt(r, t), cropHere = (tr && tr.crop) || tierCrop;
+  const emp = !tr && state.empties && (state.empties[k] === "dirty" || state.empties[k] === "clean") ? state.empties[k] : "";
   const smp = !!(tr && tr.crop && !CROP_ORDER.includes(tr.crop)), off = !!(tr && tr.crop && tr.crop !== tierCrop && !smp);
-  let cls = "l3m-cell" + (isSalted(r, t, p) ? " salt" : "") + (tr ? (tr.ready ? " ready" : " grow") : "") + (off ? " off" : "") + (smp ? " smp" : "") + (sel.has(k) ? " sel" : "");
+  let cls = "l3m-cell" + (isSalted(r, t, p) ? " salt" : "") + (tr ? (tr.ready ? " ready" : " grow") : "") + (off ? " off" : "") + (smp ? " smp" : "") + (emp ? " " + emp : "") + (sel.has(k) ? " sel" : "");
   let title = label(r, t, p) + " · " + cropAt(r, t) + (r === "N" && t <= 2 ? (isSalted(r, t, p) ? " · salted tank 3N1" : " · normal tank 3N2") : "");
   if (tr){
     const age = daysBetween(tr.date, today());
     title += " · " + (smp ? "SAMPLE: " + cropHere : off ? "HOLDS " + cropHere + " (wrong tier)" : cropHere) + " · planted " + fmtFull(tr.date) + (age != null ? " (day " + age + ")" : "") + " · " + plOf(tr, cropHere) + " plants · " + (tr.ready ? "ready" : "not ready") + " · " + (tr.type === "old" ? "old crop" : "new crop") + (isAdmin && tr.pest ? " · pest (P)" : "");
-  } else title += " · empty";
-  return '<button type="button" class="' + cls + '" data-action="cell" data-k="' + k + '" title="' + esc(title) + '"><b>' + p + '</b><i>' + (tr ? esc(fmtShort(tr.date)) : "&nbsp;") + '</i>' + ((off || smp) ? '<s class="cr">' + esc(SHORT[cropHere] || cropHere) + '</s>' : "") + (tr && tr.pest ? '<strong class="pp">P</strong>' : "") + (tr && plOf(tr, cropHere) !== ppt(cropHere) ? '<em>' + plOf(tr, cropHere) + '</em>' : "") + '</button>';
+  } else title += " · empty" + (emp ? " (" + emp + ")" : "");
+  return '<button type="button" class="' + cls + '" data-action="cell" data-k="' + k + '" title="' + esc(title) + '"><b>' + p + '</b><i>' + (tr ? esc(fmtShort(tr.date)) : emp ? emp : "&nbsp;") + '</i>' + ((off || smp) ? '<s class="cr">' + esc(SHORT[cropHere] || cropHere) + '</s>' : "") + (tr && tr.pest ? '<strong class="pp">P</strong>' : "") + (tr && plOf(tr, cropHere) !== ppt(cropHere) ? '<em>' + plOf(tr, cropHere) + '</em>' : "") + '</button>';
 }
 
 function rackHtml(rk){
@@ -239,7 +252,7 @@ function selBar(){
   if (!isAdmin || !sel.size) return "";
   let e = 0, f = 0; sel.forEach(k => { if (state.trays[k]) f++; else e++; });
   return '<div class="l3m-bar"><span class="cnt">' + sel.size + ' selected</span><span class="n" style="opacity:.7;margin-right:6px;">' + e + ' empty · ' + f + ' with crops</span>' +
-    (e ? '<button class="btn primary" data-action="act" data-a="transplant">Transplant ' + e + '</button>' : '') +
+    (e ? '<button class="btn primary" data-action="act" data-a="transplant">Transplant ' + e + '</button><button class="btn" data-action="act" data-a="dirty">Mark dirty</button><button class="btn" data-action="act" data-a="clean">Mark clean</button>' : '') +
     (f ? '<button class="btn" data-action="act" data-a="ready">Mark ready</button><button class="btn" data-action="act" data-a="notready">Not ready</button><button class="btn primary" data-action="act" data-a="harvest">Harvest ' + f + '</button><button class="btn danger" data-action="act" data-a="dispose">Dispose</button>' : '') +
     '<button class="btn" data-action="clearSel">Clear</button></div>';
 }
@@ -416,7 +429,7 @@ function render(){
   }
   h += blk("02", "Floor plan — what is free", floorPlan());
   h += blk("03", "Tray map", actions +
-    '<div class="l3m-leg"><span><u></u>Empty</span><span><u style="background:var(--blush,#ecd6cb)"></u>Growing</span><span><u style="background:var(--sage,#d3dccf)"></u>Ready</span><span><u style="border-style:dashed;border-color:#5b8db8"></u>Salted water</span><span><u style="background:#f7d9a6;border-color:#d4871c"></u>Wrong tier (shift back later)</span><span><u style="background:#ddd5f3;border-color:#6b5bb0"></u>Sample / test crop</span><span>Number = tray position · small text = date planted</span></div>' +
+    '<div class="l3m-leg"><span><u></u>Empty</span><span><u style="background:var(--blush,#ecd6cb)"></u>Growing</span><span><u style="background:var(--sage,#d3dccf)"></u>Ready</span><span><u style="border-style:dashed;border-color:#5b8db8"></u>Salted water</span><span><u style="background:#f7d9a6;border-color:#d4871c"></u>Wrong tier (shift back later)</span><span><u style="background:#ddd5f3;border-color:#6b5bb0"></u>Sample / test crop</span><span><u style="background:#dcc7ab;border-color:#8a5a2b"></u>Empty · dirty</span><span><u style="background:#e1f0fa"></u>Empty · clean</span><span>Number = tray position · small text = date planted</span></div>' +
     '<div class="' + (isAdmin ? "l3m-adm" : "") + '">' + rackHtml(RACKS[0]) + rackHtml(RACKS[1]) + '</div>' + selBar());
   h += '<section class="nl-block"><div class="nl-bh nl-toggle" data-action="toggleDates" style="cursor:pointer;"><span class="nl-no">04</span><span class="nl-bt">Dates by crop</span><span class="nl-count">' + plural(list.length, "tray") + ' · ' + (showDates ? "Hide ▴" : "Show ▾") + '</span></div>' + (showDates ? datesTable(list) : "") + '</section>';
   h += blk("05", "Consolidation — before 1 Oct vs from 1 Oct", consolidation(list));
@@ -452,7 +465,10 @@ function openTray(k){
   const head = '<h3>' + label(q.r, q.t, q.p) + ' · ' + esc(crop) + '</h3>';
   const status = '<div class="field"><label>Status</label><select id="l3mStatus"><option value="0"' + (!tr || !tr.ready ? " selected" : "") + '>Not ready</option><option value="1"' + (tr && tr.ready ? " selected" : "") + '>Ready to harvest</option></select></div>';
   if (!tr){
-    openModal(head + '<div class="sub">Empty tray (' + (q.r === "N" ? "North" : "South") + ' rack, tier ' + q.t + ', position ' + q.p + '). Transplant a crop into it.</div>' +
+    const cur = state.empties && state.empties[k];
+    openModal(head + '<div class="sub">Empty tray (' + (q.r === "N" ? "North" : "South") + ' rack, tier ' + q.t + ', position ' + q.p + ')' + (cur ? ' · currently marked <b>' + cur + '</b>' : '') + '.</div>' +
+      '<div class="field"><label>Label this empty tray</label><div class="nl-btnrow"><button class="btn" data-m="emptyMark" data-v="dirty" data-k="' + k + '" style="background:#dcc7ab;border-color:#8a5a2b;">Dirty — needs cleaning</button><button class="btn" data-m="emptyMark" data-v="clean" data-k="' + k + '" style="background:#e1f0fa;">Clean</button>' + (cur ? '<button class="btn" data-m="emptyMark" data-v="" data-k="' + k + '">Clear label</button>' : '') + '</div></div>' +
+      '<div class="sub" style="margin-top:10px;"><b>Or transplant a crop into it:</b></div>' +
       '<div class="row2"><div class="field"><label>Date planted</label><input type="date" id="l3mDate" value="' + today() + '"></div><div class="field"><label>New or old crop</label>' + typeSel("new") + '</div></div>' + cropSel(tierCrop, tierCrop, false) + plantsField(crop, "") + status +
       '<div class="modal-actions"><button class="btn" data-m="cancel">Cancel</button><button class="btn primary" data-m="saveTray" data-k="' + k + '">Transplant</button></div>');
     return;
@@ -475,6 +491,10 @@ function saveTray(k){
     if (tr){ if (crop !== tierCrop) tr.crop = crop; else delete tr.crop; if (pest) tr.pest = true; else delete tr.pest; setPl(tr, pl, crop); const was = !!tr.ready; tr.date = date; tr.type = type; tr.ready = ready; if (ready && !was) tr.readyDate = d; if (!ready) tr.readyDate = null; }
     else { s.trays[k] = { date, ready, readyDate: ready ? d : null, type }; if (crop !== tierCrop) s.trays[k].crop = crop; if (pest) s.trays[k].pest = true; setPl(s.trays[k], pl, crop); }
   }).then(ok => { if (ok) closeModal(); });
+}
+
+function setEmpty(keys, v){
+  return mutate(s => { s.empties = s.empties || {}; keys.forEach(k => { if (s.trays[k]) return; if (v === "dirty" || v === "clean") s.empties[k] = v; else delete s.empties[k]; }); });
 }
 
 function emptyKeys(){ return [...sel].filter(k => !state.trays[k]); }
@@ -539,7 +559,7 @@ function takePlants(s, keys, amt, kind, date, note){
     const tr = s.trays[k]; if (!tr) continue;
     const crop = cropOfKey(k, s.trays), have = plOf(tr, crop), take = Math.min(have, left);
     const base = { k, crop, date: tr.date, readyDate: tr.readyDate || null, type: tr.type === "old" ? "old" : "new", exitType: kind, exitDate: date };
-    if (take >= have){ s.history.push(Object.assign(base, { plants: have, note: note || "" })); delete s.trays[k]; }
+    if (take >= have){ s.history.push(Object.assign(base, { plants: have, note: note || "" })); delete s.trays[k]; s.empties = s.empties || {}; s.empties[k] = "dirty"; }
     else { s.history.push(Object.assign(base, { plants: take, note: "partial (" + take + " of " + have + ")" + (note ? " · " + note : "") })); tr.plants = have - take; }
     left -= take; took += take;
   }
@@ -756,6 +776,7 @@ function onClick(e){
       if (!confirm("Empty this tray without recording it in the history? Use this for a mistaken entry.")) return;
       return mutate(s => { delete s.trays[m.dataset.k]; }).then(ok => { if (ok) closeModal(); });
     }
+    if (a === "emptyMark") return setEmpty([m.dataset.k], m.dataset.v).then(ok => { if (ok) closeModal(); });
     if (a === "saveTransplant") return saveTransplant(m.dataset.keys.split(","));
     if (a === "saveFill") return saveFill(m.dataset.r, +m.dataset.t);
     if (a === "saveExit") return saveExit(m.dataset.kind, m.dataset.keys.split(","));
@@ -776,6 +797,7 @@ function onClick(e){
   else if (a === "act"){
     const x = t.dataset.a;
     if (x === "transplant") openTransplant(emptyKeys());
+    else if (x === "dirty" || x === "clean") setEmpty(emptyKeys(), x).then(ok => { if (ok){ sel.clear(); render(); } });
     else if (x === "ready") setReady(true);
     else if (x === "notready") setReady(false);
     else if (x === "harvest") openExit("harvested");
