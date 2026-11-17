@@ -14,7 +14,6 @@ const esc = (s) => String(s == null ? "" : s).replace(/[&<>"]/g, c => ({ "&": "&
 const isSuper = () => !!me && (data.super || []).map(x => String(x).toLowerCase()).includes(String(me.email || "").toLowerCase());
 
 const STYLE = `
-.adm-fab{position:fixed;right:14px;bottom:14px;z-index:900;background:#35473a;color:#fff;border:0;border-radius:999px;padding:12px 18px;font:600 14px Inter,system-ui,sans-serif;box-shadow:0 4px 14px rgba(0,0,0,.25);cursor:pointer}
 .adm-ov{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:1000;display:none;align-items:center;justify-content:center;padding:16px}
 .adm-ov.on{display:flex}
 .adm-box{background:var(--card,#f7f3ee);border-radius:18px;max-width:460px;width:100%;max-height:90vh;overflow:auto;padding:22px;font-family:Inter,system-ui,sans-serif;color:#2c3a30}
@@ -35,9 +34,11 @@ const STYLE = `
 let fab, ov;
 function build(){
   const st = document.createElement("style"); st.textContent = STYLE; document.head.appendChild(st);
-  fab = document.createElement("button"); fab.className = "adm-fab"; fab.textContent = "Manage admins"; fab.style.display = "none";
+  fab = document.createElement("button"); fab.className = "admin-btn"; fab.id = "manageAdminsBtn"; fab.textContent = "Admins"; fab.style.display = "none";
   ov = document.createElement("div"); ov.className = "adm-ov";
-  document.body.appendChild(fab); document.body.appendChild(ov);
+  const logout = document.getElementById("adminToggleBtn");
+  if (logout && logout.parentElement) logout.parentElement.insertBefore(fab, logout); else document.body.appendChild(fab);
+  document.body.appendChild(ov);
   fab.addEventListener("click", () => { render(""); ov.classList.add("on"); });
   ov.addEventListener("click", onClick);
 }

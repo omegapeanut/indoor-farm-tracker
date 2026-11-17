@@ -119,7 +119,6 @@ const STYLE = `
   .nl-root{overflow-x:hidden}
   .nl-modal{max-width:100% !important}
   .l3m-leg{display:flex;flex-wrap:wrap;gap:6px 12px;font-size:12px}
-  .adm-fab{bottom:10px;right:10px;padding:10px 14px;font-size:13px}
 }
 .l3m-leg span{display:inline-flex;align-items:center;gap:5px}
 .l3m-leg u{display:inline-block;width:14px;height:14px;border-radius:4px;border:1.5px solid rgba(0,0,0,.25);text-decoration:none}
