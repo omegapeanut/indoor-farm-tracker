@@ -110,6 +110,9 @@ const STYLE = `
   .nl-cap-row{flex-wrap:wrap}
   .nl-bh{flex-wrap:wrap}
   .l3m-tier{min-width:0}
+  .tab-btn{overflow:hidden}
+  .tab-label{white-space:normal !important;text-align:center;line-height:1.15;overflow-wrap:anywhere;max-width:100%}
+  .tabs{align-items:stretch}
   .l3m-cells{grid-template-columns:repeat(6,minmax(0,1fr)) !important;gap:5px}
   .l3m-cell{min-height:54px}
   .l3m-cell b{font-size:15px}
