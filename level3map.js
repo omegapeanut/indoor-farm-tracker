@@ -103,6 +103,24 @@ const STYLE = `
 .l3r-save{position:fixed;left:0;right:0;bottom:0;padding:12px 18px 18px;background:linear-gradient(transparent,var(--bg,#eee8e2) 30%)}
 .l3r-save .in{max-width:920px;margin:0 auto}
 .l3m-cell{position:relative}.l3m-cell em{position:absolute;top:0;right:2px;font-size:9px;font-style:normal;font-weight:800;color:#9a4a3a}
+.l3-swipe{display:none}
+@media (max-width:640px){
+  .nl-table{display:block;overflow-x:auto;max-width:100%;-webkit-overflow-scrolling:touch}
+  .nl-caps{grid-template-columns:1fr !important}
+  .nl-cap-row{flex-wrap:wrap}
+  .nl-bh{flex-wrap:wrap}
+  .l3m-tier{min-width:0}
+  .l3m-cells{grid-template-columns:repeat(6,minmax(0,1fr)) !important;gap:5px}
+  .l3m-cell{min-height:54px}
+  .l3m-cell b{font-size:15px}
+  .l3m-th{gap:6px}
+  .l3m-th button{font-size:13px;padding:6px 11px}
+  .l3-swipe{display:block}
+  .nl-root{overflow-x:hidden}
+  .nl-modal{max-width:100% !important}
+  .l3m-leg{display:flex;flex-wrap:wrap;gap:6px 12px;font-size:12px}
+  .adm-fab{bottom:10px;right:10px;padding:10px 14px;font-size:13px}
+}
 .l3m-leg span{display:inline-flex;align-items:center;gap:5px}
 .l3m-leg u{display:inline-block;width:14px;height:14px;border-radius:4px;border:1.5px solid rgba(0,0,0,.25);text-decoration:none}
 `;
@@ -329,7 +347,7 @@ function floorPlan(){
   s += box({ title: "Buffer · T1–T6", sub: "Tray 1, 2 of every tier", bh: 132, rowGap: 9, rows: bufRows, note: "S1–S2 · all tiers" }, 0, SY);
   s += text(X0, 636, "SOUTH RACK", 11, 600, "#777", "start");
   s += '</svg>';
-  return '<div style="overflow-x:auto;">' + s + '</div><p class="hint" style="margin-top:6px;">Laid out like the tank diagram. Each box is one crop on one tank. Small squares are its trays: white = free, pink = growing, green = ready. Dashed = salted tank 3N1 (Ice Plant trays 1-3 and 9-11 of T1 and T2). The Ice Plant middle trays (4-8 of both tiers) use the normal tank 3N2. South trays S3–S13 of each tier are on 3S2 (T6–T4) and 3S1 (T3–T1); trays S1–S2 of every tier are on the Buffer tank. Tap a box to jump to it in the tray map.</p>';
+  return '<p class="hint l3-swipe">Swipe sideways to see the whole plan →</p><div style="overflow-x:auto;-webkit-overflow-scrolling:touch;">' + s + '</div><p class="hint" style="margin-top:6px;">Laid out like the tank diagram. Each box is one crop on one tank. Small squares are its trays: white = free, pink = growing, green = ready. Dashed = salted tank 3N1 (Ice Plant trays 1-3 and 9-11 of T1 and T2). The Ice Plant middle trays (4-8 of both tiers) use the normal tank 3N2. South trays S3–S13 of each tier are on 3S2 (T6–T4) and 3S1 (T3–T1); trays S1–S2 of every tier are on the Buffer tank. Tap a box to jump to it in the tray map.</p>';
 }
 
 // Crops consolidated by planting period: before 1 Oct vs from 1 Oct, with the dates and totals.
