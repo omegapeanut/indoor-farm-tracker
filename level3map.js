@@ -619,11 +619,11 @@ function render(){
   h += blk("03", "Tray map", actions +
     '<div class="l3m-leg"><span><u></u>Empty</span><span><u style="background:var(--blush,#ecd6cb)"></u>Growing</span><span><u style="background:var(--sage,#d3dccf)"></u>Ready</span><span><u style="border-style:dashed;border-color:#5b8db8"></u>Salted water</span><span><u style="background:#f7d9a6;border-color:#d4871c"></u>Wrong tier (shift back later)</span><span><u style="background:#ddd5f3;border-color:#6b5bb0"></u>Sample / test crop</span><span><u style="background:#2e7d32"></u>NEW — planted in the last 2 days</span><span><u style="background:#fff;border-left:5px solid #c62828"></u>Planted before 1 Oct — to remove</span><span><u style="background:#fff;border-top:5px solid #1a237e"></u>40+ days since transplant — harvest first (days shown)</span><span><u style="background:#fff;border-bottom:5px solid #2f7f86"></u>Buffer tank (S1, no nutrients)</span><span><u style="background:#dcc7ab;border-color:#8a5a2b"></u>Empty · dirty</span><span><u style="background:#e1f0fa"></u>Empty · clean</span><span>Number = tray position · small text = date planted</span></div>' +
     '<div class="' + (isAdmin ? "l3m-adm" : "") + '">' + rackHtml(RACKS[0]) + rackHtml(RACKS[1]) + '</div>' + selBar());
-  h += blk("04", "Action history", actionHistory());
+  h += cblk("alog", "04", "Action history", () => actionHistory(), plural((state.log || []).length, "action"));
   h += cblk("dates", "05", "Dates by crop", () => datesTable(list), plural(list.length, "tray"));
   h += cblk("cons", "06", "Consolidation — before 1 Oct vs from 1 Oct", () => consolidation(list));
   h += cblk("var", "07", "By variety", () => varietyTable(list));
-  h += blk("08", "History", historySection());
+  h += cblk("hist", "08", "History", () => historySection());
   h += '</div>';
   root.innerHTML = h;
   if (rec) renderRec();

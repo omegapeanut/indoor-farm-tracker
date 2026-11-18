@@ -150,6 +150,8 @@ function sortBatches(arr){
   return arr.slice().sort((a, b) => (a.sownDate || "9999").localeCompare(b.sownDate || "9999"));
 }
 
+const secOpen = new Set();
+function cblk(id, no, title, fn, count){ const o = secOpen.has(id); return '<section class="nl-block"><div class="nl-bh nl-toggle" data-action="tg" data-id="' + id + '" style="cursor:pointer;"><span class="nl-no">' + no + '</span><span class="nl-bt">' + title + '</span><span class="nl-count">' + (count ? count + " · " : "") + (o ? "Hide ▴" : "Show ▾") + '</span></div>' + (o ? fn() : "") + '</section>'; }
 function blk(no,title,inner,extra){ return '<section class="nl-block"><div class="nl-bh"><span class="nl-no">'+no+'</span><span class="nl-bt">'+title+'</span>'+(extra||'')+'</div>'+inner+'</section>'; }
 
 function render(){
@@ -176,15 +178,15 @@ function render(){
     if (dueG.length) alerts.push("Ready to move to nursery (" + plural(nFree, "space") + " free): " + dueG.map(b => esc(b.variety) + " ×" + b.trays).join(", ") + ".");
   }
   if (alerts.length) capH += '<div class="nl-alerts">' + alerts.map(a => '<div>' + a + '</div>').join("") + '</div>';
-  h += blk("01", "Capacity", capH);
+  h += cblk("cap", "01", "Capacity", () => capH, "Germination " + gUsed + "/" + state.capGerm + " · Nursery " + nUsed + "/" + state.capNursery);
 
-  h += blk("02", "Germination chamber", '<div class="nl-list">' + (germ.length ? groupBatches(germ).map(b => batchCard(b, stats)).join("") : '<div class="empty-state">Empty — sow something.</div>') + '</div>', '<span class="nl-count">' + gUsed + ' / ' + state.capGerm + '</span>');
+  h += cblk("germ", "02", "Germination chamber", () => '<div class="nl-list">' + (germ.length ? groupBatches(germ).map(b => batchCard(b, stats)).join("") : '<div class="empty-state">Empty — sow something.</div>') + '</div>', gUsed + " / " + state.capGerm);
   h += '<div id="nmSlot"></div>';
-  if (nur.length) h += blk("03b", "Older nursery batches (not on the tray map)", '<div class="nl-list">' + groupBatches(nur).map(b => batchCard(b, stats)).join("") + '</div>', '<span class="nl-count">' + sumTrays(nur) + ' trays</span>');
+  if (nur.length) h += cblk("old", "03b", "Older nursery batches (not on the tray map)", () => '<div class="nl-list">' + groupBatches(nur).map(b => batchCard(b, stats)).join("") + '</div>', sumTrays(nur) + " trays");
 
-  h += blk("04", "Tray count by variety", summaryTables(germ, nurAll, gUsed, nUsed));
-  h += blk("05", "Patterns — from recorded dates", patternSection(stats));
-  h += blk("06", "History", historySection());
+  h += cblk("sum", "04", "Tray count by variety", () => summaryTables(germ, nurAll, gUsed, nUsed));
+  h += cblk("pat", "05", "Patterns — from recorded dates", () => patternSection(stats));
+  h += cblk("hist", "06", "History", () => historySection());
 
   h += '<p class="nl-legacy"><button class="btn" data-action="legacy">' + (showLegacy ? "Hide" : "Show") + ' old Grow Log (hidden, nothing deleted)</button></p>';
   h += '</div>';
@@ -474,6 +476,7 @@ function onClick(e){
   }
   if (e.target.id === "nlOverlay") return closeModal();
   const t = e.target.closest("[data-action]");
+  if (t && t.dataset.action === "tg"){ const id = t.dataset.id; if (secOpen.has(id)) secOpen.delete(id); else secOpen.add(id); return render(); }
   if (!t) return;
   const a = t.dataset.action;
   if (a === "open" && isAdmin){
