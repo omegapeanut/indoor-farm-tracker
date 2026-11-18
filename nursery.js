@@ -178,20 +178,13 @@ function render(){
   if (alerts.length) capH += '<div class="nl-alerts">' + alerts.map(a => '<div>' + a + '</div>').join("") + '</div>';
   h += blk("01", "Capacity", capH);
 
-  if (isAdmin){
-    let act = '<div class="nl-actions"><button class="btn primary" data-action="sow">+ Sow into germination</button>' +
-      '<button class="btn" data-action="existing">+ Add existing stock</button>' +
-      '<button class="btn" data-action="settings">⚙ Varieties &amp; capacity</button></div>';
-    h += blk("02", "Actions", act + quickCountPanel());
-  }
-
-  h += blk("03", "Germination chamber", '<div class="nl-list">' + (germ.length ? groupBatches(germ).map(b => batchCard(b, stats)).join("") : '<div class="empty-state">Empty — sow something.</div>') + '</div>', '<span class="nl-count">' + gUsed + ' / ' + state.capGerm + '</span>');
+  h += blk("02", "Germination chamber", '<div class="nl-list">' + (germ.length ? groupBatches(germ).map(b => batchCard(b, stats)).join("") : '<div class="empty-state">Empty — sow something.</div>') + '</div>', '<span class="nl-count">' + gUsed + ' / ' + state.capGerm + '</span>');
   h += '<div id="nmSlot"></div>';
-  if (nur.length) h += blk("04b", "Older nursery batches (not on the tray map)", '<div class="nl-list">' + groupBatches(nur).map(b => batchCard(b, stats)).join("") + '</div>', '<span class="nl-count">' + sumTrays(nur) + ' trays</span>');
+  if (nur.length) h += blk("03b", "Older nursery batches (not on the tray map)", '<div class="nl-list">' + groupBatches(nur).map(b => batchCard(b, stats)).join("") + '</div>', '<span class="nl-count">' + sumTrays(nur) + ' trays</span>');
 
-  h += blk("05", "Tray count by variety", summaryTables(germ, nurAll, gUsed, nUsed));
-  h += blk("06", "Patterns — from recorded dates", patternSection(stats));
-  h += blk("07", "History", historySection());
+  h += blk("04", "Tray count by variety", summaryTables(germ, nurAll, gUsed, nUsed));
+  h += blk("05", "Patterns — from recorded dates", patternSection(stats));
+  h += blk("06", "History", historySection());
 
   h += '<p class="nl-legacy"><button class="btn" data-action="legacy">' + (showLegacy ? "Hide" : "Show") + ' old Grow Log (hidden, nothing deleted)</button></p>';
   h += '</div>';

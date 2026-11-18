@@ -158,7 +158,7 @@ function cellHtml(t, p){
 }
 function render(){
   const used = Object.keys(state.trays).length, plants = Object.values(state.trays).reduce((s, x) => s + plOf(x), 0);
-  let h = '<section class="nl-block"><div class="nl-bh"><span class="nl-no">04</span><span class="nl-bt">Nursery — tray map</span><span class="nl-count">' + used + ' / ' + (TIERS.length * POS) + ' trays · ' + plants + ' plants</span></div>';
+  let h = '<section class="nl-block"><div class="nl-bh"><span class="nl-no">03</span><span class="nl-bt">Nursery — tray map</span><span class="nl-count">' + used + ' / ' + (TIERS.length * POS) + ' trays · ' + plants + ' plants</span></div>';
   if (loadError) h += '<div class="kiosk-message err">Couldn\'t load: ' + esc(loadError) + '</div>';
   if (!loaded && !loadError) h += '<p class="hint">Loading…</p>';
   h += '<p class="nm-note">4 tiers, 14 trays each, shown right to left (14 … 1) with tier 1 at the bottom. One tray holds up to ' + PPT + ' plants. Each tray shows the date it was seeded for germination and how many days ago.' + (isAdmin ? ' Tap a tray to seed or change it; press and hold a tray, then drop it on another slot to shift it.' : '') + '</p>';
@@ -174,7 +174,7 @@ function render(){
   });
   h += '</div></div></section>';
   const n = (state.log || []).length;
-  h += '<section class="nl-block"><div class="nl-bh nm-hist-tog" data-action="log" style="cursor:pointer;"><span class="nl-no">04a</span><span class="nl-bt">Nursery action history</span><span class="nl-count">' + plural(n, "action") + ' · ' + (showLog ? "Hide ▴" : "Show ▾") + '</span></div>' + (showLog ? logHtml() : "") + '</section>';
+  h += '<section class="nl-block"><div class="nl-bh nm-hist-tog" data-action="log" style="cursor:pointer;"><span class="nl-no">03a</span><span class="nl-bt">Nursery action history</span><span class="nl-count">' + plural(n, "action") + ' · ' + (showLog ? "Hide ▴" : "Show ▾") + '</span></div>' + (showLog ? logHtml() : "") + '</section>';
   mapEl.innerHTML = h;
 }
 
