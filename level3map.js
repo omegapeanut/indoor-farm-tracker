@@ -251,7 +251,7 @@ function rackHtml(rk){
       (rk.id === "S" ? '<span class="salt" style="color:#2f7f86;font-weight:700;">S1–S2 = buffer tank (no nutrients · for crops ready to harvest)</span>' : '') + (rk.id === "N" && t <= 2 ? '<span class="salt">dashed = salted tank 3N1 (trays 1-3, 9-11) · plain = normal tank 3N2 (trays 4-8)</span>' : '') +
       (isAdmin ? '<button class="btn" data-action="fillTier" data-r="' + rk.id + '" data-t="' + t + '">+ Transplant</button>' + (ready.length ? '<button class="btn" data-action="harvestTier" data-r="' + rk.id + '" data-t="' + t + '">Harvest ready</button>' : '') : '') +
       '</div><div class="l3m-cells" style="grid-template-columns:repeat(' + posOf(rk.id) + ',minmax(40px,1fr));">';
-    for (let p = 1; p <= posOf(rk.id); p++) h += cellHtml(rk.id, t, p);
+    { const order = []; for (let p = 1; p <= posOf(rk.id); p++) order.push(p); if (rk.id === "S") order.reverse(); order.forEach(p => { h += cellHtml(rk.id, t, p); }); }
     h += '</div></div>';
   });
   return h + '</div></div>';
@@ -374,15 +374,15 @@ function floorPlan(){
     '<rect x="' + X0 + '" y="' + (RAILN + 18) + '" width="200" height="50" rx="6" fill="#fff" stroke="#35473a" stroke-width="2.5"/>' + text(X0 + 100, RAILN + 39, "AGV TROLLEY", 13, 700) + text(X0 + 100, RAILN + 56, "MAIN ENTRANCE", 11, 600) +
     line(X0, RAILN + 84, 970, RAILN + 84, true, true) + text(X0 + 5, RAILN + 98, "Robot rail (south)", 10, 400, "#777", "start");
   const bfc = cx(0), s2c = (cx(1) + cx(3)) / 2, s1c = (cx(4) + cx(6)) / 2;
-  const sRows = (t) => [{ r: "S", t, ps: range(3, posOf("S")) }];
-  const bufRows = TIERS.map(t => ({ r: "S", t, ps: [1, 2], lab: "T" + t }));
+  const sRows = (t) => [{ r: "S", t, ps: range(3, posOf("S")).reverse() }];
+  const bufRows = TIERS.map(t => ({ r: "S", t, ps: [2, 1], lab: "T" + t }));
   s += tank(s2c, STK, 140, "3S2", "L3 South side tank-2", "3 tanks sharing", [6, 5, 4].map(sRows).flat(), false, false);
   s += tank(s1c, STK, 140, "3S1", "L3 South side tank-1", "3 tanks sharing", [3, 2, 1].map(sRows).flat(), false, false);
   s += tank(bfc, STK, 124, "Buffer", "Slot 1", "2 tanks sharing", bufRows, false, false);
   const pipeS = (from, to, tcx, dashed) => { let o = ""; for (let i = from; i <= to; i++) o += line(cx(i), SBUS, cx(i), SY, dashed); return o + line(cx(from), SBUS, cx(to), SBUS, dashed) + line(tcx, STK + 66, tcx, SBUS, dashed); };
   s += pipeS(0, 0, bfc, false) + pipeS(1, 3, s2c, false) + pipeS(4, 6, s1c, false);
-  TIERS.forEach((t, i) => { s += box({ title: "T" + t + " · " + SHORT[S.tiers[t]], rows: [{ r: "S", t, ps: range(3, posOf("S")), lab: "T" + t }], note: "S3–S" + posOf("S") }, i + 1, SY); });
-  s += box({ title: "Buffer · T1–T6", sub: "Tray 1, 2 of every tier", bh: 132, rowGap: 9, rows: bufRows, note: "S1–S2 · all tiers" }, 0, SY);
+  TIERS.forEach((t, i) => { s += box({ title: "T" + t + " · " + SHORT[S.tiers[t]], rows: [{ r: "S", t, ps: range(3, posOf("S")).reverse(), lab: "T" + t }], note: "S" + posOf("S") + "–S3" }, i + 1, SY); });
+  s += box({ title: "Buffer · T1–T6", sub: "Tray 1, 2 of every tier", bh: 132, rowGap: 9, rows: bufRows, note: "S2–S1 · all tiers" }, 0, SY);
   s += text(X0, 636, "SOUTH RACK", 11, 600, "#777", "start");
   s += '</svg>';
   return '<p class="hint l3-swipe">Swipe sideways to see the whole plan →</p><div style="overflow-x:auto;-webkit-overflow-scrolling:touch;">' + s + '</div><p class="hint" style="margin-top:6px;">Laid out like the tank diagram. Each box is one crop on one tank. Small squares are its trays: white = free, pink = growing, green = ready. Dashed = salted tank 3N1 (Ice Plant trays 1-3 and 9-11 of T1 and T2). The Ice Plant middle trays (4-8 of both tiers) use the normal tank 3N2. South trays S3–S13 of each tier are on 3S2 (T6–T4) and 3S1 (T3–T1); trays S1–S2 of every tier are on the Buffer tank. Tap a box to jump to it in the tray map.</p>';
