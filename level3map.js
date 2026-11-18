@@ -105,23 +105,26 @@ const STYLE = `
 .l3r-msg{background:var(--sage,#d3dccf);border-radius:16px;padding:14px 18px;font-size:22px;font-weight:700;margin:12px 0}
 .l3r-save{position:fixed;left:0;right:0;bottom:0;padding:12px 18px 18px;background:linear-gradient(transparent,var(--bg,#eee8e2) 30%)}
 .l3r-save .in{max-width:920px;margin:0 auto}
-.l3m-cell{position:relative}.l3m-cell em{position:absolute;top:0;right:2px;font-size:9px;font-style:normal;font-weight:800;color:#9a4a3a}
-.l3m-cell.old40::before{content:"";position:absolute;left:0;right:0;top:0;height:6px;background:#1a237e;border-radius:6px 6px 0 0}
-.l3m-cell var.ag{position:absolute;right:2px;bottom:2px;font-style:normal;font-size:9px;font-weight:800;line-height:1;color:#fff;background:#1a237e;border-radius:6px;padding:2px 4px}
-.l3m-cell.buf var.ag{bottom:12px}
-.l3m-cell.pre{box-shadow:inset 6px 0 0 #c62828}
 .l3m-cell.pre i{color:#b71c1c;font-weight:800;opacity:1}
-.l3m-cell.buf{padding-bottom:10px}
-.l3m-cell.buf::after{content:"BUFFER";position:absolute;left:0;right:0;bottom:0;height:10px;line-height:10px;font-size:6.5px;font-weight:800;letter-spacing:.05em;color:#fff;background:#2f7f86;border-radius:0 0 6px 6px}
 .l3m-cell.dirty{background:#dcc7ab;border-color:#8a5a2b;border-width:2px}
 .l3m-cell.dirty i{opacity:1;font-weight:800;color:#6b3f12;font-size:10px}
 .l3m-cell.clean{background:#e1f0fa}
 .l3m-cell.clean i{opacity:1;font-weight:700;color:#2a6a96;font-size:10px}
 .l3m-cell.smp{background:#ddd5f3;border-color:#6b5bb0;border-width:2px}
 .l3m-cell.smp s.cr{color:#4a3a94}
-.l3m-cell strong.pp{position:absolute;left:3px;top:0;font-size:12px;font-weight:900;color:#1f9d3a;line-height:1.1}
 .l3m-cell.off{background:#f7d9a6;border-color:#d4871c;border-width:2px}
-.l3m-cell s.cr{display:block;text-decoration:none;font-size:8.5px;font-weight:800;color:#8a4b00;line-height:1.05;overflow:hidden;white-space:nowrap}
+.l3m-cell{display:flex;flex-direction:column;align-items:stretch;justify-content:flex-start;min-height:78px;padding:3px 2px 3px;overflow:hidden;box-sizing:border-box}
+.l3m-cell .tp{display:flex;justify-content:space-between;align-items:center;min-height:13px;padding:0 1px}
+.l3m-cell .tp strong.pp{font-size:12px;font-weight:900;color:#1f9d3a;line-height:1}
+.l3m-cell .tp em{margin-left:auto;font-size:9.5px;font-style:normal;font-weight:800;color:#9a4a3a;line-height:1}
+.l3m-cell .ft{display:flex;flex-wrap:wrap;justify-content:center;align-content:flex-start;gap:2px;margin-top:auto;padding-top:2px;min-height:15px}
+.l3m-cell s.cr{display:block;max-width:100%;text-decoration:none;font-size:8.5px;font-weight:800;line-height:1;color:#8a4b00;background:rgba(212,135,28,.22);border-radius:5px;padding:2px 3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;box-sizing:border-box}
+.l3m-cell.smp s.cr{color:#4a3a94;background:rgba(107,91,176,.2)}
+.l3m-cell var.ag{display:block;font-style:normal;font-size:9px;font-weight:800;line-height:1;color:#fff;background:#1a237e;border-radius:5px;padding:2px 4px}
+.l3m-cell.pre{border-left:6px solid #c62828;border-left-style:solid}
+.l3m-cell.pre i{color:#b71c1c;font-weight:800;opacity:1}
+.l3m-cell.old40{border-top:6px solid #1a237e;border-top-style:solid}
+.l3m-cell.buf{border-bottom:6px solid #2f7f86;border-bottom-style:solid}
 .l3m-cell{-webkit-touch-callout:none;-webkit-user-select:none;user-select:none}
 .l3m-cell.lp{transform:scale(.94);opacity:.7}
 .l3m-cell.drop{outline:3px solid #2e7d32;outline-offset:1px;background:#d9efd5}
@@ -137,7 +140,7 @@ const STYLE = `
   .tab-label{white-space:normal !important;text-align:center;line-height:1.15;overflow-wrap:anywhere;max-width:100%}
   .tabs{align-items:stretch}
   .l3m-cells{grid-template-columns:repeat(6,minmax(0,1fr)) !important;gap:5px}
-  .l3m-cell{min-height:54px}
+  .l3m-cell{min-height:72px;padding:2px 1px 2px}
   .l3m-cell b{font-size:15px}
   .l3m-th{gap:6px}
   .l3m-th button{font-size:13px;padding:6px 11px}
@@ -246,7 +249,9 @@ function cellHtml(r, t, p){
     const age = daysBetween(tr.date, today());
     title += " · " + (smp ? "SAMPLE: " + cropHere : off ? "HOLDS " + cropHere + " (wrong tier)" : cropHere) + (pre ? " · BEFORE 1 OCT — to be removed" : "") + (aged ? " · " + ageDays + " DAYS since transplant — harvest first" : "") + " · planted " + fmtFull(tr.date) + (age != null ? " (day " + age + ")" : "") + " · " + plOf(tr, cropHere) + " plants · " + (tr.ready ? "ready" : "not ready") + " · " + (tr.type === "old" ? "old crop" : "new crop") + (isAdmin && tr.pest ? " · pest (P)" : "");
   } else title += " · empty" + (emp ? " (" + emp + ")" : "");
-  return '<button type="button" class="' + cls + '" data-action="cell" data-k="' + k + '" title="' + esc(title) + '"><b>' + p + '</b><i>' + (tr ? esc(fmtShort(tr.date)) : emp ? emp : "&nbsp;") + '</i>' + ((off || smp) ? '<s class="cr">' + esc(SHORT[cropHere] || cropHere) + '</s>' : "") + (tr && tr.pest ? '<strong class="pp">P</strong>' : "") + (aged ? '<var class="ag">' + ageDays + 'd</var>' : "") + (tr && plOf(tr, cropHere) !== ppt(cropHere) ? '<em>' + plOf(tr, cropHere) + '</em>' : "") + '</button>';
+  const pl = tr && plOf(tr, cropHere) !== ppt(cropHere) ? plOf(tr, cropHere) : "";
+  const chips = ((off || smp) ? '<s class="cr">' + esc(SHORT[cropHere] || cropHere) + '</s>' : "") + (aged ? '<var class="ag">' + ageDays + 'd</var>' : "");
+  return '<button type="button" class="' + cls + '" data-action="cell" data-k="' + k + '" title="' + esc(title) + '"><span class="tp">' + (tr && tr.pest ? '<strong class="pp">P</strong>' : "") + (pl !== "" ? '<em>' + pl + '</em>' : "") + '</span><b>' + p + '</b><i>' + (tr ? esc(fmtShort(tr.date)) : emp ? emp : "&nbsp;") + '</i><span class="ft">' + chips + '</span></button>';
 }
 
 function rackHtml(rk){
@@ -446,7 +451,7 @@ function render(){
   }
   h += blk("02", "Floor plan — what is free", floorPlan());
   h += blk("03", "Tray map", actions +
-    '<div class="l3m-leg"><span><u></u>Empty</span><span><u style="background:var(--blush,#ecd6cb)"></u>Growing</span><span><u style="background:var(--sage,#d3dccf)"></u>Ready</span><span><u style="border-style:dashed;border-color:#5b8db8"></u>Salted water</span><span><u style="background:#f7d9a6;border-color:#d4871c"></u>Wrong tier (shift back later)</span><span><u style="background:#ddd5f3;border-color:#6b5bb0"></u>Sample / test crop</span><span><u style="background:linear-gradient(90deg,#c62828 30%,#fff 30%)"></u>Planted before 1 Oct — to remove</span><span><u style="background:linear-gradient(#1a237e 35%,#fff 35%)"></u>40+ days since transplant — harvest first (days shown)</span><span><u style="background:linear-gradient(#fff 60%,#2f7f86 60%)"></u>Buffer tank (S1, no nutrients)</span><span><u style="background:#dcc7ab;border-color:#8a5a2b"></u>Empty · dirty</span><span><u style="background:#e1f0fa"></u>Empty · clean</span><span>Number = tray position · small text = date planted</span></div>' +
+    '<div class="l3m-leg"><span><u></u>Empty</span><span><u style="background:var(--blush,#ecd6cb)"></u>Growing</span><span><u style="background:var(--sage,#d3dccf)"></u>Ready</span><span><u style="border-style:dashed;border-color:#5b8db8"></u>Salted water</span><span><u style="background:#f7d9a6;border-color:#d4871c"></u>Wrong tier (shift back later)</span><span><u style="background:#ddd5f3;border-color:#6b5bb0"></u>Sample / test crop</span><span><u style="background:#fff;border-left:5px solid #c62828"></u>Planted before 1 Oct — to remove</span><span><u style="background:#fff;border-top:5px solid #1a237e"></u>40+ days since transplant — harvest first (days shown)</span><span><u style="background:#fff;border-bottom:5px solid #2f7f86"></u>Buffer tank (S1, no nutrients)</span><span><u style="background:#dcc7ab;border-color:#8a5a2b"></u>Empty · dirty</span><span><u style="background:#e1f0fa"></u>Empty · clean</span><span>Number = tray position · small text = date planted</span></div>' +
     '<div class="' + (isAdmin ? "l3m-adm" : "") + '">' + rackHtml(RACKS[0]) + rackHtml(RACKS[1]) + '</div>' + selBar());
   h += '<section class="nl-block"><div class="nl-bh nl-toggle" data-action="toggleDates" style="cursor:pointer;"><span class="nl-no">04</span><span class="nl-bt">Dates by crop</span><span class="nl-count">' + plural(list.length, "tray") + ' · ' + (showDates ? "Hide ▴" : "Show ▾") + '</span></div>' + (showDates ? datesTable(list) : "") + '</section>';
   h += blk("05", "Consolidation — before 1 Oct vs from 1 Oct", consolidation(list));
