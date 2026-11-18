@@ -49,6 +49,7 @@ function esc(s){ return String(s == null ? "" : s).replace(/[&<>"']/g, c => ({"&
 function toDate(s){ const p = s.split("-"); return new Date(+p[0], +p[1] - 1, +p[2]); }
 function toKey(d){ return d.getFullYear() + "-" + String(d.getMonth()+1).padStart(2,"0") + "-" + String(d.getDate()).padStart(2,"0"); }
 function today(){ const d = new Date(); if (d.getHours() < 7) d.setDate(d.getDate() - 1); return toKey(d); }
+const empOf = (v) => { const p = String(v || "").split("|"); return p[0] === "dirty" || p[0] === "clean" ? { st: p[0], d: p[1] || "" } : null; };
 function fmtShort(key){ if (!key) return ""; const d = toDate(key); return d.getDate() + " " + MONTHS[d.getMonth()]; }
 function fmtFull(key){ if (!key) return "No date"; const d = toDate(key); return d.getDate() + " " + MONTHS[d.getMonth()] + " " + d.getFullYear(); }
 function daysBetween(a, b){ if (!a || !b) return null; return Math.round((toDate(b) - toDate(a)) / 86400000); }
@@ -127,6 +128,15 @@ const STYLE = `
 .l3m-cell.pre i{color:#b71c1c;font-weight:800;opacity:1}
 .l3m-cell.old40{border-top:6px solid #1a237e;border-top-style:solid}
 .l3m-cell.buf{border-bottom:6px solid #2f7f86;border-bottom-style:solid}
+.l3m-cell.dirty{animation:l3pulse 1.4s ease-in-out infinite,l3shake 3.2s ease-in-out infinite;border-color:#c62828;border-width:2px}
+.l3m-cell.dirty i{color:#9a1c1c}
+.l3m-cell.dirty::after{content:"CLEAN ME";display:block;margin:auto auto 0;font-size:7.5px;font-weight:900;letter-spacing:.04em;line-height:1;color:#fff;background:#c62828;border-radius:5px;padding:2px 4px;animation:l3blink 1.4s steps(2,jump-none) infinite}
+.l3m-cell.dirty .ft{display:none}
+.l3-dirtycard{animation:l3pulse 1.6s ease-in-out infinite}
+@keyframes l3pulse{0%,100%{box-shadow:0 0 0 0 rgba(198,40,40,.65)}50%{box-shadow:0 0 0 7px rgba(198,40,40,0)}}
+@keyframes l3shake{0%,70%,100%{transform:translateX(0) rotate(0)}74%{transform:translateX(-2px) rotate(-2deg)}78%{transform:translateX(2px) rotate(2deg)}82%{transform:translateX(-2px) rotate(-2deg)}86%{transform:translateX(2px) rotate(2deg)}90%{transform:translateX(0) rotate(0)}}
+@keyframes l3blink{0%{opacity:1}50%{opacity:.45}}
+@media (prefers-reduced-motion:reduce){.l3m-cell.dirty,.l3m-cell.dirty::after,.l3-dirtycard{animation:none}}
 .l3m-cell{-webkit-touch-callout:none;-webkit-user-select:none;user-select:none}
 .l3m-cell.lp{transform:scale(.94);opacity:.7}
 .l3m-cell.drop{outline:3px solid #2e7d32;outline-offset:1px;background:#d9efd5}
@@ -284,6 +294,10 @@ function logDiff(prev, next, by){
   if (rdy.length) out.push(mk("ready", { keys: rdy, ready: true }));
   if (nrd.length) out.push(mk("ready", { keys: nrd, ready: false }));
   if (ed.length) out.push(mk("edit", { keys: ed }));
+  const pe = prev.empties || {}, ne = next.empties || {}, eg = { dirty: [], clean: [] };
+  Object.keys(ne).forEach(k => { const n = empOf(ne[k]), p = empOf(pe[k]); if (n && !next.trays[k] && !exited.has(k) && (!p || p.st !== n.st)) eg[n.st].push(k); });
+  if (eg.dirty.length) out.push(mk("dirty", { keys: eg.dirty }));
+  if (eg.clean.length) out.push(mk("clean", { keys: eg.clean }));
   return out;
 }
 const ACT = {
@@ -293,7 +307,9 @@ const ACT = {
   shift:     { word: "Shifted",     cls: "sh", icon: "⇄" },
   ready:     { word: "Marked",      cls: "rd", icon: "✓" },
   edit:      { word: "Edited",      cls: "ed", icon: "✎" },
-  remove:    { word: "Cleared",     cls: "rm", icon: "−" }
+  remove:    { word: "Cleared",     cls: "rm", icon: "−" },
+  dirty:     { word: "Dirty",       cls: "dp", icon: "!" },
+  clean:     { word: "Clean",       cls: "hv", icon: "✓" }
 };
 const AV = { YS: "#35473a", Hasan: "#2f7f86", Meraj: "#8a5a2b" };
 const avCol = (n) => AV[n] || "#6b5bb0";
@@ -310,6 +326,8 @@ function logLine(e){
     return { head: mv.length === 1 ? (mv[0].swap ? "Swapped two trays" : "Shifted " + esc(mv[0].crop) + " to another tray") : "Shifted " + mv.length + " trays", sub: mv.slice(0, 6).map(one).join(" · ") + (mv.length > 6 ? " · +" + (mv.length - 6) + " more" : "") };
   }
   if (e.a === "ready") return { head: (e.ready ? "Marked " : "Marked not ready: ") + tr + (e.ready ? " ready to harvest" : ""), sub: esc(keysSummary(e.keys)) };
+  if (e.a === "dirty") return { head: "Marked " + tr + " as <b>dirty</b> — needs cleaning", sub: esc(keysSummary(e.keys)) };
+  if (e.a === "clean") return { head: "Marked " + tr + " as <b>clean</b>", sub: esc(keysSummary(e.keys)) };
   if (e.a === "edit") return { head: "Edited details of " + tr, sub: esc(keysSummary(e.keys)) };
   return { head: "Cleared " + tr + " without recording a harvest", sub: esc(keysSummary(e.keys)) + " · mistaken entry" };
 }
@@ -367,7 +385,7 @@ function capCards(list){
   h += '<div class="nl-cap"><div class="nl-cap-row"><span class="nl-cap-title">Plants</span><span class="nl-cap-num"><b>' + plants + '</b></span><span class="nl-cap-sub">full tray 120 · Ice Plant 80 · partial trays counted as recorded</span></div>' + bar(0, 0) + '</div>';
   h += '<div class="nl-cap ' + (rp ? "ok" : "") + '"><div class="nl-cap-row"><span class="nl-cap-title">Plants ready</span><span class="nl-cap-num"><b>' + rp + '</b></span><span class="nl-cap-sub">' + (plants - rp) + ' not ready</span></div>' + bar(rp, plants) + '</div>';
   h += '</div>';
-  const em = state.empties || {}, dirty = Object.keys(em).filter(k => em[k] === "dirty" && !state.trays[k] && parseKey(k)), clean = Object.keys(em).filter(k => em[k] === "clean" && !state.trays[k] && parseKey(k));
+  const em = state.empties || {}, dirty = Object.keys(em).filter(k => (empOf(em[k]) || {}).st === "dirty" && !state.trays[k] && parseKey(k)), clean = Object.keys(em).filter(k => (empOf(em[k]) || {}).st === "clean" && !state.trays[k] && parseKey(k));
   const ord = (k) => { const q = parseKey(k); return (q.r === "N" ? 0 : 100) + q.t * 1000 + q.p; };
   dirty.sort((a, b) => ord(a) - ord(b));
   const pre = list.filter(x => x.date && x.date < CUT).sort((a, b) => ord(a.k) - ord(b.k));
@@ -376,7 +394,7 @@ function capCards(list){
   const aged = list.map(x => ({ k: x.k, d: x.date ? daysBetween(x.date, today()) : null, rd: !!x.ready })).filter(x => x.d != null && x.d >= AGE_ALERT).sort((a, b) => b.d - a.d);
   h += '<div class="nl-cap" style="margin-top:8px;border-color:#1a237e;"><div class="nl-cap-row"><span class="nl-cap-title">Harvest first — ' + AGE_ALERT + '+ days since transplant</span><span class="nl-cap-num"><b>' + aged.length + '</b></span><span class="nl-cap-sub">' + aged.filter(x => x.rd).length + ' already ready</span></div>' +
     (aged.length ? '<div style="font-size:12.5px;line-height:1.6;margin-top:4px;">' + aged.slice(0, 40).map(x => { const q = parseKey(x.k); return esc(label(q.r, q.t, q.p)) + ' <b>' + x.d + 'd</b>' + (x.rd ? ' ✓' : ''); }).join(' · ') + (aged.length > 40 ? ' · +' + (aged.length - 40) + ' more' : '') + '<div style="opacity:.65;margin-top:3px;">Oldest first. ✓ = marked ready.</div></div>' : '<div style="font-size:12.5px;opacity:.7;">No tray is ' + AGE_ALERT + ' days or older yet.</div>') + '</div>';
-  h += '<div class="nl-cap" style="margin-top:8px;border-color:#8a5a2b;"><div class="nl-cap-row"><span class="nl-cap-title">Trays to clean</span><span class="nl-cap-num"><b>' + dirty.length + '</b></span><span class="nl-cap-sub">' + clean.length + ' empty trays marked clean</span></div>' +
+  h += '<div class="nl-cap' + (dirty.length ? ' l3-dirtycard' : '') + '" style="margin-top:8px;border-color:#8a5a2b;"><div class="nl-cap-row"><span class="nl-cap-title">Trays to clean</span><span class="nl-cap-num"><b>' + dirty.length + '</b></span><span class="nl-cap-sub">' + clean.length + ' empty trays marked clean</span></div>' +
     (dirty.length ? '<div style="font-size:12.5px;line-height:1.5;margin-top:4px;">' + esc(keysSummary(dirty)) + '</div>' : '<div style="font-size:12.5px;opacity:.7;">No dirty trays marked. Harvested trays are marked dirty automatically.</div>') + '</div>';
   return h;
 }
@@ -387,17 +405,17 @@ function cellHtml(r, t, p){
   const pre = !!(tr && tr.date && tr.date < CUT);
   const fresh = !!(tr && tr.date && daysBetween(tr.date, today()) != null && daysBetween(tr.date, today()) >= 0 && daysBetween(tr.date, today()) <= 2);
   const ageDays = tr && tr.date ? daysBetween(tr.date, today()) : null, aged = ageDays != null && ageDays >= AGE_ALERT;
-  const emp = !tr && state.empties && (state.empties[k] === "dirty" || state.empties[k] === "clean") ? state.empties[k] : "";
+  const eo = !tr && state.empties ? empOf(state.empties[k]) : null, emp = eo ? eo.st : "";
   const smp = !!(tr && tr.crop && !CROP_ORDER.includes(tr.crop)), off = !!(tr && tr.crop && tr.crop !== tierCrop && !smp);
   let cls = "l3m-cell" + (isSalted(r, t, p) ? " salt" : "") + (isBuffer(r, t, p) ? " buf" : "") + (tr ? (tr.ready ? " ready" : " grow") : "") + (off ? " off" : "") + (smp ? " smp" : "") + (emp ? " " + emp : "") + (pre ? " pre" : "") + (aged ? " old40" : "") + (sel.has(k) ? " sel" : "");
   let title = label(r, t, p) + " · " + cropAt(r, t) + (r === "N" && t <= 2 ? (isSalted(r, t, p) ? " · salted tank 3N1" : " · normal tank 3N2") : "") + (isBuffer(r, t, p) ? " · BUFFER tank (no nutrients, for crops ready to harvest)" : "");
   if (tr){
     const age = daysBetween(tr.date, today());
     title += " · " + (smp ? "SAMPLE: " + cropHere : off ? "HOLDS " + cropHere + " (wrong tier)" : cropHere) + (pre ? " · BEFORE 1 OCT — to be removed" : "") + (aged ? " · " + ageDays + " DAYS since transplant — harvest first" : "") + (fresh ? " · NEW — planted within 2 days" : "") + " · planted " + fmtFull(tr.date) + (age != null ? " (day " + age + ")" : "") + " · " + plOf(tr, cropHere) + " plants · " + (tr.ready ? "ready" : "not ready") + " · " + (tr.type === "old" ? "old crop" : "new crop") + (isAdmin && tr.pest ? " · pest (P)" : "");
-  } else title += " · empty" + (emp ? " (" + emp + ")" : "");
+  } else title += " · empty" + (emp ? " (" + emp + (eo.d ? " since " + fmtFull(eo.d) : "") + ")" : "");
   const pl = tr && plOf(tr, cropHere) !== ppt(cropHere) ? plOf(tr, cropHere) : "";
   const chips = ((off || smp) ? '<s class="cr">' + esc(SHORT[cropHere] || cropHere) + '</s>' : "") + (aged ? '<var class="ag">' + ageDays + 'd</var>' : "") + (fresh ? '<var class="nw">NEW</var>' : "");
-  return '<button type="button" class="' + cls + '" data-action="cell" data-k="' + k + '" title="' + esc(title) + '"><span class="tp">' + (tr && tr.pest ? '<strong class="pp">P</strong>' : "") + (pl !== "" ? '<em>' + pl + '</em>' : "") + '</span><b>' + p + '</b><i>' + (tr ? esc(fmtShort(tr.date)) : emp ? emp : "&nbsp;") + '</i><span class="ft">' + chips + '</span></button>';
+  return '<button type="button" class="' + cls + '" data-action="cell" data-k="' + k + '" title="' + esc(title) + '"><span class="tp">' + (tr && tr.pest ? '<strong class="pp">P</strong>' : "") + (pl !== "" ? '<em>' + pl + '</em>' : "") + '</span><b>' + p + '</b><i>' + (tr ? esc(fmtShort(tr.date)) : emp ? emp + (eo.d ? "<br>" + esc(fmtShort(eo.d)) : "") : "&nbsp;") + '</i><span class="ft">' + chips + '</span></button>';
 }
 
 function rackHtml(rk){
@@ -634,9 +652,9 @@ function openTray(k){
   const head = '<h3>' + label(q.r, q.t, q.p) + ' · ' + esc(crop) + '</h3>';
   const status = '<div class="field"><label>Status</label><select id="l3mStatus"><option value="0"' + (!tr || !tr.ready ? " selected" : "") + '>Not ready</option><option value="1"' + (tr && tr.ready ? " selected" : "") + '>Ready to harvest</option></select></div>';
   if (!tr){
-    const cur = state.empties && state.empties[k];
+    const curO = state.empties ? empOf(state.empties[k]) : null, cur = curO ? curO.st + (curO.d ? " since " + fmtFull(curO.d) : "") : "";
     openModal(head + '<div class="sub">Empty tray (' + (q.r === "N" ? "North" : "South") + ' rack, tier ' + q.t + ', position ' + q.p + ')' + (cur ? ' · currently marked <b>' + cur + '</b>' : '') + '.</div>' +
-      '<div class="field"><label>Label this empty tray</label><div class="nl-btnrow"><button class="btn" data-m="emptyMark" data-v="dirty" data-k="' + k + '" style="background:#dcc7ab;border-color:#8a5a2b;">Dirty — needs cleaning</button><button class="btn" data-m="emptyMark" data-v="clean" data-k="' + k + '" style="background:#e1f0fa;">Clean</button>' + (cur ? '<button class="btn" data-m="emptyMark" data-v="" data-k="' + k + '">Clear label</button>' : '') + '</div></div>' +
+      '<div class="field"><label>Label this empty tray</label><div class="field" style="margin:0 0 8px;"><label style="font-size:11px;">Date</label><input type="date" id="l3mEmpDate" value="' + today() + '"></div><div class="nl-btnrow"><button class="btn" data-m="emptyMark" data-v="dirty" data-k="' + k + '" style="background:#dcc7ab;border-color:#8a5a2b;">Dirty — needs cleaning</button><button class="btn" data-m="emptyMark" data-v="clean" data-k="' + k + '" style="background:#e1f0fa;">Clean</button>' + (cur ? '<button class="btn" data-m="emptyMark" data-v="" data-k="' + k + '">Clear label</button>' : '') + '</div></div>' +
       '<div class="sub" style="margin-top:10px;"><b>Or transplant a crop into it:</b></div>' +
       '<div class="row2"><div class="field"><label>Date planted</label><input type="date" id="l3mDate" value="' + today() + '"></div><div class="field"><label>New or old crop</label>' + typeSel("new") + '</div></div>' + cropSel(tierCrop, tierCrop, false) + plantsField(crop, "") + status +
       '<div class="modal-actions"><button class="btn" data-m="cancel">Cancel</button><button class="btn primary" data-m="saveTray" data-k="' + k + '">Transplant</button></div>');
@@ -662,8 +680,8 @@ function saveTray(k){
   }).then(ok => { if (ok) closeModal(); });
 }
 
-function setEmpty(keys, v){
-  return mutate(s => { s.empties = s.empties || {}; keys.forEach(k => { if (s.trays[k]) return; if (v === "dirty" || v === "clean") s.empties[k] = v; else delete s.empties[k]; }); });
+function setEmpty(keys, v, date){
+  return mutate(s => { s.empties = s.empties || {}; keys.forEach(k => { if (s.trays[k]) return; if (v === "dirty" || v === "clean") s.empties[k] = v + "|" + (date || today()); else delete s.empties[k]; }); });
 }
 
 function emptyKeys(){ return [...sel].filter(k => !state.trays[k]); }
@@ -728,7 +746,7 @@ function takePlants(s, keys, amt, kind, date, note){
     const tr = s.trays[k]; if (!tr) continue;
     const crop = cropOfKey(k, s.trays), have = plOf(tr, crop), take = Math.min(have, left);
     const base = { k, crop, date: tr.date, readyDate: tr.readyDate || null, type: tr.type === "old" ? "old" : "new", exitType: kind, exitDate: date };
-    if (take >= have){ s.history.push(Object.assign(base, { plants: have, note: note || "" })); delete s.trays[k]; s.empties = s.empties || {}; s.empties[k] = "dirty"; }
+    if (take >= have){ s.history.push(Object.assign(base, { plants: have, note: note || "" })); delete s.trays[k]; s.empties = s.empties || {}; s.empties[k] = "dirty|" + (date || today()); }
     else { s.history.push(Object.assign(base, { plants: take, note: "partial (" + take + " of " + have + ")" + (note ? " · " + note : "") })); tr.plants = have - take; }
     left -= take; took += take;
   }
@@ -945,7 +963,7 @@ function onClick(e){
       if (!confirm("Empty this tray without recording it in the history? Use this for a mistaken entry.")) return;
       return mutate(s => { delete s.trays[m.dataset.k]; }).then(ok => { if (ok) closeModal(); });
     }
-    if (a === "emptyMark") return setEmpty([m.dataset.k], m.dataset.v).then(ok => { if (ok) closeModal(); });
+    if (a === "emptyMark") return setEmpty([m.dataset.k], m.dataset.v, (document.getElementById("l3mEmpDate") || {}).value).then(ok => { if (ok) closeModal(); });
     if (a === "saveTransplant") return saveTransplant(m.dataset.keys.split(","));
     if (a === "saveFill") return saveFill(m.dataset.r, +m.dataset.t);
     if (a === "saveExit") return saveExit(m.dataset.kind, m.dataset.keys.split(","));
