@@ -141,6 +141,7 @@ const STYLE = `
   .tabs{align-items:stretch}
   .l3m-cells{grid-template-columns:repeat(6,minmax(0,1fr)) !important;gap:5px}
   .l3m-cell{min-height:72px;padding:2px 1px 2px}
+  .l3m-cell s.cr{white-space:normal;text-overflow:clip;overflow-wrap:anywhere;text-align:center;font-size:8px}
   .l3m-cell b{font-size:15px}
   .l3m-th{gap:6px}
   .l3m-th button{font-size:13px;padding:6px 11px}
