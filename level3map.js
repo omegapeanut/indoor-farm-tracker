@@ -31,7 +31,7 @@ const TOTAL = TIERS.length * (11 + 13);
 const cropAt = (r, t) => RACKS.find(x => x.id === r).tiers[t];
 const ppt = (crop) => (crop === "Ice Plant" ? 80 : 120);
 // Ice Plant tiers (North T1, T2): trays 1-3 and 9-11 are on the salted tank 3N1, the middle trays 4-8 on the normal nutrient tank 3N2.
-const isBuffer = (r, t, p) => r === "S" && p <= 2;
+const isBuffer = (r, t, p) => r === "S" && p <= 1;
 const isSalted = (r, t, p) => r === "N" && (t === 1 || t === 2) && (p <= 3 || p >= 9);
 const keyOf = (r, t, p) => r + t + "-" + p;
 function parseKey(k){ const m = /^([NS])(\d)-(\d+)$/.exec(k); return m ? { r: m[1], t: +m[2], p: +m[3] } : null; }
@@ -248,7 +248,7 @@ function rackHtml(rk){
     for (let p = 1; p <= posOf(rk.id); p++){ const tr = state.trays[keyOf(rk.id, t, p)]; if (tr){ used.push(p); if (tr.ready) ready.push(p); } }
     h += '<div class="l3m-tier"><div class="l3m-th"><span class="t" data-action="tier" data-r="' + rk.id + '" data-t="' + t + '">T' + t + '</span><span class="c">' + esc(rk.tiers[t]) + '</span>' +
       '<span class="n">' + used.length + '/' + posOf(rk.id) + (ready.length ? ' · ' + ready.length + ' ready' : '') + '</span>' +
-      (rk.id === "S" ? '<span class="salt" style="color:#2f7f86;font-weight:700;">S1–S2 = buffer tank (no nutrients · for crops ready to harvest)</span>' : '') + (rk.id === "N" && t <= 2 ? '<span class="salt">dashed = salted tank 3N1 (trays 1-3, 9-11) · plain = normal tank 3N2 (trays 4-8)</span>' : '') +
+      (rk.id === "S" ? '<span class="salt" style="color:#2f7f86;font-weight:700;">S1 = buffer tank (no nutrients · for crops ready to harvest)</span>' : '') + (rk.id === "N" && t <= 2 ? '<span class="salt">dashed = salted tank 3N1 (trays 1-3, 9-11) · plain = normal tank 3N2 (trays 4-8)</span>' : '') +
       (isAdmin ? '<button class="btn" data-action="fillTier" data-r="' + rk.id + '" data-t="' + t + '">+ Transplant</button>' + (ready.length ? '<button class="btn" data-action="harvestTier" data-r="' + rk.id + '" data-t="' + t + '">Harvest ready</button>' : '') : '') +
       '</div><div class="l3m-cells" style="grid-template-columns:repeat(' + posOf(rk.id) + ',minmax(40px,1fr));">';
     { const order = []; for (let p = 1; p <= posOf(rk.id); p++) order.push(p); if (rk.id === "S") order.reverse(); order.forEach(p => { h += cellHtml(rk.id, t, p); }); }
@@ -374,18 +374,18 @@ function floorPlan(){
     '<rect x="' + X0 + '" y="' + (RAILN + 18) + '" width="200" height="50" rx="6" fill="#fff" stroke="#35473a" stroke-width="2.5"/>' + text(X0 + 100, RAILN + 39, "AGV TROLLEY", 13, 700) + text(X0 + 100, RAILN + 56, "MAIN ENTRANCE", 11, 600) +
     line(X0, RAILN + 84, 970, RAILN + 84, true, true) + text(X0 + 5, RAILN + 98, "Robot rail (south)", 10, 400, "#777", "start");
   const bfc = cx(0), s2c = (cx(1) + cx(3)) / 2, s1c = (cx(4) + cx(6)) / 2;
-  const sRows = (t) => [{ r: "S", t, ps: range(3, posOf("S")).reverse() }];
-  const bufRows = TIERS.map(t => ({ r: "S", t, ps: [2, 1], lab: "T" + t }));
+  const sRows = (t) => [{ r: "S", t, ps: range(2, posOf("S")).reverse() }];
+  const bufRows = TIERS.map(t => ({ r: "S", t, ps: [1], lab: "T" + t }));
   s += tank(s2c, STK, 140, "3S2", "L3 South side tank-2", "3 tanks sharing", [6, 5, 4].map(sRows).flat(), false, false);
   s += tank(s1c, STK, 140, "3S1", "L3 South side tank-1", "3 tanks sharing", [3, 2, 1].map(sRows).flat(), false, false);
   s += tank(bfc, STK, 124, "Buffer", "Slot 1", "2 tanks sharing", bufRows, false, false);
   const pipeS = (from, to, tcx, dashed) => { let o = ""; for (let i = from; i <= to; i++) o += line(cx(i), SBUS, cx(i), SY, dashed); return o + line(cx(from), SBUS, cx(to), SBUS, dashed) + line(tcx, STK + 66, tcx, SBUS, dashed); };
   s += pipeS(0, 0, bfc, false) + pipeS(1, 3, s2c, false) + pipeS(4, 6, s1c, false);
-  TIERS.forEach((t, i) => { s += box({ title: "T" + t + " · " + SHORT[S.tiers[t]], rows: [{ r: "S", t, ps: range(3, posOf("S")).reverse(), lab: "T" + t }], note: "S" + posOf("S") + "–S3" }, i + 1, SY); });
-  s += box({ title: "Buffer · T1–T6", sub: "Tray 1, 2 of every tier", bh: 132, rowGap: 9, rows: bufRows, note: "S2–S1 · all tiers" }, 0, SY);
+  TIERS.forEach((t, i) => { s += box({ title: "T" + t + " · " + SHORT[S.tiers[t]], rows: [{ r: "S", t, ps: range(2, posOf("S")).reverse(), lab: "T" + t }], note: "S" + posOf("S") + "–S2" }, i + 1, SY); });
+  s += box({ title: "Buffer · T1–T6", sub: "Tray 1 of every tier", bh: 132, rowGap: 9, rows: bufRows, note: "S1 · all tiers" }, 0, SY);
   s += text(X0, 636, "SOUTH RACK", 11, 600, "#777", "start");
   s += '</svg>';
-  return '<p class="hint l3-swipe">Swipe sideways to see the whole plan →</p><div style="overflow-x:auto;-webkit-overflow-scrolling:touch;">' + s + '</div><p class="hint" style="margin-top:6px;">Laid out like the tank diagram. Each box is one crop on one tank. Small squares are its trays: white = free, pink = growing, green = ready. Dashed = salted tank 3N1 (Ice Plant trays 1-3 and 9-11 of T1 and T2). The Ice Plant middle trays (4-8 of both tiers) use the normal tank 3N2. South trays S3–S13 of each tier are on 3S2 (T6–T4) and 3S1 (T3–T1); trays S1–S2 of every tier are on the Buffer tank. Tap a box to jump to it in the tray map.</p>';
+  return '<p class="hint l3-swipe">Swipe sideways to see the whole plan →</p><div style="overflow-x:auto;-webkit-overflow-scrolling:touch;">' + s + '</div><p class="hint" style="margin-top:6px;">Laid out like the tank diagram. Each box is one crop on one tank. Small squares are its trays: white = free, pink = growing, green = ready. Dashed = salted tank 3N1 (Ice Plant trays 1-3 and 9-11 of T1 and T2). The Ice Plant middle trays (4-8 of both tiers) use the normal tank 3N2. South trays S2–S13 of each tier are on 3S2 (T6–T4) and 3S1 (T3–T1); tray S1 of every tier is on the Buffer tank. Tap a box to jump to it in the tray map.</p>';
 }
 
 // Crops consolidated by planting period: before 1 Oct vs from 1 Oct, with the dates and totals.
@@ -438,7 +438,7 @@ function render(){
   }
   h += blk("02", "Floor plan — what is free", floorPlan());
   h += blk("03", "Tray map", actions +
-    '<div class="l3m-leg"><span><u></u>Empty</span><span><u style="background:var(--blush,#ecd6cb)"></u>Growing</span><span><u style="background:var(--sage,#d3dccf)"></u>Ready</span><span><u style="border-style:dashed;border-color:#5b8db8"></u>Salted water</span><span><u style="background:#f7d9a6;border-color:#d4871c"></u>Wrong tier (shift back later)</span><span><u style="background:#ddd5f3;border-color:#6b5bb0"></u>Sample / test crop</span><span><u style="background:linear-gradient(90deg,#c62828 30%,#fff 30%)"></u>Planted before 1 Oct — to remove</span><span><u style="background:linear-gradient(#fff 60%,#2f7f86 60%)"></u>Buffer tank (S1–S2, no nutrients)</span><span><u style="background:#dcc7ab;border-color:#8a5a2b"></u>Empty · dirty</span><span><u style="background:#e1f0fa"></u>Empty · clean</span><span>Number = tray position · small text = date planted</span></div>' +
+    '<div class="l3m-leg"><span><u></u>Empty</span><span><u style="background:var(--blush,#ecd6cb)"></u>Growing</span><span><u style="background:var(--sage,#d3dccf)"></u>Ready</span><span><u style="border-style:dashed;border-color:#5b8db8"></u>Salted water</span><span><u style="background:#f7d9a6;border-color:#d4871c"></u>Wrong tier (shift back later)</span><span><u style="background:#ddd5f3;border-color:#6b5bb0"></u>Sample / test crop</span><span><u style="background:linear-gradient(90deg,#c62828 30%,#fff 30%)"></u>Planted before 1 Oct — to remove</span><span><u style="background:linear-gradient(#fff 60%,#2f7f86 60%)"></u>Buffer tank (S1, no nutrients)</span><span><u style="background:#dcc7ab;border-color:#8a5a2b"></u>Empty · dirty</span><span><u style="background:#e1f0fa"></u>Empty · clean</span><span>Number = tray position · small text = date planted</span></div>' +
     '<div class="' + (isAdmin ? "l3m-adm" : "") + '">' + rackHtml(RACKS[0]) + rackHtml(RACKS[1]) + '</div>' + selBar());
   h += '<section class="nl-block"><div class="nl-bh nl-toggle" data-action="toggleDates" style="cursor:pointer;"><span class="nl-no">04</span><span class="nl-bt">Dates by crop</span><span class="nl-count">' + plural(list.length, "tray") + ' · ' + (showDates ? "Hide ▴" : "Show ▾") + '</span></div>' + (showDates ? datesTable(list) : "") + '</section>';
   h += blk("05", "Consolidation — before 1 Oct vs from 1 Oct", consolidation(list));
