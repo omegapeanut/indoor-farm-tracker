@@ -105,6 +105,8 @@ const STYLE = `
 .l3r-save{position:fixed;left:0;right:0;bottom:0;padding:12px 18px 18px;background:linear-gradient(transparent,var(--bg,#eee8e2) 30%)}
 .l3r-save .in{max-width:920px;margin:0 auto}
 .l3m-cell{position:relative}.l3m-cell em{position:absolute;top:0;right:2px;font-size:9px;font-style:normal;font-weight:800;color:#9a4a3a}
+.l3m-cell.pre{box-shadow:inset 6px 0 0 #c62828}
+.l3m-cell.pre i{color:#b71c1c;font-weight:800;opacity:1}
 .l3m-cell.buf{padding-bottom:10px}
 .l3m-cell.buf::after{content:"BUFFER";position:absolute;left:0;right:0;bottom:0;height:10px;line-height:10px;font-size:6.5px;font-weight:800;letter-spacing:.05em;color:#fff;background:#2f7f86;border-radius:0 0 6px 6px}
 .l3m-cell.dirty{background:#dcc7ab;border-color:#8a5a2b;border-width:2px}
@@ -216,6 +218,9 @@ function capCards(list){
   const em = state.empties || {}, dirty = Object.keys(em).filter(k => em[k] === "dirty" && !state.trays[k] && parseKey(k)), clean = Object.keys(em).filter(k => em[k] === "clean" && !state.trays[k] && parseKey(k));
   const ord = (k) => { const q = parseKey(k); return (q.r === "N" ? 0 : 100) + q.t * 1000 + q.p; };
   dirty.sort((a, b) => ord(a) - ord(b));
+  const pre = list.filter(x => x.date && x.date < CUT).sort((a, b) => ord(a.k) - ord(b.k));
+  h += '<div class="nl-cap" style="margin-top:8px;border-color:#c62828;"><div class="nl-cap-row"><span class="nl-cap-title">To remove — planted before 1 Oct</span><span class="nl-cap-num"><b>' + pre.length + '</b></span><span class="nl-cap-sub">' + pre.reduce((s2, x) => s2 + trayPlants(x), 0) + ' plants</span></div>' +
+    (pre.length ? '<div style="font-size:12.5px;line-height:1.5;margin-top:4px;">' + esc(keysSummary(pre.map(x => x.k))) + '</div>' : '<div style="font-size:12.5px;opacity:.7;">None. Every tray was planted from 1 Oct.</div>') + '</div>';
   h += '<div class="nl-cap" style="margin-top:8px;border-color:#8a5a2b;"><div class="nl-cap-row"><span class="nl-cap-title">Trays to clean</span><span class="nl-cap-num"><b>' + dirty.length + '</b></span><span class="nl-cap-sub">' + clean.length + ' empty trays marked clean</span></div>' +
     (dirty.length ? '<div style="font-size:12.5px;line-height:1.5;margin-top:4px;">' + esc(keysSummary(dirty)) + '</div>' : '<div style="font-size:12.5px;opacity:.7;">No dirty trays marked. Harvested trays are marked dirty automatically.</div>') + '</div>';
   return h;
@@ -224,13 +229,14 @@ function capCards(list){
 function cellHtml(r, t, p){
   const k = keyOf(r, t, p), tr = state.trays[k];
   const tierCrop = cropAt(r, t), cropHere = (tr && tr.crop) || tierCrop;
+  const pre = !!(tr && tr.date && tr.date < CUT);
   const emp = !tr && state.empties && (state.empties[k] === "dirty" || state.empties[k] === "clean") ? state.empties[k] : "";
   const smp = !!(tr && tr.crop && !CROP_ORDER.includes(tr.crop)), off = !!(tr && tr.crop && tr.crop !== tierCrop && !smp);
-  let cls = "l3m-cell" + (isSalted(r, t, p) ? " salt" : "") + (isBuffer(r, t, p) ? " buf" : "") + (tr ? (tr.ready ? " ready" : " grow") : "") + (off ? " off" : "") + (smp ? " smp" : "") + (emp ? " " + emp : "") + (sel.has(k) ? " sel" : "");
+  let cls = "l3m-cell" + (isSalted(r, t, p) ? " salt" : "") + (isBuffer(r, t, p) ? " buf" : "") + (tr ? (tr.ready ? " ready" : " grow") : "") + (off ? " off" : "") + (smp ? " smp" : "") + (emp ? " " + emp : "") + (pre ? " pre" : "") + (sel.has(k) ? " sel" : "");
   let title = label(r, t, p) + " · " + cropAt(r, t) + (r === "N" && t <= 2 ? (isSalted(r, t, p) ? " · salted tank 3N1" : " · normal tank 3N2") : "") + (isBuffer(r, t, p) ? " · BUFFER tank (no nutrients, for crops ready to harvest)" : "");
   if (tr){
     const age = daysBetween(tr.date, today());
-    title += " · " + (smp ? "SAMPLE: " + cropHere : off ? "HOLDS " + cropHere + " (wrong tier)" : cropHere) + " · planted " + fmtFull(tr.date) + (age != null ? " (day " + age + ")" : "") + " · " + plOf(tr, cropHere) + " plants · " + (tr.ready ? "ready" : "not ready") + " · " + (tr.type === "old" ? "old crop" : "new crop") + (isAdmin && tr.pest ? " · pest (P)" : "");
+    title += " · " + (smp ? "SAMPLE: " + cropHere : off ? "HOLDS " + cropHere + " (wrong tier)" : cropHere) + (pre ? " · BEFORE 1 OCT — to be removed" : "") + " · planted " + fmtFull(tr.date) + (age != null ? " (day " + age + ")" : "") + " · " + plOf(tr, cropHere) + " plants · " + (tr.ready ? "ready" : "not ready") + " · " + (tr.type === "old" ? "old crop" : "new crop") + (isAdmin && tr.pest ? " · pest (P)" : "");
   } else title += " · empty" + (emp ? " (" + emp + ")" : "");
   return '<button type="button" class="' + cls + '" data-action="cell" data-k="' + k + '" title="' + esc(title) + '"><b>' + p + '</b><i>' + (tr ? esc(fmtShort(tr.date)) : emp ? emp : "&nbsp;") + '</i>' + ((off || smp) ? '<s class="cr">' + esc(SHORT[cropHere] || cropHere) + '</s>' : "") + (tr && tr.pest ? '<strong class="pp">P</strong>' : "") + (tr && plOf(tr, cropHere) !== ppt(cropHere) ? '<em>' + plOf(tr, cropHere) + '</em>' : "") + '</button>';
 }
@@ -432,7 +438,7 @@ function render(){
   }
   h += blk("02", "Floor plan — what is free", floorPlan());
   h += blk("03", "Tray map", actions +
-    '<div class="l3m-leg"><span><u></u>Empty</span><span><u style="background:var(--blush,#ecd6cb)"></u>Growing</span><span><u style="background:var(--sage,#d3dccf)"></u>Ready</span><span><u style="border-style:dashed;border-color:#5b8db8"></u>Salted water</span><span><u style="background:#f7d9a6;border-color:#d4871c"></u>Wrong tier (shift back later)</span><span><u style="background:#ddd5f3;border-color:#6b5bb0"></u>Sample / test crop</span><span><u style="background:linear-gradient(#fff 60%,#2f7f86 60%)"></u>Buffer tank (S1–S2, no nutrients)</span><span><u style="background:#dcc7ab;border-color:#8a5a2b"></u>Empty · dirty</span><span><u style="background:#e1f0fa"></u>Empty · clean</span><span>Number = tray position · small text = date planted</span></div>' +
+    '<div class="l3m-leg"><span><u></u>Empty</span><span><u style="background:var(--blush,#ecd6cb)"></u>Growing</span><span><u style="background:var(--sage,#d3dccf)"></u>Ready</span><span><u style="border-style:dashed;border-color:#5b8db8"></u>Salted water</span><span><u style="background:#f7d9a6;border-color:#d4871c"></u>Wrong tier (shift back later)</span><span><u style="background:#ddd5f3;border-color:#6b5bb0"></u>Sample / test crop</span><span><u style="background:linear-gradient(90deg,#c62828 30%,#fff 30%)"></u>Planted before 1 Oct — to remove</span><span><u style="background:linear-gradient(#fff 60%,#2f7f86 60%)"></u>Buffer tank (S1–S2, no nutrients)</span><span><u style="background:#dcc7ab;border-color:#8a5a2b"></u>Empty · dirty</span><span><u style="background:#e1f0fa"></u>Empty · clean</span><span>Number = tray position · small text = date planted</span></div>' +
     '<div class="' + (isAdmin ? "l3m-adm" : "") + '">' + rackHtml(RACKS[0]) + rackHtml(RACKS[1]) + '</div>' + selBar());
   h += '<section class="nl-block"><div class="nl-bh nl-toggle" data-action="toggleDates" style="cursor:pointer;"><span class="nl-no">04</span><span class="nl-bt">Dates by crop</span><span class="nl-count">' + plural(list.length, "tray") + ' · ' + (showDates ? "Hide ▴" : "Show ▾") + '</span></div>' + (showDates ? datesTable(list) : "") + '</section>';
   h += blk("05", "Consolidation — before 1 Oct vs from 1 Oct", consolidation(list));
