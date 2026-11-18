@@ -31,6 +31,7 @@ const TOTAL = TIERS.length * (11 + 13);
 const cropAt = (r, t) => RACKS.find(x => x.id === r).tiers[t];
 const ppt = (crop) => (crop === "Ice Plant" ? 80 : 120);
 // Ice Plant tiers (North T1, T2): trays 1-3 and 9-11 are on the salted tank 3N1, the middle trays 4-8 on the normal nutrient tank 3N2.
+const isBuffer = (r, t, p) => r === "S" && p <= 2;
 const isSalted = (r, t, p) => r === "N" && (t === 1 || t === 2) && (p <= 3 || p >= 9);
 const keyOf = (r, t, p) => r + t + "-" + p;
 function parseKey(k){ const m = /^([NS])(\d)-(\d+)$/.exec(k); return m ? { r: m[1], t: +m[2], p: +m[3] } : null; }
@@ -104,6 +105,8 @@ const STYLE = `
 .l3r-save{position:fixed;left:0;right:0;bottom:0;padding:12px 18px 18px;background:linear-gradient(transparent,var(--bg,#eee8e2) 30%)}
 .l3r-save .in{max-width:920px;margin:0 auto}
 .l3m-cell{position:relative}.l3m-cell em{position:absolute;top:0;right:2px;font-size:9px;font-style:normal;font-weight:800;color:#9a4a3a}
+.l3m-cell.buf{padding-bottom:10px}
+.l3m-cell.buf::after{content:"BUFFER";position:absolute;left:0;right:0;bottom:0;height:10px;line-height:10px;font-size:6.5px;font-weight:800;letter-spacing:.05em;color:#fff;background:#2f7f86;border-radius:0 0 6px 6px}
 .l3m-cell.dirty{background:#dcc7ab;border-color:#8a5a2b;border-width:2px}
 .l3m-cell.dirty i{opacity:1;font-weight:800;color:#6b3f12;font-size:10px}
 .l3m-cell.clean{background:#e1f0fa}
@@ -223,8 +226,8 @@ function cellHtml(r, t, p){
   const tierCrop = cropAt(r, t), cropHere = (tr && tr.crop) || tierCrop;
   const emp = !tr && state.empties && (state.empties[k] === "dirty" || state.empties[k] === "clean") ? state.empties[k] : "";
   const smp = !!(tr && tr.crop && !CROP_ORDER.includes(tr.crop)), off = !!(tr && tr.crop && tr.crop !== tierCrop && !smp);
-  let cls = "l3m-cell" + (isSalted(r, t, p) ? " salt" : "") + (tr ? (tr.ready ? " ready" : " grow") : "") + (off ? " off" : "") + (smp ? " smp" : "") + (emp ? " " + emp : "") + (sel.has(k) ? " sel" : "");
-  let title = label(r, t, p) + " · " + cropAt(r, t) + (r === "N" && t <= 2 ? (isSalted(r, t, p) ? " · salted tank 3N1" : " · normal tank 3N2") : "");
+  let cls = "l3m-cell" + (isSalted(r, t, p) ? " salt" : "") + (isBuffer(r, t, p) ? " buf" : "") + (tr ? (tr.ready ? " ready" : " grow") : "") + (off ? " off" : "") + (smp ? " smp" : "") + (emp ? " " + emp : "") + (sel.has(k) ? " sel" : "");
+  let title = label(r, t, p) + " · " + cropAt(r, t) + (r === "N" && t <= 2 ? (isSalted(r, t, p) ? " · salted tank 3N1" : " · normal tank 3N2") : "") + (isBuffer(r, t, p) ? " · BUFFER tank (no nutrients, for crops ready to harvest)" : "");
   if (tr){
     const age = daysBetween(tr.date, today());
     title += " · " + (smp ? "SAMPLE: " + cropHere : off ? "HOLDS " + cropHere + " (wrong tier)" : cropHere) + " · planted " + fmtFull(tr.date) + (age != null ? " (day " + age + ")" : "") + " · " + plOf(tr, cropHere) + " plants · " + (tr.ready ? "ready" : "not ready") + " · " + (tr.type === "old" ? "old crop" : "new crop") + (isAdmin && tr.pest ? " · pest (P)" : "");
@@ -239,7 +242,7 @@ function rackHtml(rk){
     for (let p = 1; p <= posOf(rk.id); p++){ const tr = state.trays[keyOf(rk.id, t, p)]; if (tr){ used.push(p); if (tr.ready) ready.push(p); } }
     h += '<div class="l3m-tier"><div class="l3m-th"><span class="t" data-action="tier" data-r="' + rk.id + '" data-t="' + t + '">T' + t + '</span><span class="c">' + esc(rk.tiers[t]) + '</span>' +
       '<span class="n">' + used.length + '/' + posOf(rk.id) + (ready.length ? ' · ' + ready.length + ' ready' : '') + '</span>' +
-      (rk.id === "N" && t <= 2 ? '<span class="salt">dashed = salted tank 3N1 (trays 1-3, 9-11) · plain = normal tank 3N2 (trays 4-8)</span>' : '') +
+      (rk.id === "S" ? '<span class="salt" style="color:#2f7f86;font-weight:700;">S1–S2 = buffer tank (no nutrients · for crops ready to harvest)</span>' : '') + (rk.id === "N" && t <= 2 ? '<span class="salt">dashed = salted tank 3N1 (trays 1-3, 9-11) · plain = normal tank 3N2 (trays 4-8)</span>' : '') +
       (isAdmin ? '<button class="btn" data-action="fillTier" data-r="' + rk.id + '" data-t="' + t + '">+ Transplant</button>' + (ready.length ? '<button class="btn" data-action="harvestTier" data-r="' + rk.id + '" data-t="' + t + '">Harvest ready</button>' : '') : '') +
       '</div><div class="l3m-cells" style="grid-template-columns:repeat(' + posOf(rk.id) + ',minmax(40px,1fr));">';
     for (let p = 1; p <= posOf(rk.id); p++) h += cellHtml(rk.id, t, p);
@@ -429,7 +432,7 @@ function render(){
   }
   h += blk("02", "Floor plan — what is free", floorPlan());
   h += blk("03", "Tray map", actions +
-    '<div class="l3m-leg"><span><u></u>Empty</span><span><u style="background:var(--blush,#ecd6cb)"></u>Growing</span><span><u style="background:var(--sage,#d3dccf)"></u>Ready</span><span><u style="border-style:dashed;border-color:#5b8db8"></u>Salted water</span><span><u style="background:#f7d9a6;border-color:#d4871c"></u>Wrong tier (shift back later)</span><span><u style="background:#ddd5f3;border-color:#6b5bb0"></u>Sample / test crop</span><span><u style="background:#dcc7ab;border-color:#8a5a2b"></u>Empty · dirty</span><span><u style="background:#e1f0fa"></u>Empty · clean</span><span>Number = tray position · small text = date planted</span></div>' +
+    '<div class="l3m-leg"><span><u></u>Empty</span><span><u style="background:var(--blush,#ecd6cb)"></u>Growing</span><span><u style="background:var(--sage,#d3dccf)"></u>Ready</span><span><u style="border-style:dashed;border-color:#5b8db8"></u>Salted water</span><span><u style="background:#f7d9a6;border-color:#d4871c"></u>Wrong tier (shift back later)</span><span><u style="background:#ddd5f3;border-color:#6b5bb0"></u>Sample / test crop</span><span><u style="background:linear-gradient(#fff 60%,#2f7f86 60%)"></u>Buffer tank (S1–S2, no nutrients)</span><span><u style="background:#dcc7ab;border-color:#8a5a2b"></u>Empty · dirty</span><span><u style="background:#e1f0fa"></u>Empty · clean</span><span>Number = tray position · small text = date planted</span></div>' +
     '<div class="' + (isAdmin ? "l3m-adm" : "") + '">' + rackHtml(RACKS[0]) + rackHtml(RACKS[1]) + '</div>' + selBar());
   h += '<section class="nl-block"><div class="nl-bh nl-toggle" data-action="toggleDates" style="cursor:pointer;"><span class="nl-no">04</span><span class="nl-bt">Dates by crop</span><span class="nl-count">' + plural(list.length, "tray") + ' · ' + (showDates ? "Hide ▴" : "Show ▾") + '</span></div>' + (showDates ? datesTable(list) : "") + '</section>';
   h += blk("05", "Consolidation — before 1 Oct vs from 1 Oct", consolidation(list));
