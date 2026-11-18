@@ -39,8 +39,9 @@ function parseKey(k){ const m = /^([NS])(\d)-(\d+)$/.exec(k); return m ? { r: m[
 const cropOfKey = (k, trays) => { const q = parseKey(k); if (!q) return ""; const tr = (trays || state.trays)[k]; return (tr && tr.crop) || cropAt(q.r, q.t); };
 const tierCropOfKey = (k) => { const q = parseKey(k); return q ? cropAt(q.r, q.t) : ""; };
 
-let state = { trays: {}, history: [], empties: {} };
+let state = { trays: {}, history: [], empties: {}, log: [] };
 let multi = false;
+let logN = 20, logWho = "all";
 let loaded = false, isAdmin = false, loadError = "", showHistory = false, showDates = true, last = null;
 const sel = new Set();
 
@@ -130,6 +131,35 @@ const STYLE = `
 .l3m-cell.lp{transform:scale(.94);opacity:.7}
 .l3m-cell.drop{outline:3px solid #2e7d32;outline-offset:1px;background:#d9efd5}
 .l3m-ghost{position:fixed;z-index:3000;pointer-events:none;background:#35473a;color:#fff;border-radius:12px;padding:8px 12px;font:700 14px Inter,system-ui,sans-serif;box-shadow:0 6px 18px rgba(0,0,0,.35);transform:translate(-50%,-130%)}
+.al-stats{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:2px 0 12px}
+.al-st{background:var(--card,#f7f3ee);border:1px solid rgba(0,0,0,.1);border-radius:12px;padding:10px 12px}
+.al-st b{display:block;font-size:24px;line-height:1.1;color:#35473a}
+.al-st span{display:block;font-size:11px;letter-spacing:.03em;text-transform:uppercase;opacity:.65;margin-top:3px}
+.al-chips{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 10px}
+.al-chip{display:inline-flex;align-items:center;gap:6px;font:600 13px Inter,system-ui,sans-serif;border:1.5px solid rgba(0,0,0,.18);background:#fff;color:#35473a;border-radius:999px;padding:5px 11px 5px 6px;cursor:pointer}
+.al-chip:first-child{padding-left:11px}
+.al-chip i{display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:50%;color:#fff;font-style:normal;font-size:11px;font-weight:800}
+.al-chip small{opacity:.6;font-weight:700}
+.al-chip.on{background:#35473a;color:#fff;border-color:#35473a}
+.al-chip.on small{opacity:.8}
+.al-list{border:1px solid rgba(0,0,0,.1);border-radius:14px;background:#fff;overflow:hidden}
+.al-day{background:#f1ece5;font-size:11px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:#6b665e;padding:6px 14px;border-top:1px solid rgba(0,0,0,.06)}
+.al-day:first-child{border-top:0}
+.al-row{display:flex;align-items:flex-start;gap:12px;padding:11px 14px;border-top:1px solid rgba(0,0,0,.06)}
+.al-day + .al-row{border-top:0}
+.al-av{flex:0 0 auto;width:34px;height:34px;border-radius:50%;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:15px}
+.al-mid{flex:1 1 auto;min-width:0}
+.al-top{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.al-by{font-weight:800;font-size:14px;color:#2c3a30}
+.al-bd{font-size:10.5px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;border-radius:999px;padding:2px 8px}
+.al-bd.hv{background:#d3e6d0;color:#1f5d2a}.al-bd.dp{background:#f6d4d0;color:#9a2a22}.al-bd.tp{background:#d6e6f2;color:#1e5b86}
+.al-bd.sh{background:#e3dcf4;color:#4a3a94}.al-bd.rd{background:#f7e6b8;color:#7a5600}.al-bd.ed{background:#e8e4de;color:#5b564e}.al-bd.rm{background:#ead9d9;color:#7a3a3a}
+.al-hd{font-size:14px;margin-top:3px;color:#2c3a30;overflow-wrap:anywhere}
+.al-sub{font-size:12.5px;opacity:.7;margin-top:2px;overflow-wrap:anywhere}
+.al-tm{flex:0 0 auto;text-align:right;font-size:11.5px;line-height:1.3}
+.al-tm b{display:block;font-size:13px}
+.al-tm span{opacity:.6;white-space:nowrap}
+.al-foot{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-top:10px;font-size:12.5px;opacity:.9}
 .l3-swipe{display:none}
 @media (max-width:640px){
   .nl-table{display:block;overflow-x:auto;max-width:100%;-webkit-overflow-scrolling:touch}
@@ -144,6 +174,9 @@ const STYLE = `
   .l3m-cell{min-height:72px;padding:2px 1px 2px}
   .l3m-cell s.cr{white-space:normal;text-overflow:clip;overflow-wrap:anywhere;text-align:center;font-size:8px}
   .l3m-cell b{font-size:15px}
+  .al-stats{grid-template-columns:repeat(2,1fr)}
+  .al-row{padding:10px 10px;gap:9px}
+  .al-av{width:30px;height:30px;font-size:13px}
   .l3m-th{gap:6px}
   .l3m-th button{font-size:13px;padding:6px 11px}
   .l3-swipe{display:block}
@@ -171,7 +204,7 @@ function init(){
   onSnapshot(REF, (snap) => {
     if (snap.exists()){
       const d = snap.data();
-      state = { trays: d.trays && typeof d.trays === "object" ? d.trays : {}, history: Array.isArray(d.history) ? d.history : [], empties: d.empties && typeof d.empties === "object" ? d.empties : {} };
+      state = { trays: d.trays && typeof d.trays === "object" ? d.trays : {}, history: Array.isArray(d.history) ? d.history : [], empties: d.empties && typeof d.empties === "object" ? d.empties : {}, log: Array.isArray(d.log) ? d.log : [] };
     }
     loaded = true; loadError = "";
     render();
@@ -187,6 +220,7 @@ async function mutate(fn){
   fn(next);
   next.empties = next.empties || {};
   Object.keys(next.empties).forEach(k => { if (next.trays[k]) delete next.empties[k]; });
+  try { const ents = logDiff(state, next, whoName(auth.currentUser)); if (ents.length) next.log = ents.concat(Array.isArray(next.log) ? next.log : []).slice(0, 600); } catch (err){ console.warn("log", err); }
   state = next;
   render();
   try { await setDoc(REF, next); return true; }
@@ -209,6 +243,115 @@ const setPl = (tr, n, crop) => { if (n && n !== ppt(crop)) tr.plants = n; else d
 const plantsField = (crop, cur, blankNote) => '<div class="field"><label>Plants in the tray' + (crop ? ' (full tray = ' + ppt(crop) + ')' : '') + '</label><input type="number" inputmode="numeric" id="l3mPl" min="1" step="1" placeholder="' + (blankNote || "full tray") + '" value="' + (cur || "") + '"></div>';
 
 // ---------------------------------------------------------------- render
+// ---------------------------------------------------------------- action history
+const PEOPLE = { "omegapeanut@gmail.com": "YS" };
+function whoName(u){
+  const e = String((u && u.email) || "").toLowerCase();
+  if (PEOPLE[e]) return PEOPLE[e];
+  if (e.includes("hasan")) return "Hasan";
+  if (e.includes("meraj")) return "Meraj";
+  const n = e.split("@")[0].replace(/[^a-z0-9]+/g, " ").trim();
+  return n ? n.charAt(0).toUpperCase() + n.slice(1) : "Unknown";
+}
+function logDiff(prev, next, by){
+  const sigOf = (tr, k, trays) => tr.date + "|" + (tr.type === "old" ? "old" : "new") + "|" + cropOfKey(k, trays);
+  const out = [], now = new Date().toISOString();
+  const mk = (a, o) => Object.assign({ t: now, by, a }, o);
+  const newHist = (next.history || []).slice((prev.history || []).length);
+  const exited = new Set(newHist.map(x => x.k));
+  // harvests and disposals (grouped by kind + crop)
+  const hg = {};
+  newHist.forEach(x => { const a = x.exitType === "harvested" ? "harvest" : "dispose"; const g = (hg[a + "|" + x.crop] = hg[a + "|" + x.crop] || { a, crop: x.crop, keys: [], plants: 0, partial: false }); if (!g.keys.includes(x.k)) g.keys.push(x.k); g.plants += x.plants || 0; if (/^partial/.test(x.note || "")) g.partial = true; });
+  Object.values(hg).forEach(g => out.push(mk(g.a, { crop: g.crop, keys: g.keys, plants: g.plants, partial: g.partial })));
+  const pk = Object.keys(prev.trays || {}), nk = Object.keys(next.trays || {});
+  const added = nk.filter(k => !prev.trays[k]), removed = pk.filter(k => !next.trays[k] && !exited.has(k));
+  const changed = pk.filter(k => next.trays[k] && prev.trays[k] && JSON.stringify(prev.trays[k]) !== JSON.stringify(next.trays[k]) && !exited.has(k));
+  // shifts: tray removed from one slot and the same tray appearing in another, or two trays swapped
+  const moves = [], usedA = new Set(), usedR = new Set(), usedC = new Set();
+  removed.forEach(r => { const sg = sigOf(prev.trays[r], r, prev.trays); const a = added.find(x => !usedA.has(x) && sigOf(next.trays[x], x, next.trays) === sg); if (a){ usedA.add(a); usedR.add(r); moves.push({ from: r, to: a, crop: cropOfKey(r, prev.trays), plants: plOf(prev.trays[r], cropOfKey(r, prev.trays)) }); } });
+  changed.forEach(x => { if (usedC.has(x)) return; const y = changed.find(z => z !== x && !usedC.has(z) && sigOf(next.trays[x], x, next.trays) === sigOf(prev.trays[z], z, prev.trays) && sigOf(next.trays[z], z, next.trays) === sigOf(prev.trays[x], x, prev.trays) && sigOf(prev.trays[x], x, prev.trays) !== sigOf(prev.trays[z], z, prev.trays) || (z !== x && !usedC.has(z) && JSON.stringify(prev.trays[x].date) === JSON.stringify(next.trays[z].date) && false)); if (y){ usedC.add(x); usedC.add(y); moves.push({ from: x, to: y, crop: cropOfKey(x, prev.trays), plants: plOf(prev.trays[x], cropOfKey(x, prev.trays)), swap: cropOfKey(y, prev.trays), swapPlants: plOf(prev.trays[y], cropOfKey(y, prev.trays)) }); } });
+  if (moves.length) out.push(mk("shift", { mv: moves }));
+  // new transplants (grouped by crop + planting date)
+  const tg = {};
+  added.filter(k => !usedA.has(k)).forEach(k => { const c = cropOfKey(k, next.trays), tr = next.trays[k], id = c + "|" + tr.date; const g = (tg[id] = tg[id] || { crop: c, date: tr.date, keys: [], plants: 0 }); g.keys.push(k); g.plants += plOf(tr, c); });
+  Object.values(tg).forEach(g => out.push(mk("transplant", { crop: g.crop, keys: g.keys, plants: g.plants, date: g.date })));
+  // trays cleared without history (mistaken entries)
+  const rm = removed.filter(k => !usedR.has(k));
+  if (rm.length) out.push(mk("remove", { keys: rm, plants: rm.reduce((a, k) => a + plOf(prev.trays[k], cropOfKey(k, prev.trays)), 0) }));
+  // ready flag toggles vs other edits
+  const rdy = [], nrd = [], ed = [];
+  changed.filter(k => !usedC.has(k)).forEach(k => { const a = prev.trays[k], b = next.trays[k]; const sa = Object.assign({}, a), sb = Object.assign({}, b); ["ready", "readyDate"].forEach(f => { delete sa[f]; delete sb[f]; }); if (JSON.stringify(sa) === JSON.stringify(sb)) (b.ready ? rdy : nrd).push(k); else ed.push(k); });
+  if (rdy.length) out.push(mk("ready", { keys: rdy, ready: true }));
+  if (nrd.length) out.push(mk("ready", { keys: nrd, ready: false }));
+  if (ed.length) out.push(mk("edit", { keys: ed }));
+  return out;
+}
+const ACT = {
+  harvest:   { word: "Harvested",   cls: "hv", icon: "✂" },
+  dispose:   { word: "Disposed",    cls: "dp", icon: "✕" },
+  transplant:{ word: "Transplanted",cls: "tp", icon: "＋" },
+  shift:     { word: "Shifted",     cls: "sh", icon: "⇄" },
+  ready:     { word: "Marked",      cls: "rd", icon: "✓" },
+  edit:      { word: "Edited",      cls: "ed", icon: "✎" },
+  remove:    { word: "Cleared",     cls: "rm", icon: "−" }
+};
+const AV = { YS: "#35473a", Hasan: "#2f7f86", Meraj: "#8a5a2b" };
+const avCol = (n) => AV[n] || "#6b5bb0";
+function lblK(k){ const q = parseKey(k); return q ? label(q.r, q.t, q.p) : k; }
+function logLine(e){
+  const n = (e.keys || []).length, tr = n === 1 ? "1 tray" : n + " trays";
+  const crop = e.crop ? '<b>' + esc(e.crop) + '</b>' : "";
+  if (e.a === "harvest") return { head: "Harvested " + (e.plants != null ? '<b>' + e.plants + '</b> ' : "") + 'plants' + (e.crop ? " of " + crop : ""), sub: esc(keysSummary(e.keys)) + (e.partial ? " · partial, balance stays in tray" : " · " + tr) };
+  if (e.a === "dispose") return { head: "Disposed " + (e.plants != null ? '<b>' + e.plants + '</b> ' : "") + 'plants' + (e.crop ? " of " + crop : ""), sub: esc(keysSummary(e.keys)) + (e.partial ? " · partial, balance stays in tray" : " · " + tr) };
+  if (e.a === "transplant") return { head: "Transplanted " + tr + (e.crop ? " of " + crop : ""), sub: esc(keysSummary(e.keys)) + " · " + (e.plants || 0) + " plants" + (e.date ? " · planted " + esc(fmtFull(e.date)) : "") };
+  if (e.a === "shift"){
+    const mv = e.mv || [];
+    const one = (m) => (m.swap ? "<b>" + esc(lblK(m.from)) + "</b> ⇄ <b>" + esc(lblK(m.to)) + "</b> (" + esc(m.crop) + " ⇄ " + esc(m.swap) + ")" : "<b>" + esc(lblK(m.from)) + "</b> → <b>" + esc(lblK(m.to)) + "</b> (" + esc(m.crop) + ")");
+    return { head: mv.length === 1 ? (mv[0].swap ? "Swapped two trays" : "Shifted " + esc(mv[0].crop) + " to another tray") : "Shifted " + mv.length + " trays", sub: mv.slice(0, 6).map(one).join(" · ") + (mv.length > 6 ? " · +" + (mv.length - 6) + " more" : "") };
+  }
+  if (e.a === "ready") return { head: (e.ready ? "Marked " : "Marked not ready: ") + tr + (e.ready ? " ready to harvest" : ""), sub: esc(keysSummary(e.keys)) };
+  if (e.a === "edit") return { head: "Edited details of " + tr, sub: esc(keysSummary(e.keys)) };
+  return { head: "Cleared " + tr + " without recording a harvest", sub: esc(keysSummary(e.keys)) + " · mistaken entry" };
+}
+function logTime(iso){
+  const d = new Date(iso); if (isNaN(d)) return { day: "", clock: "", rel: "" };
+  const t0 = new Date(); const sd = (x) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
+  const diff = Math.round((sd(t0) - sd(d)) / 86400000);
+  const day = diff === 0 ? "Today" : diff === 1 ? "Yesterday" : d.getDate() + " " + MONTHS[d.getMonth()] + " " + d.getFullYear();
+  const clock = String(d.getHours()).padStart(2, "0") + ":" + String(d.getMinutes()).padStart(2, "0");
+  const m = Math.floor((Date.now() - d.getTime()) / 60000);
+  const rel = m < 1 ? "just now" : m < 60 ? m + " min ago" : m < 1440 ? Math.floor(m / 60) + " h ago" : diff + " d ago";
+  return { day, clock, rel };
+}
+function actionHistory(){
+  const all = Array.isArray(state.log) ? state.log : [];
+  if (!all.length) return '<p class="hint">No actions recorded yet. From now on, every harvest, disposal, transplant, shift and change is listed here with the name of the person who did it.</p>';
+  const who = {}; all.forEach(e => { who[e.by] = (who[e.by] || 0) + 1; });
+  const names = Object.keys(who).sort((a, b) => who[b] - who[a]);
+  const list = logWho === "all" ? all : all.filter(e => e.by === logWho);
+  const wk = Date.now() - 7 * 86400000;
+  const stat = (lbl, v) => '<div class="al-st"><b>' + v + '</b><span>' + lbl + '</span></div>';
+  const wkList = all.filter(e => new Date(e.t).getTime() >= wk);
+  const sum = (a, f) => a.reduce((s, e) => s + (e.a === f ? (e.plants || 0) : 0), 0);
+  let h = '<div class="al-stats">' + stat("Actions · last 7 days", wkList.length) + stat("Plants harvested · 7 days", sum(wkList, "harvest")) + stat("Plants disposed · 7 days", sum(wkList, "dispose")) + stat("Trays transplanted · 7 days", wkList.filter(e => e.a === "transplant").reduce((s, e) => s + (e.keys || []).length, 0)) + '</div>';
+  h += '<div class="al-chips"><button class="al-chip' + (logWho === "all" ? " on" : "") + '" data-action="logWho" data-who="all">Everyone <small>' + all.length + '</small></button>' +
+    names.map(n => '<button class="al-chip' + (logWho === n ? " on" : "") + '" data-action="logWho" data-who="' + esc(n) + '"><i style="background:' + avCol(n) + '">' + esc(n.charAt(0)) + '</i>' + esc(n) + ' <small>' + who[n] + '</small></button>').join("") + '</div>';
+  const shown = list.slice(0, logN);
+  let lastDay = "";
+  h += '<div class="al-list">';
+  shown.forEach(e => {
+    const L = logLine(e), T = logTime(e.t), A = ACT[e.a] || ACT.edit;
+    if (T.day !== lastDay){ h += '<div class="al-day">' + esc(T.day) + '</div>'; lastDay = T.day; }
+    h += '<div class="al-row"><span class="al-av" style="background:' + avCol(e.by) + '">' + esc(String(e.by || "?").charAt(0)) + '</span>' +
+      '<div class="al-mid"><div class="al-top"><span class="al-by">' + esc(e.by || "Unknown") + '</span><span class="al-bd ' + A.cls + '">' + A.icon + ' ' + A.word + '</span></div>' +
+      '<div class="al-hd">' + L.head + '</div><div class="al-sub">' + L.sub + '</div></div>' +
+      '<div class="al-tm"><b>' + T.clock + '</b><span>' + T.rel + '</span></div></div>';
+  });
+  h += '</div>';
+  h += '<div class="al-foot">Showing ' + shown.length + ' of ' + list.length + ' actions' + (list.length > shown.length ? '<button class="btn" data-action="logMore">Show more actions</button>' : '') + '</div>';
+  return h;
+}
+
 function blk(no, title, inner, extra){ return '<section class="nl-block"><div class="nl-bh"><span class="nl-no">' + no + '</span><span class="nl-bt">' + title + '</span>' + (extra || "") + '</div>' + inner + '</section>'; }
 function bar(used, max){
   const pct = max ? Math.min(100, Math.round(used / max * 100)) : 0;
@@ -456,10 +599,11 @@ function render(){
   h += blk("03", "Tray map", actions +
     '<div class="l3m-leg"><span><u></u>Empty</span><span><u style="background:var(--blush,#ecd6cb)"></u>Growing</span><span><u style="background:var(--sage,#d3dccf)"></u>Ready</span><span><u style="border-style:dashed;border-color:#5b8db8"></u>Salted water</span><span><u style="background:#f7d9a6;border-color:#d4871c"></u>Wrong tier (shift back later)</span><span><u style="background:#ddd5f3;border-color:#6b5bb0"></u>Sample / test crop</span><span><u style="background:#2e7d32"></u>NEW — planted in the last 2 days</span><span><u style="background:#fff;border-left:5px solid #c62828"></u>Planted before 1 Oct — to remove</span><span><u style="background:#fff;border-top:5px solid #1a237e"></u>40+ days since transplant — harvest first (days shown)</span><span><u style="background:#fff;border-bottom:5px solid #2f7f86"></u>Buffer tank (S1, no nutrients)</span><span><u style="background:#dcc7ab;border-color:#8a5a2b"></u>Empty · dirty</span><span><u style="background:#e1f0fa"></u>Empty · clean</span><span>Number = tray position · small text = date planted</span></div>' +
     '<div class="' + (isAdmin ? "l3m-adm" : "") + '">' + rackHtml(RACKS[0]) + rackHtml(RACKS[1]) + '</div>' + selBar());
-  h += '<section class="nl-block"><div class="nl-bh nl-toggle" data-action="toggleDates" style="cursor:pointer;"><span class="nl-no">04</span><span class="nl-bt">Dates by crop</span><span class="nl-count">' + plural(list.length, "tray") + ' · ' + (showDates ? "Hide ▴" : "Show ▾") + '</span></div>' + (showDates ? datesTable(list) : "") + '</section>';
-  h += blk("05", "Consolidation — before 1 Oct vs from 1 Oct", consolidation(list));
-  h += blk("06", "By variety", varietyTable(list));
-  h += blk("07", "History", historySection());
+  h += blk("04", "Action history", actionHistory());
+  h += '<section class="nl-block"><div class="nl-bh nl-toggle" data-action="toggleDates" style="cursor:pointer;"><span class="nl-no">05</span><span class="nl-bt">Dates by crop</span><span class="nl-count">' + plural(list.length, "tray") + ' · ' + (showDates ? "Hide ▴" : "Show ▾") + '</span></div>' + (showDates ? datesTable(list) : "") + '</section>';
+  h += blk("06", "Consolidation — before 1 Oct vs from 1 Oct", consolidation(list));
+  h += blk("07", "By variety", varietyTable(list));
+  h += blk("08", "History", historySection());
   h += '</div>';
   root.innerHTML = h;
   if (rec) renderRec();
@@ -842,6 +986,8 @@ function onClick(e){
   else if (a === "import") importOld();
   else if (a === "toggleDates"){ showDates = !showDates; render(); }
   else if (a === "history"){ showHistory = !showHistory; render(); }
+  else if (a === "logMore"){ logN += 20; render(); }
+  else if (a === "logWho"){ logWho = t.dataset.who || "all"; logN = 20; render(); }
 }
 
 // ---------------------------------------------------------------- press-and-hold to drag a tray to another slot
