@@ -42,6 +42,7 @@ const tierCropOfKey = (k) => { const q = parseKey(k); return q ? cropAt(q.r, q.t
 let state = { trays: {}, history: [], empties: {}, log: [] };
 let multi = false;
 let logN = 20, logWho = "all";
+const openSec = new Set();
 let loaded = false, isAdmin = false, loadError = "", showHistory = false, showDates = true, last = null;
 const sel = new Set();
 
@@ -370,6 +371,7 @@ function actionHistory(){
   return h;
 }
 
+function cblk(id, no, title, fn, count){ const o = openSec.has(id); return '<section class="nl-block"><div class="nl-bh nl-toggle" data-action="tg" data-id="' + id + '" style="cursor:pointer;"><span class="nl-no">' + no + '</span><span class="nl-bt">' + title + '</span><span class="nl-count">' + (count ? count + " · " : "") + (o ? "Hide ▴" : "Show ▾") + '</span></div>' + (o ? fn() : "") + '</section>'; }
 function blk(no, title, inner, extra){ return '<section class="nl-block"><div class="nl-bh"><span class="nl-no">' + no + '</span><span class="nl-bt">' + title + '</span>' + (extra || "") + '</div>' + inner + '</section>'; }
 function bar(used, max){
   const pct = max ? Math.min(100, Math.round(used / max * 100)) : 0;
@@ -384,7 +386,7 @@ function capCards(list){
   h += '<div class="nl-cap ' + (empty === 0 ? "ok" : "") + '"><div class="nl-cap-row"><span class="nl-cap-title">Trays with crops</span><span class="nl-cap-num"><b>' + filled + '</b>/' + TOTAL + '</span><span class="nl-cap-sub">' + empty + ' empty</span></div>' + bar(filled, TOTAL) + '</div>';
   h += '<div class="nl-cap"><div class="nl-cap-row"><span class="nl-cap-title">Plants</span><span class="nl-cap-num"><b>' + plants + '</b></span><span class="nl-cap-sub">full tray 120 · Ice Plant 80 · partial trays counted as recorded</span></div>' + bar(0, 0) + '</div>';
   h += '<div class="nl-cap ' + (rp ? "ok" : "") + '"><div class="nl-cap-row"><span class="nl-cap-title">Plants ready</span><span class="nl-cap-num"><b>' + rp + '</b></span><span class="nl-cap-sub">' + (plants - rp) + ' not ready</span></div>' + bar(rp, plants) + '</div>';
-  h += '</div>';
+  h += '</div><!--MORE-->';
   const em = state.empties || {}, dirty = Object.keys(em).filter(k => (empOf(em[k]) || {}).st === "dirty" && !state.trays[k] && parseKey(k)), clean = Object.keys(em).filter(k => (empOf(em[k]) || {}).st === "clean" && !state.trays[k] && parseKey(k));
   const ord = (k) => { const q = parseKey(k); return (q.r === "N" ? 0 : 100) + q.t * 1000 + q.p; };
   dirty.sort((a, b) => ord(a) - ord(b));
@@ -604,23 +606,23 @@ function render(){
   const list = occ();
   let h = '<div class="section nl-root"><h2>Level 3 — Tray map</h2>';
   h += '<p class="hint">North rack 11 trays per tier, South rack 13, 6 tiers each. Tap a tray to see and change its details. Use Select many to update several at once. Each tier grows one crop.</p>';
-  if (isAdmin) h += '<button class="btn primary" style="font-size:19px;padding:16px 24px;margin:4px 0 10px;" data-action="recOpen">📋 Record crops — big buttons (iPad mode)</button>';
   if (loadError) h += '<div class="kiosk-message err">Couldn\'t load: ' + esc(loadError) + '</div>';
   if (!loaded && !loadError) h += '<p class="hint">Loading…</p>';
-  h += blk("01", "Capacity", capCards(list));
+  { const cc = capCards(list).split("<!--MORE-->"), o = openSec.has("cap");
+    h += '<section class="nl-block"><div class="nl-bh nl-toggle" data-action="tg" data-id="cap" style="cursor:pointer;"><span class="nl-no">01</span><span class="nl-bt">Capacity</span><span class="nl-count">' + (o ? "Show less ▴" : "Show more ▾") + '</span></div>' + cc[0] + (o ? cc[1] : "") + '</section>'; }
   let actions = "";
   if (isAdmin){
     actions = '<div class="nl-actions"><button class="btn' + (multi ? " primary" : "") + '" data-action="multi">' + (multi ? "Selecting many: ON (tap trays, then choose an action)" : "Select many trays") + '</button>' + (last ? '<button class="btn" data-action="undo">Undo last change</button>' : '') +
       (!list.length ? '<button class="btn" data-action="import">Import from the old Level 3 tracker</button>' : '') + '</div>';
   }
-  h += blk("02", "Floor plan — what is free", floorPlan());
+  h += cblk("fp", "02", "Nutrient tank position", () => floorPlan());
   h += blk("03", "Tray map", actions +
     '<div class="l3m-leg"><span><u></u>Empty</span><span><u style="background:var(--blush,#ecd6cb)"></u>Growing</span><span><u style="background:var(--sage,#d3dccf)"></u>Ready</span><span><u style="border-style:dashed;border-color:#5b8db8"></u>Salted water</span><span><u style="background:#f7d9a6;border-color:#d4871c"></u>Wrong tier (shift back later)</span><span><u style="background:#ddd5f3;border-color:#6b5bb0"></u>Sample / test crop</span><span><u style="background:#2e7d32"></u>NEW — planted in the last 2 days</span><span><u style="background:#fff;border-left:5px solid #c62828"></u>Planted before 1 Oct — to remove</span><span><u style="background:#fff;border-top:5px solid #1a237e"></u>40+ days since transplant — harvest first (days shown)</span><span><u style="background:#fff;border-bottom:5px solid #2f7f86"></u>Buffer tank (S1, no nutrients)</span><span><u style="background:#dcc7ab;border-color:#8a5a2b"></u>Empty · dirty</span><span><u style="background:#e1f0fa"></u>Empty · clean</span><span>Number = tray position · small text = date planted</span></div>' +
     '<div class="' + (isAdmin ? "l3m-adm" : "") + '">' + rackHtml(RACKS[0]) + rackHtml(RACKS[1]) + '</div>' + selBar());
   h += blk("04", "Action history", actionHistory());
-  h += '<section class="nl-block"><div class="nl-bh nl-toggle" data-action="toggleDates" style="cursor:pointer;"><span class="nl-no">05</span><span class="nl-bt">Dates by crop</span><span class="nl-count">' + plural(list.length, "tray") + ' · ' + (showDates ? "Hide ▴" : "Show ▾") + '</span></div>' + (showDates ? datesTable(list) : "") + '</section>';
-  h += blk("06", "Consolidation — before 1 Oct vs from 1 Oct", consolidation(list));
-  h += blk("07", "By variety", varietyTable(list));
+  h += cblk("dates", "05", "Dates by crop", () => datesTable(list), plural(list.length, "tray"));
+  h += cblk("cons", "06", "Consolidation — before 1 Oct vs from 1 Oct", () => consolidation(list));
+  h += cblk("var", "07", "By variety", () => varietyTable(list));
   h += blk("08", "History", historySection());
   h += '</div>';
   root.innerHTML = h;
@@ -1002,7 +1004,7 @@ function onClick(e){
   else if (a === "recOpen" && isAdmin){ rec = { crop: null, action: null, n: 1, date: today(), type: "new", ready: false, grp: null, msg: "" }; renderRec(); }
   else if (a === "undo") undo();
   else if (a === "import") importOld();
-  else if (a === "toggleDates"){ showDates = !showDates; render(); }
+  else if (a === "tg"){ const id = t.dataset.id; if (openSec.has(id)) openSec.delete(id); else openSec.add(id); render(); }
   else if (a === "history"){ showHistory = !showHistory; render(); }
   else if (a === "logMore"){ logN += 20; render(); }
   else if (a === "logWho"){ logWho = t.dataset.who || "all"; logN = 20; render(); }
