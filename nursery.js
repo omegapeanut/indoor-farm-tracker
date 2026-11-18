@@ -51,6 +51,7 @@ function init(){
   root.addEventListener("click", onClick);
   ov.addEventListener("click", onClick);
   onAuthStateChanged(auth, (user) => { isAdmin = !!user; render(); });
+  window.addEventListener("nm-used", () => { if (loaded) render(); });
   onSnapshot(REF, (snap) => {
     if (snap.exists()){
       const d = snap.data();
@@ -155,7 +156,8 @@ function render(){
   if (!root) return;
   const stats = computeStats();
   const germ = sortBatches(inLoc("germ")), nur = sortBatches(inLoc("nursery"));
-  const gUsed = sumTrays(germ), nUsed = sumTrays(nur);
+  const nurAll = nur.concat((window.NM_LIST || []).map(v => ({ variety: v, trays: 1 })));
+  const gUsed = sumTrays(germ), nUsed = sumTrays(nurAll);
   let h = '<div class="section nl-root">';
   h += '<h2>Level 1 — Germination chamber &amp; Nursery</h2>';
   h += '<p class="hint">Tap a germination batch to move it to the nursery; tap a nursery batch to send it to Level 1, Level 3, or dispose.</p>';
@@ -184,15 +186,17 @@ function render(){
   }
 
   h += blk("03", "Germination chamber", '<div class="nl-list">' + (germ.length ? groupBatches(germ).map(b => batchCard(b, stats)).join("") : '<div class="empty-state">Empty — sow something.</div>') + '</div>', '<span class="nl-count">' + gUsed + ' / ' + state.capGerm + '</span>');
-  h += blk("04", "Nursery", '<div class="nl-list">' + (nur.length ? groupBatches(nur).map(b => batchCard(b, stats)).join("") : '<div class="empty-state">Empty.</div>') + '</div>', '<span class="nl-count">' + nUsed + ' / ' + state.capNursery + '</span>');
+  h += '<div id="nmSlot"></div>';
+  if (nur.length) h += blk("04b", "Older nursery batches (not on the tray map)", '<div class="nl-list">' + groupBatches(nur).map(b => batchCard(b, stats)).join("") + '</div>', '<span class="nl-count">' + sumTrays(nur) + ' trays</span>');
 
-  h += blk("05", "Tray count by variety", summaryTables(germ, nur, gUsed, nUsed));
+  h += blk("05", "Tray count by variety", summaryTables(germ, nurAll, gUsed, nUsed));
   h += blk("06", "Patterns — from recorded dates", patternSection(stats));
   h += blk("07", "History", historySection());
 
   h += '<p class="nl-legacy"><button class="btn" data-action="legacy">' + (showLegacy ? "Hide" : "Show") + ' old Grow Log (hidden, nothing deleted)</button></p>';
   h += '</div>';
   root.innerHTML = h;
+  window.dispatchEvent(new Event("nm-slot"));
   const legacy = document.getElementById("legacyGrowLog");
   if (legacy) legacy.style.display = showLegacy ? "" : "none";
 }
@@ -433,13 +437,13 @@ async function clearAll(){
   if (!confirm("Really clear everything? This cannot be undone from the app.")) return;
   try {
     const stamp = new Date().toISOString().slice(0, 16).replace(/[-:T]/g, "");
-    for (const name of ["nurseryLog", "level3Log", "level3Map", "ahuLog"]){
+    for (const name of ["nurseryLog", "level3Log", "level3Map", "ahuLog", "nurseryMap"]){
       const r = doc(db, "meta", name);
       const snap = await getDoc(r);
       if (!snap.exists()) continue;
       const d = snap.data();
       await setDoc(doc(db, "meta", name + "_backup_" + stamp), d);
-      await setDoc(r, name === "level3Map" ? Object.assign({}, d, { trays: {}, history: [] }) : Object.assign({}, d, { batches: [] }));
+      await setDoc(r, (name === "level3Map" || name === "nurseryMap") ? Object.assign({}, d, { trays: {}, history: [] }) : Object.assign({}, d, { batches: [] }));
     }
     closeModal();
     alert("Cleared. Level 1 and Level 3 are now empty.");
