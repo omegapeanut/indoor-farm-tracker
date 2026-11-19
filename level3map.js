@@ -61,7 +61,7 @@ const label = (r, t, p) => "T" + t + " " + r + p;
 const STYLE = `
 .l3m-rack{margin:6px 0 18px}
 .l3m-rack h4{margin:0 0 6px;font-family:'Cormorant Garamond',serif;font-size:20px;font-weight:600}
-.l3m-scroll{overflow-x:auto;padding-bottom:4px}
+.l3m-scroll{overflow-x:auto;padding:10px;margin:-10px}
 .l3m-tier{min-width:560px;margin:0 0 10px}
 .l3m-th{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:0 0 4px;font-size:13px}
 .l3m-th .t{font-weight:700;cursor:pointer;padding:2px 8px;border-radius:999px;background:var(--card2,#f1ebe4);border:1px solid rgba(0,0,0,.12)}
