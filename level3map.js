@@ -382,10 +382,9 @@ function capCards(list){
   const filled = list.length, plants = list.reduce((s, x) => s + trayPlants(x), 0);
   const rp = list.filter(x => x.ready).reduce((s, x) => s + trayPlants(x), 0);
   const empty = TOTAL - filled;
-  let h = '<div class="nl-caps" style="grid-template-columns:repeat(3,minmax(0,1fr));">';
+  let h = '<div class="nl-caps" style="grid-template-columns:repeat(2,minmax(0,1fr));">';
   h += '<div class="nl-cap ' + (empty === 0 ? "ok" : "") + '"><div class="nl-cap-row"><span class="nl-cap-title">Trays with crops</span><span class="nl-cap-num"><b>' + filled + '</b>/' + TOTAL + '</span><span class="nl-cap-sub">' + empty + ' empty</span></div>' + bar(filled, TOTAL) + '</div>';
   h += '<div class="nl-cap"><div class="nl-cap-row"><span class="nl-cap-title">Plants</span><span class="nl-cap-num"><b>' + plants + '</b></span><span class="nl-cap-sub">full tray 120 · Ice Plant 80 · partial trays counted as recorded</span></div>' + bar(0, 0) + '</div>';
-  h += '<div class="nl-cap ' + (rp ? "ok" : "") + '"><div class="nl-cap-row"><span class="nl-cap-title">Plants ready</span><span class="nl-cap-num"><b>' + rp + '</b></span><span class="nl-cap-sub">' + (plants - rp) + ' not ready</span></div>' + bar(rp, plants) + '</div>';
   h += '</div><!--MORE-->';
   const em = state.empties || {}, dirty = Object.keys(em).filter(k => (empOf(em[k]) || {}).st === "dirty" && !state.trays[k] && parseKey(k)), clean = Object.keys(em).filter(k => (empOf(em[k]) || {}).st === "clean" && !state.trays[k] && parseKey(k));
   const ord = (k) => { const q = parseKey(k); return (q.r === "N" ? 0 : 100) + q.t * 1000 + q.p; };
@@ -394,8 +393,8 @@ function capCards(list){
   h += '<div class="nl-cap" style="margin-top:8px;border-color:#c62828;"><div class="nl-cap-row"><span class="nl-cap-title">To remove — planted before 1 Oct</span><span class="nl-cap-num"><b>' + pre.length + '</b></span><span class="nl-cap-sub">' + pre.reduce((s2, x) => s2 + trayPlants(x), 0) + ' plants</span></div>' +
     (pre.length ? '<div style="font-size:12.5px;line-height:1.5;margin-top:4px;">' + esc(keysSummary(pre.map(x => x.k))) + '</div>' : '<div style="font-size:12.5px;opacity:.7;">None. Every tray was planted from 1 Oct.</div>') + '</div>';
   const aged = list.map(x => ({ k: x.k, d: x.date ? daysBetween(x.date, today()) : null, rd: !!x.ready })).filter(x => x.d != null && x.d >= AGE_ALERT).sort((a, b) => b.d - a.d);
-  h += '<div class="nl-cap" style="margin-top:8px;border-color:#1a237e;"><div class="nl-cap-row"><span class="nl-cap-title">Harvest first — ' + AGE_ALERT + '+ days since transplant</span><span class="nl-cap-num"><b>' + aged.length + '</b></span><span class="nl-cap-sub">' + aged.filter(x => x.rd).length + ' already ready</span></div>' +
-    (aged.length ? '<div style="font-size:12.5px;line-height:1.6;margin-top:4px;">' + aged.slice(0, 40).map(x => { const q = parseKey(x.k); return esc(label(q.r, q.t, q.p)) + ' <b>' + x.d + 'd</b>' + (x.rd ? ' ✓' : ''); }).join(' · ') + (aged.length > 40 ? ' · +' + (aged.length - 40) + ' more' : '') + '<div style="opacity:.65;margin-top:3px;">Oldest first. ✓ = marked ready.</div></div>' : '<div style="font-size:12.5px;opacity:.7;">No tray is ' + AGE_ALERT + ' days or older yet.</div>') + '</div>';
+  h += '<div class="nl-cap" style="margin-top:8px;border-color:#1a237e;"><div class="nl-cap-row"><span class="nl-cap-title">Harvest first — ' + AGE_ALERT + '+ days since transplant</span><span class="nl-cap-num"><b>' + aged.length + '</b></span><span class="nl-cap-sub">oldest first</span></div>' +
+    (aged.length ? '<div style="font-size:12.5px;line-height:1.6;margin-top:4px;">' + aged.slice(0, 40).map(x => { const q = parseKey(x.k); return esc(label(q.r, q.t, q.p)) + ' <b>' + x.d + 'd</b>' + ''; }).join(' · ') + (aged.length > 40 ? ' · +' + (aged.length - 40) + ' more' : '') + '</div>' : '<div style="font-size:12.5px;opacity:.7;">No tray is ' + AGE_ALERT + ' days or older yet.</div>') + '</div>';
   h += '<div class="nl-cap' + (dirty.length ? ' l3-dirtycard' : '') + '" style="margin-top:8px;border-color:#8a5a2b;"><div class="nl-cap-row"><span class="nl-cap-title">Trays to clean</span><span class="nl-cap-num"><b>' + dirty.length + '</b></span><span class="nl-cap-sub">' + clean.length + ' empty trays marked clean</span></div>' +
     (dirty.length ? '<div style="font-size:12.5px;line-height:1.5;margin-top:4px;">' + esc(keysSummary(dirty)) + '</div>' : '<div style="font-size:12.5px;opacity:.7;">No dirty trays marked. Harvested trays are marked dirty automatically.</div>') + '</div>';
   return h;
@@ -409,11 +408,11 @@ function cellHtml(r, t, p){
   const ageDays = tr && tr.date ? daysBetween(tr.date, today()) : null, aged = ageDays != null && ageDays >= AGE_ALERT;
   const eo = !tr && state.empties ? empOf(state.empties[k]) : null, emp = eo ? eo.st : "";
   const smp = !!(tr && tr.crop && !CROP_ORDER.includes(tr.crop)), off = !!(tr && tr.crop && tr.crop !== tierCrop && !smp);
-  let cls = "l3m-cell" + (isSalted(r, t, p) ? " salt" : "") + (isBuffer(r, t, p) ? " buf" : "") + (tr ? (tr.ready ? " ready" : " grow") : "") + (off ? " off" : "") + (smp ? " smp" : "") + (emp ? " " + emp : "") + (pre ? " pre" : "") + (aged ? " old40" : "") + (sel.has(k) ? " sel" : "");
+  let cls = "l3m-cell" + (isSalted(r, t, p) ? " salt" : "") + (isBuffer(r, t, p) ? " buf" : "") + (tr ? " ready" : "") + (off ? " off" : "") + (smp ? " smp" : "") + (emp ? " " + emp : "") + (pre ? " pre" : "") + (aged ? " old40" : "") + (sel.has(k) ? " sel" : "");
   let title = label(r, t, p) + " · " + cropAt(r, t) + (r === "N" && t <= 2 ? (isSalted(r, t, p) ? " · salted tank 3N1" : " · normal tank 3N2") : "") + (isBuffer(r, t, p) ? " · BUFFER tank (no nutrients, for crops ready to harvest)" : "");
   if (tr){
     const age = daysBetween(tr.date, today());
-    title += " · " + (smp ? "SAMPLE: " + cropHere : off ? "HOLDS " + cropHere + " (wrong tier)" : cropHere) + (pre ? " · BEFORE 1 OCT — to be removed" : "") + (aged ? " · " + ageDays + " DAYS since transplant — harvest first" : "") + (fresh ? " · NEW — planted within 2 days" : "") + " · planted " + fmtFull(tr.date) + (age != null ? " (day " + age + ")" : "") + " · " + plOf(tr, cropHere) + " plants · " + (tr.ready ? "ready" : "not ready") + " · " + (tr.type === "old" ? "old crop" : "new crop") + (isAdmin && tr.pest ? " · pest (P)" : "");
+    title += " · " + (smp ? "SAMPLE: " + cropHere : off ? "HOLDS " + cropHere + " (wrong tier)" : cropHere) + (pre ? " · BEFORE 1 OCT — to be removed" : "") + (aged ? " · " + ageDays + " DAYS since transplant — harvest first" : "") + (fresh ? " · NEW — planted within 2 days" : "") + " · planted " + fmtFull(tr.date) + (age != null ? " (day " + age + ")" : "") + " · " + plOf(tr, cropHere) + " plants · " + (tr.type === "old" ? "old crop" : "new crop") + (isAdmin && tr.pest ? " · pest (P)" : "");
   } else title += " · empty" + (emp ? " (" + emp + (eo.d ? " since " + fmtFull(eo.d) : "") + ")" : "");
   const pl = tr && plOf(tr, cropHere) !== ppt(cropHere) ? plOf(tr, cropHere) : "";
   const chips = ((off || smp) ? '<s class="cr">' + esc(SHORT[cropHere] || cropHere) + '</s>' : "") + (aged ? '<var class="ag">' + ageDays + 'd</var>' : "") + (fresh ? '<var class="nw">NEW</var>' : "");
@@ -426,9 +425,9 @@ function rackHtml(rk){
     const used = [], ready = [];
     for (let p = 1; p <= posOf(rk.id); p++){ const tr = state.trays[keyOf(rk.id, t, p)]; if (tr){ used.push(p); if (tr.ready) ready.push(p); } }
     h += '<div class="l3m-tier"><div class="l3m-th"><span class="t" data-action="tier" data-r="' + rk.id + '" data-t="' + t + '">T' + t + '</span><span class="c">' + esc(rk.tiers[t]) + '</span>' +
-      '<span class="n">' + used.length + '/' + posOf(rk.id) + (ready.length ? ' · ' + ready.length + ' ready' : '') + '</span>' +
+      '<span class="n">' + used.length + '/' + posOf(rk.id) + '' + '</span>' +
       (rk.id === "S" ? '<span class="salt" style="color:#2f7f86;font-weight:700;">S1 = buffer tank (no nutrients · for crops ready to harvest)</span>' : '') + (rk.id === "N" && t <= 2 ? '<span class="salt">dashed = salted tank 3N1 (trays 1-3, 9-11) · plain = normal tank 3N2 (trays 4-8)</span>' : '') +
-      (isAdmin ? '<button class="btn" data-action="fillTier" data-r="' + rk.id + '" data-t="' + t + '">+ Transplant</button>' + (ready.length ? '<button class="btn" data-action="harvestTier" data-r="' + rk.id + '" data-t="' + t + '">Harvest ready</button>' : '') : '') +
+      (isAdmin ? '<button class="btn" data-action="fillTier" data-r="' + rk.id + '" data-t="' + t + '">+ Transplant</button>' : '') +
       '</div><div class="l3m-cells" style="grid-template-columns:repeat(' + posOf(rk.id) + ',minmax(40px,1fr));">';
     { const order = []; for (let p = 1; p <= posOf(rk.id); p++) order.push(p); if (rk.id === "S") order.reverse(); order.forEach(p => { h += cellHtml(rk.id, t, p); }); }
     h += '</div></div>';
@@ -441,7 +440,7 @@ function selBar(){
   let e = 0, f = 0; sel.forEach(k => { if (state.trays[k]) f++; else e++; });
   return '<div class="l3m-bar"><span class="cnt">' + sel.size + ' selected</span><span class="n" style="opacity:.7;margin-right:6px;">' + e + ' empty · ' + f + ' with crops</span>' +
     (e ? '<button class="btn primary" data-action="act" data-a="transplant">Transplant ' + e + '</button><button class="btn" data-action="act" data-a="dirty">Mark dirty</button><button class="btn" data-action="act" data-a="clean">Mark clean</button>' : '') +
-    (f ? '<button class="btn" data-action="act" data-a="ready">Mark ready</button><button class="btn" data-action="act" data-a="notready">Not ready</button><button class="btn primary" data-action="act" data-a="harvest">Harvest ' + f + '</button><button class="btn danger" data-action="act" data-a="dispose">Dispose</button>' : '') +
+    (f ? '<button class="btn primary" data-action="act" data-a="harvest">Harvest ' + f + '</button><button class="btn danger" data-action="act" data-a="dispose">Dispose</button>' : '') +
     '<button class="btn" data-action="clearSel">Clear</button></div>';
 }
 
@@ -458,20 +457,20 @@ function datesTable(list){
   if (!list.length) return '<div class="empty-state">No trays recorded yet. Tap squares on the map, then Transplant.</div>';
   const g = new Map();
   list.forEach(x => {
-    const k = [x.crop, x.r, x.t, x.date || "", x.ready ? "r" : "n", x.type === "old" ? "old" : "new"].join("|");
+    const k = [x.crop, x.r, x.t, x.date || "", x.type === "old" ? "old" : "new"].join("|");
     if (!g.has(k)) g.set(k, { crop: x.crop, off: x.tierCrop !== x.crop, r: x.r, t: x.t, date: x.date, ready: !!x.ready, type: x.type === "old" ? "old" : "new", ps: [], pls: [] });
     g.get(k).ps.push(x.p); g.get(k).pls.push(trayPlants(x));
   });
   const order = (r, t) => (r === "N" ? 0 : 100) + t;
   const rows = [...g.values()].sort((a, b) => a.crop.localeCompare(b.crop) || order(a.r, a.t) - order(b.r, b.t) || (a.date || "9999").localeCompare(b.date || "9999"));
   const totals = {}; rows.forEach(r => { totals[r.crop] = (totals[r.crop] || 0) + r.ps.length; });
-  let h = '<div style="overflow-x:auto;"><table class="nl-table"><thead><tr><th>Crop</th><th>Date planted</th><th>Day</th><th>Tier &amp; trays</th><th>Trays</th><th>Plants</th><th>Per tray</th><th>Status</th><th>Type</th></tr></thead><tbody>', prev = null;
+  let h = '<div style="overflow-x:auto;"><table class="nl-table"><thead><tr><th>Crop</th><th>Date planted</th><th>Day</th><th>Tier &amp; trays</th><th>Trays</th><th>Plants</th><th>Per tray</th><th>Type</th></tr></thead><tbody>', prev = null;
   rows.forEach(r => {
     const first = r.crop !== prev; prev = r.crop;
     const age = r.date ? daysBetween(r.date, today()) : null;
     h += '<tr style="' + (first ? "border-top:2px solid rgba(0,0,0,.12);" : "") + '"><td>' + (first ? '<b>' + esc(r.crop) + '</b> <span class="nl-n">' + plural(totals[r.crop], "tray") + '</span>' : "") + '</td>' +
       '<td>' + fmtFull(r.date) + '</td><td>' + (age != null ? age : "–") + '</td><td>T' + r.t + (r.off ? ' <span style="color:#b3640a;font-weight:700;">(wrong tier)</span>' : '') + ' · ' + r.r + ranges(r.ps).replace(/(, )(\d)/g, "$1" + r.r + "$2").replace(/–(\d)/g, "–" + r.r + "$1") + '</td><td>' + r.ps.length + '</td><td>' + r.pls.reduce((a, b) => a + b, 0) + '</td><td>' + perTray(r.pls) + '</td>' +
-      '<td><span class="nl-state ' + (r.ready ? "is-ready" : "not-ready") + '">' + (r.ready ? "Ready" : "Not ready") + '</span></td><td>' + (r.type === "old" ? "Old crop" : "New crop") + '</td></tr>';
+      '<td>' + (r.type === "old" ? "Old crop" : "New crop") + '</td></tr>';
   });
   return h + '</tbody></table></div>';
 }
@@ -481,16 +480,16 @@ function varietyTable(list){
   RACKS.forEach(rk => TIERS.forEach(t => { const c = rk.tiers[t]; crops[c] = (crops[c] || 0) + posOf(rk.id); }));
   list.forEach(x => { if (!(x.crop in crops)) crops[x.crop] = 0; });
   const names = Object.keys(crops).sort((a, b) => a.localeCompare(b));
-  let h = '<table class="nl-table"><thead><tr><th>Variety</th><th>Trays with crops</th><th>Before 1 Oct</th><th>From 1 Oct</th><th>Plants ready</th><th>Plants not ready</th><th>Total plants</th></tr></thead><tbody>';
+  let h = '<table class="nl-table"><thead><tr><th>Variety</th><th>Trays with crops</th><th>Before 1 Oct</th><th>From 1 Oct</th><th>Total plants</th></tr></thead><tbody>';
   let tT = 0, tF = 0, tB = 0, tA = 0, tR = 0, tN = 0, tM = 0;
   names.forEach(v => {
     const l = list.filter(x => x.crop === v), maxT = crops[v], mp = maxT * ppt(v);
-    const rp = sumPl(l.filter(x => x.ready)), np = sumPl(l.filter(x => !x.ready));
+    const rp = sumPl(l), np = 0;
     const fb = l.filter(x => x.date && x.date < CUT).length, fa = l.filter(x => x.date && x.date >= CUT).length;
     tT += maxT; tF += l.length; tB += fb; tA += fa; tR += rp; tN += np; tM += mp;
-    h += '<tr><td>' + esc(v) + (maxT ? "" : ' <span class="nl-n">(sample)</span>') + '</td><td>' + l.length + (maxT ? ' / ' + maxT : "") + '</td><td>' + fb + '</td><td>' + fa + '</td><td>' + rp + '</td><td>' + np + '</td><td>' + (rp + np) + (maxT ? ' / ' + mp : "") + '</td></tr>';
+    h += '<tr><td>' + esc(v) + (maxT ? "" : ' <span class="nl-n">(sample)</span>') + '</td><td>' + l.length + (maxT ? ' / ' + maxT : "") + '</td><td>' + fb + '</td><td>' + fa + '</td><td>' + (rp + np) + (maxT ? ' / ' + mp : "") + '</td></tr>';
   });
-  return h + '<tr class="nl-total"><td>Total</td><td>' + tF + ' / ' + tT + '</td><td>' + tB + '</td><td>' + tA + '</td><td>' + tR + '</td><td>' + tN + '</td><td>' + (tR + tN) + ' / ' + tM + '</td></tr></tbody></table>';
+  return h + '<tr class="nl-total"><td>Total</td><td>' + tF + ' / ' + tT + '</td><td>' + tB + '</td><td>' + tA + '</td><td>' + (tR + tN) + ' / ' + tM + '</td></tr></tbody></table>';
 }
 
 // South: trays 3-13 of T6-T4 on 3S2, T3-T1 on 3S1; trays 1-2 of all tiers on the Buffer tank.
@@ -509,19 +508,19 @@ function floorPlan(){
   const line = (x1, y1, x2, y2, dash, thin) => '<line x1="' + x1 + '" y1="' + y1 + '" x2="' + x2 + '" y2="' + y2 + '" stroke="#35473a" stroke-width="' + (thin ? 1.5 : 2.5) + '"' + (dash ? ' stroke-dasharray="7 5"' : "") + (thin ? ' opacity=".5"' : "") + '/>';
   const box = (def, i, y) => {
     const st = count(def.rows), x = X0 + i * (BW + GAP), bh = def.bh || BH, gap = def.rowGap || 12;
-    const tip = def.title + " · " + st.u + " of " + st.n + " trays used, " + st.free + " free, " + st.rd + " ready";
+    const tip = def.title + " · " + st.u + " of " + st.n + " trays used, " + st.free + " free";
     let g = '<g data-action="jump" data-r="' + def.rows[0].r + '" data-t="' + def.rows[0].t + '" style="cursor:pointer"><title>' + esc(tip) + '</title>' +
       '<rect x="' + x + '" y="' + y + '" width="' + BW + '" height="' + bh + '" rx="10" fill="#f1ebe4" stroke="#35473a" stroke-width="2"' + (def.salted ? ' stroke-dasharray="6 4"' : "") + '/>' +
       text(x + BW / 2, y + (def.sub ? 15 : 17), esc(def.title), 11.5, 700) +
       (def.sub ? text(x + BW / 2, y + 27, esc(def.sub), 9.5, 600, "#35473a") : "") +
       text(x + BW / 2, y + (def.sub ? 43 : 36), "free " + st.free + " / " + st.n, 14, 700, st.free === 0 ? "#9a4a3a" : "#35473a") +
-      text(x + BW / 2, y + (def.sub ? 55 : 50), st.rd + " ready · " + (st.u - st.rd) + " growing", 9.5, 400, "#555");
+      text(x + BW / 2, y + (def.sub ? 55 : 50), st.u + " planted · " + st.free + " free", 9.5, 400, "#555");
     def.rows.forEach((rw, ri) => {
       const ry = y + (def.sub ? 62 : 58) + ri * gap, w0 = rw.ps.length * SQ + (rw.ps.length - 1) * SG, multi = def.rows.length > 1, sx = multi ? x + 40 : x + (BW - w0) / 2;
       if (multi) g += text(x + 10, ry + 7, rw.lab, 9, 600, "#555", "start");
       rw.ps.forEach((p, k) => {
         const tr = state.trays[keyOf(rw.r, rw.t, p)];
-        g += '<rect x="' + (sx + k * (SQ + SG)).toFixed(1) + '" y="' + ry + '" width="' + SQ + '" height="' + SQ + '" rx="1.5" fill="' + (tr ? (tr.ready ? "#b9c9b3" : "#ecd6cb") : "#ffffff") + '" stroke="' + (tr ? (tr.ready ? "#6d8f6a" : "#c3836b") : "#9aa59c") + '" stroke-width="1"/>';
+        g += '<rect x="' + (sx + k * (SQ + SG)).toFixed(1) + '" y="' + ry + '" width="' + SQ + '" height="' + SQ + '" rx="1.5" fill="' + (tr ? "#b9c9b3" : "#ffffff") + '" stroke="' + (tr ? "#6d8f6a" : "#9aa59c") + '" stroke-width="1"/>';
       });
     });
     g += text(x + BW / 2, y + bh - 7, def.note, 8.5, 400, "#555") + '</g>';
@@ -617,7 +616,7 @@ function render(){
   }
   h += cblk("fp", "02", "Nutrient tank position", () => floorPlan());
   h += blk("03", "Tray map", actions +
-    '<div class="l3m-leg"><span><u></u>Empty</span><span><u style="background:var(--blush,#ecd6cb)"></u>Growing</span><span><u style="background:var(--sage,#d3dccf)"></u>Ready</span><span><u style="border-style:dashed;border-color:#5b8db8"></u>Salted water</span><span><u style="background:#f7d9a6;border-color:#d4871c"></u>Wrong tier (shift back later)</span><span><u style="background:#ddd5f3;border-color:#6b5bb0"></u>Sample / test crop</span><span><u style="background:#2e7d32"></u>NEW — planted in the last 2 days</span><span><u style="background:#fff;border-left:5px solid #c62828"></u>Planted before 1 Oct — to remove</span><span><u style="background:#fff;border-top:5px solid #1a237e"></u>40+ days since transplant — harvest first (days shown)</span><span><u style="background:#fff;border-bottom:5px solid #2f7f86"></u>Buffer tank (S1, no nutrients)</span><span><u style="background:#dcc7ab;border-color:#8a5a2b"></u>Empty · dirty</span><span><u style="background:#e1f0fa"></u>Empty · clean</span><span>Number = tray position · small text = date planted</span></div>' +
+    '<div class="l3m-leg"><span><u></u>Empty</span><span><u style="background:var(--sage,#d3dccf)"></u>Planted</span><span><u style="border-style:dashed;border-color:#5b8db8"></u>Salted water</span><span><u style="background:#f7d9a6;border-color:#d4871c"></u>Wrong tier (shift back later)</span><span><u style="background:#ddd5f3;border-color:#6b5bb0"></u>Sample / test crop</span><span><u style="background:#2e7d32"></u>NEW — planted in the last 2 days</span><span><u style="background:#fff;border-left:5px solid #c62828"></u>Planted before 1 Oct — to remove</span><span><u style="background:#fff;border-top:5px solid #1a237e"></u>40+ days since transplant — harvest first (days shown)</span><span><u style="background:#fff;border-bottom:5px solid #2f7f86"></u>Buffer tank (S1, no nutrients)</span><span><u style="background:#dcc7ab;border-color:#8a5a2b"></u>Empty · dirty</span><span><u style="background:#e1f0fa"></u>Empty · clean</span><span>Number = tray position · small text = date planted</span></div>' +
     '<div class="' + (isAdmin ? "l3m-adm" : "") + '">' + rackHtml(RACKS[0]) + rackHtml(RACKS[1]) + '</div>' + selBar());
   h += cblk("alog", "04", "Action history", () => actionHistory(), plural((state.log || []).length, "action"));
   h += cblk("dates", "05", "Dates by crop", () => datesTable(list), plural(list.length, "tray"));
@@ -652,7 +651,7 @@ function openTray(k){
   const q = parseKey(k); if (!q) return;
   const tr = state.trays[k], tierCrop = cropAt(q.r, q.t), crop = (tr && tr.crop) || tierCrop;
   const head = '<h3>' + label(q.r, q.t, q.p) + ' · ' + esc(crop) + '</h3>';
-  const status = '<div class="field"><label>Status</label><select id="l3mStatus"><option value="0"' + (!tr || !tr.ready ? " selected" : "") + '>Not ready</option><option value="1"' + (tr && tr.ready ? " selected" : "") + '>Ready to harvest</option></select></div>';
+  const status = '';
   if (!tr){
     const curO = state.empties ? empOf(state.empties[k]) : null, cur = curO ? curO.st + (curO.d ? " since " + fmtFull(curO.d) : "") : "";
     openModal(head + '<div class="sub">Empty tray (' + (q.r === "N" ? "North" : "South") + ' rack, tier ' + q.t + ', position ' + q.p + ')' + (cur ? ' · currently marked <b>' + cur + '</b>' : '') + '.</div>' +
@@ -671,13 +670,13 @@ function openTray(k){
 }
 
 function saveTray(k){
-  const date = val("l3mDate") || today(), type = val("l3mType") === "old" ? "old" : "new", ready = val("l3mStatus") === "1", d = today(), pl = parsePl(val("l3mPl")), tierCrop = tierCropOfKey(k);
+  const date = val("l3mDate") || today(), type = val("l3mType") === "old" ? "old" : "new", ready = false, d = today(), pl = parsePl(val("l3mPl")), tierCrop = tierCropOfKey(k);
   let crop = val("l3mCrop") || tierCrop;
   if (crop === "__new__"){ crop = val("l3mCropNew").trim(); if (!crop) return alert("Type a name for the new crop."); }
   const pest = document.getElementById("l3mPest") && document.getElementById("l3mPest").checked;
   mutate(s => {
     const tr = s.trays[k];
-    if (tr){ if (crop !== tierCrop) tr.crop = crop; else delete tr.crop; if (pest) tr.pest = true; else delete tr.pest; setPl(tr, pl, crop); const was = !!tr.ready; tr.date = date; tr.type = type; tr.ready = ready; if (ready && !was) tr.readyDate = d; if (!ready) tr.readyDate = null; }
+    if (tr){ if (crop !== tierCrop) tr.crop = crop; else delete tr.crop; if (pest) tr.pest = true; else delete tr.pest; setPl(tr, pl, crop); tr.date = date; tr.type = type; }
     else { s.trays[k] = { date, ready, readyDate: ready ? d : null, type }; if (crop !== tierCrop) s.trays[k].crop = crop; if (pest) s.trays[k].pest = true; setPl(s.trays[k], pl, crop); }
   }).then(ok => { if (ok) closeModal(); });
 }
