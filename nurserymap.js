@@ -154,7 +154,7 @@ function cellHtml(t, p){
   if (!tr) return '<button type="button" class="l3m-cell" data-action="cell" data-k="' + k + '" title="' + esc("T" + t + " #" + p + " · " + TIER_CROP[t] + " · empty") + '"><span class="tp"></span><b>' + p + '</b><i>&nbsp;</i><span class="ft"></span></button>';
   const crop = cropOf(k), off = crop !== TIER_CROP[t], age = daysBetween(tr.date, today()), pl = plOf(tr);
   const title = "T" + t + " #" + p + " · " + crop + (off ? " (not this tier's crop)" : "") + " · seeded " + fmtFull(tr.date) + (age != null ? " (" + age + " days ago)" : "") + " · " + pl + " plants";
-  return '<button type="button" class="l3m-cell grow' + (off ? " off" : "") + '" data-action="cell" data-k="' + k + '" title="' + esc(title) + '"><span class="tp">' + (pl !== PPT ? '<em>' + pl + '</em>' : "") + '</span><b>' + p + '</b><i>' + esc(fmtShort(tr.date)) + '</i><span class="ft">' + (off ? '<s class="cr">' + esc(SHORT[crop] || crop) + '</s>' : "") + (age != null && age >= 0 ? '<var class="nd">' + age + 'd</var>' : "") + '</span></button>';
+  return '<button type="button" class="l3m-cell ready' + (off ? " off" : "") + '" data-action="cell" data-k="' + k + '" title="' + esc(title) + '"><span class="tp">' + (pl !== PPT ? '<em>' + pl + '</em>' : "") + '</span><b>' + p + '</b><i>' + esc(fmtShort(tr.date)) + '</i><span class="ft">' + (off ? '<s class="cr">' + esc(SHORT[crop] || crop) + '</s>' : "") + (age != null && age >= 0 ? '<var class="nd">' + age + 'd</var>' : "") + '</span></button>';
 }
 function render(){
   const used = Object.keys(state.trays).length, plants = Object.values(state.trays).reduce((s, x) => s + plOf(x), 0);
@@ -163,7 +163,7 @@ function render(){
   if (!loaded && !loadError) h += '<p class="hint">Loading…</p>';
   h += '<p class="nm-note">4 tiers, 14 trays each, shown right to left (14 … 1) with tier 1 at the bottom. One tray holds up to ' + PPT + ' plants. Each tray shows the date it was seeded for germination and how many days ago.' + (isAdmin ? ' Tap a tray to seed or change it; press and hold a tray, then drop it on another slot to shift it.' : '') + '</p>';
   if (isAdmin && last) h += '<div class="nl-actions"><button class="btn" data-action="undo">Undo last change</button></div>';
-  h += '<div class="l3m-leg"><span><u></u>Empty</span><span><u style="background:var(--blush,#ecd6cb)"></u>Seeded</span><span><u style="background:#f7d9a6;border-color:#d4871c"></u>Not this tier\'s crop</span><span><u style="background:#2f7f86"></u>Days since seeded</span></div>';
+  h += '<div class="l3m-leg"><span><u></u>Empty</span><span><u style="background:var(--sage,#d3dccf)"></u>Seeded</span><span><u style="background:#f7d9a6;border-color:#d4871c"></u>Not this tier\'s crop</span><span><u style="background:#2f7f86"></u>Days since seeded</span></div>';
   h += '<div class="l3m-rack"><div class="l3m-scroll ' + (isAdmin ? "l3m-adm" : "") + '">';
   TIERS.forEach(t => {
     let u = 0; for (let p = 1; p <= POS; p++) if (state.trays[keyOf(t, p)]) u++;
