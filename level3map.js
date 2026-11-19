@@ -32,6 +32,9 @@ const cropAt = (r, t) => RACKS.find(x => x.id === r).tiers[t];
 const ppt = (crop) => (crop === "Ice Plant" ? 80 : 120);
 // Ice Plant tiers (North T1, T2): trays 1-3 and 9-11 are on the salted tank 3N1, the middle trays 4-8 on the normal nutrient tank 3N2.
 const AGE_ALERT = 40;
+const READY_DAYS = 45;
+const flt = { ready: false, notfull: false, empty: false };
+const fltOn = () => flt.ready || flt.notfull || flt.empty;
 const isBuffer = (r, t, p) => r === "S" && p <= 1;
 const isSalted = (r, t, p) => r === "N" && (t === 1 || t === 2) && (p <= 3 || p >= 9);
 const keyOf = (r, t, p) => r + t + "-" + p;
@@ -171,6 +174,22 @@ const STYLE = `
 .al-tm b{display:block;font-size:13px}
 .al-tm span{opacity:.6;white-space:nowrap}
 .al-foot{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-top:10px;font-size:12.5px;opacity:.9}
+.flt-bar{display:flex;flex-wrap:wrap;gap:8px;margin:2px 0 10px}
+.flt-btn{display:inline-flex;align-items:center;gap:8px;font:600 14px Inter,system-ui,sans-serif;border:1.5px solid rgba(0,0,0,.22);background:#fff;color:#2c3a30;border-radius:999px;padding:8px 14px 8px 10px;cursor:pointer}
+.flt-sw{width:18px;height:18px;border-radius:50%;border:2px solid #9aa59c;background:#fff;box-sizing:border-box;position:relative}
+.flt-btn b{background:#efeae3;border-radius:999px;padding:2px 9px;font-size:13px;min-width:20px;text-align:center}
+.flt-btn.on{background:#35473a;border-color:#35473a;color:#fff}
+.flt-btn.on .flt-sw{background:#7ed08a;border-color:#fff}
+.flt-btn.on .flt-sw::after{content:"";position:absolute;left:4px;top:1px;width:4px;height:8px;border:solid #1f3a26;border-width:0 2px 2px 0;transform:rotate(45deg)}
+.flt-btn.on b{background:rgba(255,255,255,.2);color:#fff}
+.flt-total{display:flex;align-items:center;gap:16px;flex-wrap:wrap;background:#eef4ea;border:1.5px solid #6d8f6a;border-radius:14px;padding:10px 16px;margin:0 0 12px}
+.flt-num{display:flex;align-items:baseline;gap:8px}
+.flt-num b{font-size:34px;line-height:1;color:#35473a}
+.flt-num span{font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;opacity:.7}
+.flt-det{font-size:13.5px;line-height:1.5}
+.flt-note{font-size:12px;opacity:.65}
+.l3m-rack.filtering .l3m-cell.dim{opacity:.22;filter:grayscale(.6)}
+.l3m-rack.filtering .l3m-cell.hl{outline:3px solid #35473a;outline-offset:-1px;box-shadow:0 0 0 2px #fff inset}
 .l3-swipe{display:none}
 @media (max-width:640px){
   .nl-table{display:block;overflow-x:auto;max-width:100%;-webkit-overflow-scrolling:touch}
@@ -247,6 +266,29 @@ async function undo(){
 }
 
 const occ = () => Object.keys(state.trays).map(k => Object.assign({ k }, parseKey(k), state.trays[k])).filter(x => x.r && x.p >= 1 && x.p <= posOf(x.r)).map(x => Object.assign(x, { tierCrop: cropAt(x.r, x.t), crop: x.crop || cropAt(x.r, x.t) }));
+function fltOf(r, t, p){
+  const k = keyOf(r, t, p), tr = state.trays[k], out = [];
+  if (!tr){ out.push("empty"); return out; }
+  const age = tr.date ? daysBetween(tr.date, today()) : null;
+  if (age != null && age >= READY_DAYS) out.push("ready");
+  if (plOf(tr, cropOfKey(k)) < ppt(cropOfKey(k))) out.push("notfull");
+  return out;
+}
+function fltPanel(){
+  const c = { ready: 0, notfull: 0, empty: 0 }, hit = { N: 0, S: 0 };
+  let uniq = 0, plants = 0, empties = 0;
+  RACKS.forEach(rk => TIERS.forEach(t => { for (let p = 1; p <= posOf(rk.id); p++){
+    const f = fltOf(rk.id, t, p); f.forEach(x => { c[x]++; });
+    if (f.some(x => flt[x])){ uniq++; hit[rk.id]++; const tr = state.trays[keyOf(rk.id, t, p)]; if (tr) plants += plOf(tr, cropOfKey(keyOf(rk.id, t, p))); else empties++; }
+  } }));
+  const btn = (id, txt, n) => '<button class="flt-btn' + (flt[id] ? " on" : "") + '" data-action="flt" data-f="' + id + '" aria-pressed="' + (flt[id] ? "true" : "false") + '"><span class="flt-sw"></span><span class="flt-t">' + txt + '</span><b>' + n + '</b></button>';
+  let h = '<div class="flt-bar">' + btn("ready", READY_DAYS + "+ days — ready to harvest", c.ready) + btn("notfull", "Not full trays", c.notfull) + btn("empty", "Empty trays", c.empty) + '</div>';
+  if (fltOn()){
+    const parts = []; if (flt.ready) parts.push(READY_DAYS + "+ days " + c.ready); if (flt.notfull) parts.push("not full " + c.notfull); if (flt.empty) parts.push("empty " + c.empty);
+    h += '<div class="flt-total"><div class="flt-num"><b>' + uniq + '</b><span>' + (uniq === 1 ? "tray" : "trays") + ' highlighted</span></div><div class="flt-det"><div>' + parts.join(" · ") + '</div><div>North ' + hit.N + ' · South ' + hit.S + (plants ? ' · ' + plants + ' plants in these trays' : '') + (empties && (flt.ready || flt.notfull) ? '' : '') + '</div>' + ((parts.length > 1) ? '<div class="flt-note">A tray in more than one group is counted once in the total.</div>' : '') + '</div></div>';
+  }
+  return h;
+}
 const plOf = (tr, crop) => (tr && Number(tr.plants) > 0 ? Math.round(Number(tr.plants)) : ppt(crop));
 const trayPlants = (x) => plOf(x, x.crop);
 const parsePl = (v) => { const n = Math.round(Number(v)); return n >= 1 ? n : null; };
@@ -408,7 +450,7 @@ function cellHtml(r, t, p){
   const ageDays = tr && tr.date ? daysBetween(tr.date, today()) : null, aged = ageDays != null && ageDays >= AGE_ALERT;
   const eo = !tr && state.empties ? empOf(state.empties[k]) : null, emp = eo ? eo.st : "";
   const smp = !!(tr && tr.crop && !CROP_ORDER.includes(tr.crop)), off = !!(tr && tr.crop && tr.crop !== tierCrop && !smp);
-  let cls = "l3m-cell" + (isSalted(r, t, p) ? " salt" : "") + (isBuffer(r, t, p) ? " buf" : "") + (tr ? " ready" : "") + (off ? " off" : "") + (smp ? " smp" : "") + (emp ? " " + emp : "") + (pre ? " pre" : "") + (aged ? " old40" : "") + (sel.has(k) ? " sel" : "");
+  let cls = "l3m-cell" + (isSalted(r, t, p) ? " salt" : "") + (isBuffer(r, t, p) ? " buf" : "") + (tr ? " ready" : "") + (off ? " off" : "") + (smp ? " smp" : "") + (emp ? " " + emp : "") + (pre ? " pre" : "") + (aged ? " old40" : "") + (sel.has(k) ? " sel" : "") + (fltOn() ? (fltOf(r, t, p).some(x => flt[x]) ? " hl" : " dim") : "");
   let title = label(r, t, p) + " · " + cropAt(r, t) + (r === "N" && t <= 2 ? (isSalted(r, t, p) ? " · salted tank 3N1" : " · normal tank 3N2") : "") + (isBuffer(r, t, p) ? " · BUFFER tank (no nutrients, for crops ready to harvest)" : "");
   if (tr){
     const age = daysBetween(tr.date, today());
@@ -420,7 +462,7 @@ function cellHtml(r, t, p){
 }
 
 function rackHtml(rk){
-  let h = '<div class="l3m-rack"><h4>' + rk.name + '</h4><div class="l3m-scroll">';
+  let h = '<div class="l3m-rack' + (fltOn() ? ' filtering' : '') + '"><h4>' + rk.name + '</h4><div class="l3m-scroll">';
   TIERS.forEach(t => {
     const used = [], ready = [];
     for (let p = 1; p <= posOf(rk.id); p++){ const tr = state.trays[keyOf(rk.id, t, p)]; if (tr){ used.push(p); if (tr.ready) ready.push(p); } }
@@ -615,7 +657,7 @@ function render(){
       (!list.length ? '<button class="btn" data-action="import">Import from the old Level 3 tracker</button>' : '') + '</div>';
   }
   h += cblk("fp", "02", "Nutrient tank position", () => floorPlan());
-  h += blk("03", "Tray map", actions +
+  h += blk("03", "Tray map", actions + fltPanel() +
     '<div class="l3m-leg"><span><u></u>Empty</span><span><u style="background:var(--sage,#d3dccf)"></u>Planted</span><span><u style="border-style:dashed;border-color:#5b8db8"></u>Salted water</span><span><u style="background:#f7d9a6;border-color:#d4871c"></u>Wrong tier (shift back later)</span><span><u style="background:#ddd5f3;border-color:#6b5bb0"></u>Sample / test crop</span><span><u style="background:#2e7d32"></u>NEW — planted in the last 2 days</span><span><u style="background:#fff;border-left:5px solid #c62828"></u>Planted before 1 Oct — to remove</span><span><u style="background:#fff;border-top:5px solid #1a237e"></u>40+ days since transplant — harvest first (days shown)</span><span><u style="background:#fff;border-bottom:5px solid #2f7f86"></u>Buffer tank (S1, no nutrients)</span><span><u style="background:#dcc7ab;border-color:#8a5a2b"></u>Empty · dirty</span><span><u style="background:#e1f0fa"></u>Empty · clean</span><span>Number = tray position · small text = date planted</span></div>' +
     '<div class="' + (isAdmin ? "l3m-adm" : "") + '">' + rackHtml(RACKS[0]) + rackHtml(RACKS[1]) + '</div>' + selBar());
   h += cblk("alog", "04", "Action history", () => actionHistory(), plural((state.log || []).length, "action"));
@@ -992,6 +1034,7 @@ function onClick(e){
     else if (x === "dispose") openExit("disposed");
   }
   else if (a === "fillTier" && isAdmin) openFillTier(t.dataset.r, +t.dataset.t);
+  else if (a === "flt"){ const f = t.dataset.f; if (f in flt){ flt[f] = !flt[f]; render(); } }
   else if (a === "harvestTier" && isAdmin){
     sel.clear(); for (let p = 1; p <= posOf(t.dataset.r); p++){ const k = keyOf(t.dataset.r, +t.dataset.t, p); if (state.trays[k] && state.trays[k].ready) sel.add(k); }
     openExit("harvested");
