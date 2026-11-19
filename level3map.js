@@ -33,8 +33,9 @@ const ppt = (crop) => (crop === "Ice Plant" ? 80 : 120);
 // Ice Plant tiers (North T1, T2): trays 1-3 and 9-11 are on the salted tank 3N1, the middle trays 4-8 on the normal nutrient tank 3N2.
 const AGE_ALERT = 40;
 const READY_DAYS = 45;
-const flt = { ready: false, notfull: false, empty: false };
-const fltOn = () => flt.ready || flt.notfull || flt.empty;
+const flt = { ready: false, notfull: false, empty: false, crops: new Set() };
+const fltStatus = () => flt.ready || flt.notfull || flt.empty;
+const fltOn = () => fltStatus() || flt.crops.size > 0;
 const isBuffer = (r, t, p) => r === "S" && p <= 1;
 const isSalted = (r, t, p) => r === "N" && (t === 1 || t === 2) && (p <= 3 || p >= 9);
 const keyOf = (r, t, p) => r + t + "-" + p;
@@ -182,6 +183,13 @@ const STYLE = `
 .flt-btn.on .flt-sw{background:#7ed08a;border-color:#fff}
 .flt-btn.on .flt-sw::after{content:"";position:absolute;left:4px;top:1px;width:4px;height:8px;border:solid #1f3a26;border-width:0 2px 2px 0;transform:rotate(45deg)}
 .flt-btn.on b{background:rgba(255,255,255,.2);color:#fff}
+.flt-croprow{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin:0 0 10px}
+.flt-lbl{font-size:11px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;opacity:.6;margin-right:2px}
+.flt-chip{display:inline-flex;align-items:center;gap:6px;font:600 12.5px Inter,system-ui,sans-serif;border:1.5px solid rgba(0,0,0,.2);background:#fff;color:#2c3a30;border-radius:999px;padding:5px 8px 5px 11px;cursor:pointer}
+.flt-chip b{background:#efeae3;border-radius:999px;padding:1px 7px;font-size:11.5px}
+.flt-chip.on{background:#35473a;border-color:#35473a;color:#fff}
+.flt-chip.on b{background:rgba(255,255,255,.22);color:#fff}
+.flt-clear{font:600 12.5px Inter,system-ui,sans-serif;border:0;background:none;color:#9a4a3a;text-decoration:underline;cursor:pointer;padding:4px 6px}
 .flt-total{display:flex;align-items:center;gap:16px;flex-wrap:wrap;background:#eef4ea;border:1.5px solid #6d8f6a;border-radius:14px;padding:10px 16px;margin:0 0 12px}
 .flt-num{display:flex;align-items:baseline;gap:8px}
 .flt-num b{font-size:34px;line-height:1;color:#35473a}
@@ -274,18 +282,30 @@ function fltOf(r, t, p){
   if (plOf(tr, cropOfKey(k)) < ppt(cropOfKey(k))) out.push("notfull");
   return out;
 }
+const fltCropOK = (r, t, p) => !flt.crops.size || flt.crops.has(cropOfKey(keyOf(r, t, p)));
+function fltMatch(r, t, p){
+  if (!fltOn() || !fltCropOK(r, t, p)) return false;
+  if (fltStatus()) return fltOf(r, t, p).some(x => flt[x]);
+  return !!state.trays[keyOf(r, t, p)];
+}
 function fltPanel(){
-  const c = { ready: 0, notfull: 0, empty: 0 }, hit = { N: 0, S: 0 };
-  let uniq = 0, plants = 0, empties = 0;
+  const c = { ready: 0, notfull: 0, empty: 0 }, hit = { N: 0, S: 0 }, cropN = {};
+  let uniq = 0, plants = 0;
   RACKS.forEach(rk => TIERS.forEach(t => { for (let p = 1; p <= posOf(rk.id); p++){
-    const f = fltOf(rk.id, t, p); f.forEach(x => { c[x]++; });
-    if (f.some(x => flt[x])){ uniq++; hit[rk.id]++; const tr = state.trays[keyOf(rk.id, t, p)]; if (tr) plants += plOf(tr, cropOfKey(keyOf(rk.id, t, p))); else empties++; }
+    const k = keyOf(rk.id, t, p), tr = state.trays[k], cr = cropOfKey(k);
+    if (tr) cropN[cr] = (cropN[cr] || 0) + 1;
+    if (fltCropOK(rk.id, t, p)) fltOf(rk.id, t, p).forEach(x => { c[x]++; });
+    if (fltMatch(rk.id, t, p)){ uniq++; hit[rk.id]++; if (tr) plants += plOf(tr, cr); }
   } }));
   const btn = (id, txt, n) => '<button class="flt-btn' + (flt[id] ? " on" : "") + '" data-action="flt" data-f="' + id + '" aria-pressed="' + (flt[id] ? "true" : "false") + '"><span class="flt-sw"></span><span class="flt-t">' + txt + '</span><b>' + n + '</b></button>';
-  let h = '<div class="flt-bar">' + btn("ready", READY_DAYS + "+ days — ready to harvest", c.ready) + btn("notfull", "Not full trays", c.notfull) + btn("empty", "Empty trays", c.empty) + '</div>';
+  const names = [...CROP_ORDER, ...sampleNames()].filter((v, i, a) => a.indexOf(v) === i);
+  const chip = (cr) => '<button class="flt-chip' + (flt.crops.has(cr) ? " on" : "") + '" data-action="fltCrop" data-c="' + esc(cr) + '" aria-pressed="' + (flt.crops.has(cr) ? "true" : "false") + '">' + esc(cr) + '<b>' + (cropN[cr] || 0) + '</b></button>';
+  let h = '<div class="flt-bar">' + btn("ready", READY_DAYS + "+ days — ready to harvest", c.ready) + btn("notfull", "Not full trays", c.notfull) + btn("empty", "Empty trays", c.empty) + '</div>' +
+    '<div class="flt-croprow"><span class="flt-lbl">Crop</span>' + names.map(chip).join("") + (flt.crops.size ? '<button class="flt-clear" data-action="fltCropClear">Clear crops</button>' : '') + '</div>';
   if (fltOn()){
-    const parts = []; if (flt.ready) parts.push(READY_DAYS + "+ days " + c.ready); if (flt.notfull) parts.push("not full " + c.notfull); if (flt.empty) parts.push("empty " + c.empty);
-    h += '<div class="flt-total"><div class="flt-num"><b>' + uniq + '</b><span>' + (uniq === 1 ? "tray" : "trays") + ' highlighted</span></div><div class="flt-det"><div>' + parts.join(" · ") + '</div><div>North ' + hit.N + ' · South ' + hit.S + (plants ? ' · ' + plants + ' plants in these trays' : '') + (empties && (flt.ready || flt.notfull) ? '' : '') + '</div>' + ((parts.length > 1) ? '<div class="flt-note">A tray in more than one group is counted once in the total.</div>' : '') + '</div></div>';
+    const parts = []; if (flt.crops.size) parts.push([...flt.crops].join(" + ")); if (flt.ready) parts.push(READY_DAYS + "+ days " + c.ready); if (flt.notfull) parts.push("not full " + c.notfull); if (flt.empty) parts.push("empty " + c.empty);
+    const groups = (flt.ready ? 1 : 0) + (flt.notfull ? 1 : 0) + (flt.empty ? 1 : 0);
+    h += '<div class="flt-total"><div class="flt-num"><b>' + uniq + '</b><span>' + (uniq === 1 ? "tray" : "trays") + ' highlighted</span></div><div class="flt-det"><div>' + parts.join(" · ") + '</div><div>North ' + hit.N + ' · South ' + hit.S + (plants ? ' · ' + plants + ' plants in these trays' : '') + '</div>' + (groups > 1 ? '<div class="flt-note">A tray in more than one group is counted once in the total.</div>' : '') + (flt.crops.size && groups ? '<div class="flt-note">Crop and the toggles above combine: only trays of the chosen crop(s) that also match a toggle are highlighted.</div>' : '') + '</div></div>';
   }
   return h;
 }
@@ -450,7 +470,7 @@ function cellHtml(r, t, p){
   const ageDays = tr && tr.date ? daysBetween(tr.date, today()) : null, aged = ageDays != null && ageDays >= AGE_ALERT;
   const eo = !tr && state.empties ? empOf(state.empties[k]) : null, emp = eo ? eo.st : "";
   const smp = !!(tr && tr.crop && !CROP_ORDER.includes(tr.crop)), off = !!(tr && tr.crop && tr.crop !== tierCrop && !smp);
-  let cls = "l3m-cell" + (isSalted(r, t, p) ? " salt" : "") + (isBuffer(r, t, p) ? " buf" : "") + (tr ? " ready" : "") + (off ? " off" : "") + (smp ? " smp" : "") + (emp ? " " + emp : "") + (pre ? " pre" : "") + (aged ? " old40" : "") + (sel.has(k) ? " sel" : "") + (fltOn() ? (fltOf(r, t, p).some(x => flt[x]) ? " hl" : " dim") : "");
+  let cls = "l3m-cell" + (isSalted(r, t, p) ? " salt" : "") + (isBuffer(r, t, p) ? " buf" : "") + (tr ? " ready" : "") + (off ? " off" : "") + (smp ? " smp" : "") + (emp ? " " + emp : "") + (pre ? " pre" : "") + (aged ? " old40" : "") + (sel.has(k) ? " sel" : "") + (fltOn() ? (fltMatch(r, t, p) ? " hl" : " dim") : "");
   let title = label(r, t, p) + " · " + cropAt(r, t) + (r === "N" && t <= 2 ? (isSalted(r, t, p) ? " · salted tank 3N1" : " · normal tank 3N2") : "") + (isBuffer(r, t, p) ? " · BUFFER tank (no nutrients, for crops ready to harvest)" : "");
   if (tr){
     const age = daysBetween(tr.date, today());
@@ -1034,7 +1054,9 @@ function onClick(e){
     else if (x === "dispose") openExit("disposed");
   }
   else if (a === "fillTier" && isAdmin) openFillTier(t.dataset.r, +t.dataset.t);
-  else if (a === "flt"){ const f = t.dataset.f; if (f in flt){ flt[f] = !flt[f]; render(); } }
+  else if (a === "flt"){ const f = t.dataset.f; if (f === "ready" || f === "notfull" || f === "empty"){ flt[f] = !flt[f]; render(); } }
+  else if (a === "fltCrop"){ const c = t.dataset.c; if (flt.crops.has(c)) flt.crops.delete(c); else flt.crops.add(c); render(); }
+  else if (a === "fltCropClear"){ flt.crops.clear(); render(); }
   else if (a === "harvestTier" && isAdmin){
     sel.clear(); for (let p = 1; p <= posOf(t.dataset.r); p++){ const k = keyOf(t.dataset.r, +t.dataset.t, p); if (state.trays[k] && state.trays[k].ready) sel.add(k); }
     openExit("harvested");
