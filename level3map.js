@@ -134,8 +134,8 @@ const STYLE = `
 .l3m-cell.dirty::after{content:"CLEAN ME";display:block;margin:auto auto 0;font-size:7.5px;font-weight:900;letter-spacing:.04em;line-height:1;color:#fff;background:#c62828;border-radius:5px;padding:2px 4px;animation:l3blink 1.4s steps(2,jump-none) infinite}
 .l3m-cell.dirty .ft{display:none}
 .l3-dirtycard{animation:l3pulse 1.6s ease-in-out infinite}
-@keyframes l3pulse{0%,100%{box-shadow:0 0 0 0 rgba(198,40,40,.65)}50%{box-shadow:0 0 0 7px rgba(198,40,40,0)}}
-@keyframes l3shake{0%,70%,100%{transform:translateX(0) rotate(0)}74%{transform:translateX(-2px) rotate(-2deg)}78%{transform:translateX(2px) rotate(2deg)}82%{transform:translateX(-2px) rotate(-2deg)}86%{transform:translateX(2px) rotate(2deg)}90%{transform:translateX(0) rotate(0)}}
+@keyframes l3pulse{0%,100%{box-shadow:inset 0 0 0 0 rgba(198,40,40,0),inset 0 0 6px 0 rgba(198,40,40,.15)}50%{box-shadow:inset 0 0 0 4px rgba(198,40,40,.55),inset 0 0 12px 2px rgba(198,40,40,.35)}}
+@keyframes l3shake{0%,70%,100%{transform:translateX(0) rotate(0)}74%{transform:translateX(-1.5px) rotate(-1.5deg)}78%{transform:translateX(1.5px) rotate(1.5deg)}82%{transform:translateX(-1.5px) rotate(-1.5deg)}86%{transform:translateX(1.5px) rotate(1.5deg)}90%{transform:translateX(0) rotate(0)}}
 @keyframes l3blink{0%{opacity:1}50%{opacity:.45}}
 @media (prefers-reduced-motion:reduce){.l3m-cell.dirty,.l3m-cell.dirty::after,.l3-dirtycard{animation:none}}
 .l3m-cell{-webkit-touch-callout:none;-webkit-user-select:none;user-select:none}
