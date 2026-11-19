@@ -23,6 +23,7 @@ const EXIT = { level1: { word: "Sent to Level 1", btn: "To Level 1 (robot arm)",
 const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 
 let state = { trays: {}, history: [], log: [] };
+const fltCrops = new Set();
 let loaded = false, isAdmin = false, loadError = "", last = null, logN = 20, logWho = "all", showLog = false;
 
 const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -151,10 +152,24 @@ function publish(){ window.NM_LIST = Object.keys(state.trays).map(k => cropOf(k)
 // ---------------------------------------------------------------- rendering
 function cellHtml(t, p){
   const k = keyOf(t, p), tr = state.trays[k];
-  if (!tr) return '<button type="button" class="l3m-cell" data-action="cell" data-k="' + k + '" title="' + esc("T" + t + " #" + p + " · " + TIER_CROP[t] + " · empty") + '"><span class="tp"></span><b>' + p + '</b><i>&nbsp;</i><span class="ft"></span></button>';
+  const fo = fltCrops.size > 0, hit = fo && tr && fltCrops.has(cropOf(k));
+  const fc = fo ? (hit ? " hl" : " dim") : "";
+  if (!tr) return '<button type="button" class="l3m-cell' + fc + '" data-action="cell" data-k="' + k + '" title="' + esc("T" + t + " #" + p + " · " + TIER_CROP[t] + " · empty") + '"><span class="tp"></span><b>' + p + '</b><i>&nbsp;</i><span class="ft"></span></button>';
   const crop = cropOf(k), off = crop !== TIER_CROP[t], age = daysBetween(tr.date, today()), pl = plOf(tr);
   const title = "T" + t + " #" + p + " · " + crop + (off ? " (not this tier's crop)" : "") + " · seeded " + fmtFull(tr.date) + (age != null ? " (" + age + " days ago)" : "") + " · " + pl + " plants";
-  return '<button type="button" class="l3m-cell ready' + (off ? " off" : "") + '" data-action="cell" data-k="' + k + '" title="' + esc(title) + '"><span class="tp">' + (pl !== PPT ? '<em>' + pl + '</em>' : "") + '</span><b>' + p + '</b><i>' + esc(fmtShort(tr.date)) + '</i><span class="ft">' + (off ? '<s class="cr">' + esc(SHORT[crop] || crop) + '</s>' : "") + (age != null && age >= 0 ? '<var class="nd">' + age + 'd</var>' : "") + '</span></button>';
+  return '<button type="button" class="l3m-cell ready' + (off ? " off" : "") + fc + '" data-action="cell" data-k="' + k + '" title="' + esc(title) + '"><span class="tp">' + (pl !== PPT ? '<em>' + pl + '</em>' : "") + '</span><b>' + p + '</b><i>' + esc(fmtShort(tr.date)) + '</i><span class="ft">' + (off ? '<s class="cr">' + esc(SHORT[crop] || crop) + '</s>' : "") + (age != null && age >= 0 ? '<var class="nd">' + age + 'd</var>' : "") + '</span></button>';
+}
+function cropPanel(){
+  const n = {}, tierN = {}; let plants = 0, total = 0;
+  Object.keys(state.trays).forEach(k => { const c = cropOf(k); n[c] = (n[c] || 0) + 1; if (fltCrops.has(c)){ total++; plants += plOf(state.trays[k]); const q = parseKey(k); tierN[q.t] = (tierN[q.t] || 0) + 1; } });
+  const names = [...TIERS.map(t => TIER_CROP[t]), ...CROPS.filter(c => !TIERS.some(t => TIER_CROP[t] === c) && ((n[c] || 0) > 0 || fltCrops.has(c)))];
+  const chip = (c) => '<button class="flt-chip' + (fltCrops.has(c) ? " on" : "") + '" data-action="fltCrop" data-c="' + esc(c) + '" aria-pressed="' + (fltCrops.has(c) ? "true" : "false") + '">' + esc(c) + '<b>' + (n[c] || 0) + '</b></button>';
+  let h = '<div class="flt-croprow"><span class="flt-lbl">Crop</span>' + names.map(chip).join("") + (fltCrops.size ? '<button class="flt-clear" data-action="fltCropClear">Clear crops</button>' : '') + '</div>';
+  if (fltCrops.size){
+    const tiers = TIERS.filter(t => tierN[t]).map(t => "T" + t + " " + tierN[t]).join(" · ");
+    h += '<div class="flt-total"><div class="flt-num"><b>' + total + '</b><span>' + (total === 1 ? "tray" : "trays") + ' highlighted</span></div><div class="flt-det"><div>' + esc([...fltCrops].join(" + ")) + '</div><div>' + (tiers ? tiers + ' · ' : '') + plants + ' plants in these trays</div></div></div>';
+  }
+  return h;
 }
 function render(){
   const used = Object.keys(state.trays).length, plants = Object.values(state.trays).reduce((s, x) => s + plOf(x), 0);
@@ -163,8 +178,9 @@ function render(){
   if (!loaded && !loadError) h += '<p class="hint">Loading…</p>';
   h += '<p class="nm-note">4 tiers, 14 trays each, shown right to left (14 … 1) with tier 1 at the bottom. One tray holds up to ' + PPT + ' plants. Each tray shows the date it was seeded for germination and how many days ago.' + (isAdmin ? ' Tap a tray to seed or change it; press and hold a tray, then drop it on another slot to shift it.' : '') + '</p>';
   if (isAdmin && last) h += '<div class="nl-actions"><button class="btn" data-action="undo">Undo last change</button></div>';
+  h += cropPanel();
   h += '<div class="l3m-leg"><span><u></u>Empty</span><span><u style="background:var(--sage,#d3dccf)"></u>Seeded</span><span><u style="background:#f7d9a6;border-color:#d4871c"></u>Not this tier\'s crop</span><span><u style="background:#2f7f86"></u>Days since seeded</span></div>';
-  h += '<div class="l3m-rack"><div class="l3m-scroll ' + (isAdmin ? "l3m-adm" : "") + '">';
+  h += '<div class="l3m-rack' + (fltCrops.size ? ' filtering' : '') + '"><div class="l3m-scroll ' + (isAdmin ? "l3m-adm" : "") + '">';
   TIERS.forEach(t => {
     let u = 0; for (let p = 1; p <= POS; p++) if (state.trays[keyOf(t, p)]) u++;
     h += '<div class="l3m-tier"><div class="l3m-th"><span class="t">T' + t + '</span><span class="c">' + esc(TIER_CROP[t]) + '</span><span class="n">' + u + '/' + POS + ' · ' + (POS - u) + ' free</span>' + (isAdmin && u < POS ? '<button class="btn" data-action="seedTier" data-t="' + t + '">+ Seed trays</button>' : '') + '</div>' +
@@ -257,6 +273,8 @@ function onClick(e){
   const a = t.dataset.action;
   if (a === "cell"){ if (!isAdmin || Date.now() - suppressClick < 400) return; openTray(t.dataset.k); }
   else if (a === "seedTier" && isAdmin) openSeedTier(+t.dataset.t);
+  else if (a === "fltCrop"){ const c = t.dataset.c; if (fltCrops.has(c)) fltCrops.delete(c); else fltCrops.add(c); render(); }
+  else if (a === "fltCropClear"){ fltCrops.clear(); render(); }
   else if (a === "undo") undo();
   else if (a === "log"){ showLog = !showLog; render(); }
   else if (a === "more"){ logN += 20; render(); }
