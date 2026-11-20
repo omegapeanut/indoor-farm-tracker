@@ -33,6 +33,7 @@ const ppt = (crop) => (crop === "Ice Plant" ? 80 : 120);
 // Ice Plant tiers (North T1, T2): trays 1-3 and 9-11 are on the salted tank 3N1, the middle trays 4-8 on the normal nutrient tank 3N2.
 const AGE_ALERT = 40;
 const READY_DAYS = 45;
+const MID_FROM = 25, MID_TO = 39;
 const flt = { ready: false, notfull: false, empty: false, crops: new Set() };
 const fltStatus = () => flt.ready || flt.notfull || flt.empty;
 const fltOn = () => fltStatus() || flt.crops.size > 0;
@@ -129,6 +130,8 @@ const STYLE = `
 .l3m-cell.smp s.cr{color:#4a3a94;background:rgba(107,91,176,.2)}
 .l3m-cell var.ag{display:block;font-style:normal;font-size:9px;font-weight:800;line-height:1;color:#fff;background:#1a237e;border-radius:5px;padding:2px 4px}
 .l3m-cell var.nw{display:block;font-style:normal;font-size:8.5px;font-weight:900;letter-spacing:.03em;line-height:1;color:#fff;background:#2e7d32;border-radius:5px;padding:2px 4px}
+.l3m-cell.ready.mid:not(.off):not(.smp){background:#f3e9a8;border-color:#b9a23a}
+.l3m-cell var.md{display:block;font-style:normal;font-size:9px;font-weight:800;line-height:1;color:#5c4a00;background:#e6cf5c;border-radius:5px;padding:2px 4px}
 .l3m-cell.pre{border-left:6px solid #c62828;border-left-style:solid}
 .l3m-cell.pre i{color:#b71c1c;font-weight:800;opacity:1}
 .l3m-cell.old40{border-top:6px solid #1a237e;border-top-style:solid}
@@ -467,17 +470,17 @@ function cellHtml(r, t, p){
   const tierCrop = cropAt(r, t), cropHere = (tr && tr.crop) || tierCrop;
   const pre = !!(tr && tr.date && tr.date < CUT);
   const fresh = !!(tr && tr.date && daysBetween(tr.date, today()) != null && daysBetween(tr.date, today()) >= 0 && daysBetween(tr.date, today()) <= 2);
-  const ageDays = tr && tr.date ? daysBetween(tr.date, today()) : null, aged = ageDays != null && ageDays >= AGE_ALERT;
+  const ageDays = tr && tr.date ? daysBetween(tr.date, today()) : null, aged = ageDays != null && ageDays >= AGE_ALERT, mid = ageDays != null && ageDays >= MID_FROM && ageDays <= MID_TO;
   const eo = !tr && state.empties ? empOf(state.empties[k]) : null, emp = eo ? eo.st : "";
   const smp = !!(tr && tr.crop && !CROP_ORDER.includes(tr.crop)), off = !!(tr && tr.crop && tr.crop !== tierCrop && !smp);
-  let cls = "l3m-cell" + (isSalted(r, t, p) ? " salt" : "") + (isBuffer(r, t, p) ? " buf" : "") + (tr ? " ready" : "") + (off ? " off" : "") + (smp ? " smp" : "") + (emp ? " " + emp : "") + (pre ? " pre" : "") + (aged ? " old40" : "") + (sel.has(k) ? " sel" : "") + (fltOn() ? (fltMatch(r, t, p) ? " hl" : " dim") : "");
+  let cls = "l3m-cell" + (isSalted(r, t, p) ? " salt" : "") + (isBuffer(r, t, p) ? " buf" : "") + (tr ? " ready" : "") + (off ? " off" : "") + (smp ? " smp" : "") + (emp ? " " + emp : "") + (pre ? " pre" : "") + (aged ? " old40" : "") + (mid ? " mid" : "") + (sel.has(k) ? " sel" : "") + (fltOn() ? (fltMatch(r, t, p) ? " hl" : " dim") : "");
   let title = label(r, t, p) + " · " + cropAt(r, t) + (r === "N" && t <= 2 ? (isSalted(r, t, p) ? " · salted tank 3N1" : " · normal tank 3N2") : "") + (isBuffer(r, t, p) ? " · BUFFER tank (no nutrients, for crops ready to harvest)" : "");
   if (tr){
     const age = daysBetween(tr.date, today());
     title += " · " + (smp ? "SAMPLE: " + cropHere : off ? "HOLDS " + cropHere + " (wrong tier)" : cropHere) + (pre ? " · BEFORE 1 OCT — to be removed" : "") + (aged ? " · " + ageDays + " DAYS since transplant — harvest first" : "") + (fresh ? " · NEW — planted within 2 days" : "") + " · planted " + fmtFull(tr.date) + (age != null ? " (day " + age + ")" : "") + " · " + plOf(tr, cropHere) + " plants · " + (tr.type === "old" ? "old crop" : "new crop") + (isAdmin && tr.pest ? " · pest (P)" : "");
   } else title += " · empty" + (emp ? " (" + emp + (eo.d ? " since " + fmtFull(eo.d) : "") + ")" : "");
   const pl = tr && plOf(tr, cropHere) !== ppt(cropHere) ? plOf(tr, cropHere) : "";
-  const chips = ((off || smp) ? '<s class="cr">' + esc(SHORT[cropHere] || cropHere) + '</s>' : "") + (aged ? '<var class="ag">' + ageDays + 'd</var>' : "") + (fresh ? '<var class="nw">NEW</var>' : "");
+  const chips = ((off || smp) ? '<s class="cr">' + esc(SHORT[cropHere] || cropHere) + '</s>' : "") + (aged ? '<var class="ag">' + ageDays + 'd</var>' : "") + (mid ? '<var class="md">' + ageDays + 'd</var>' : "") + (fresh ? '<var class="nw">NEW</var>' : "");
   return '<button type="button" class="' + cls + '" data-action="cell" data-k="' + k + '" title="' + esc(title) + '"><span class="tp">' + (tr && tr.pest ? '<strong class="pp">P</strong>' : "") + (pl !== "" ? '<em>' + pl + '</em>' : "") + '</span><b>' + p + '</b><i>' + (tr ? esc(fmtShort(tr.date)) : emp ? emp + (eo.d ? "<br>" + esc(fmtShort(eo.d)) : "") : "&nbsp;") + '</i><span class="ft">' + chips + '</span></button>';
 }
 
@@ -678,7 +681,7 @@ function render(){
   }
   h += cblk("fp", "02", "Nutrient tank position", () => floorPlan());
   h += blk("03", "Tray map", actions + fltPanel() +
-    '<div class="l3m-leg"><span><u></u>Empty</span><span><u style="background:var(--sage,#d3dccf)"></u>Planted</span><span><u style="border-style:dashed;border-color:#5b8db8"></u>Salted water</span><span><u style="background:#f7d9a6;border-color:#d4871c"></u>Wrong tier (shift back later)</span><span><u style="background:#ddd5f3;border-color:#6b5bb0"></u>Sample / test crop</span><span><u style="background:#2e7d32"></u>NEW — planted in the last 2 days</span><span><u style="background:#fff;border-left:5px solid #c62828"></u>Planted before 1 Oct — to remove</span><span><u style="background:#fff;border-top:5px solid #1a237e"></u>40+ days since transplant — harvest first (days shown)</span><span><u style="background:#fff;border-bottom:5px solid #2f7f86"></u>Buffer tank (S1, no nutrients)</span><span><u style="background:#dcc7ab;border-color:#8a5a2b"></u>Empty · dirty</span><span><u style="background:#e1f0fa"></u>Empty · clean</span><span>Number = tray position · small text = date planted</span></div>' +
+    '<div class="l3m-leg"><span><u></u>Empty</span><span><u style="background:var(--sage,#d3dccf)"></u>Planted</span><span><u style="border-style:dashed;border-color:#5b8db8"></u>Salted water</span><span><u style="background:#f7d9a6;border-color:#d4871c"></u>Wrong tier (shift back later)</span><span><u style="background:#ddd5f3;border-color:#6b5bb0"></u>Sample / test crop</span><span><u style="background:#f3e9a8;border-color:#b9a23a"></u>25–39 days since transplant</span><span><u style="background:#2e7d32"></u>NEW — planted in the last 2 days</span><span><u style="background:#fff;border-left:5px solid #c62828"></u>Planted before 1 Oct — to remove</span><span><u style="background:#fff;border-top:5px solid #1a237e"></u>40+ days since transplant — harvest first (days shown)</span><span><u style="background:#fff;border-bottom:5px solid #2f7f86"></u>Buffer tank (S1, no nutrients)</span><span><u style="background:#dcc7ab;border-color:#8a5a2b"></u>Empty · dirty</span><span><u style="background:#e1f0fa"></u>Empty · clean</span><span>Number = tray position · small text = date planted</span></div>' +
     '<div class="' + (isAdmin ? "l3m-adm" : "") + '">' + rackHtml(RACKS[0]) + rackHtml(RACKS[1]) + '</div>' + selBar());
   h += cblk("alog", "04", "Action history", () => actionHistory(), plural((state.log || []).length, "action"));
   h += cblk("dates", "05", "Dates by crop", () => datesTable(list), plural(list.length, "tray"));
