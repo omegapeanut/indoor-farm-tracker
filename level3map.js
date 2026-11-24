@@ -393,21 +393,77 @@ function logDiff(prev, next, by){
   return out;
 }
 const sameJ = (a, b) => JSON.stringify(a == null ? null : a) === JSON.stringify(b == null ? null : b);
+// Entries logged before undo data was stored: rebuild what we can from the current state and the harvest history.
+function legacyUndo(e){
+  const T = state.trays, E = state.empties || {}, ub = {}, ua = {}, eb = {}, ea = {}, hn = [];
+  const cur = (k) => (T[k] ? clone(T[k]) : null), used = new Set();
+  const ks = e.keys || [];
+  if (e.a === "harvest" || e.a === "dispose"){
+    if (!ks.length) return null;
+    const want = e.a === "harvest" ? "harvested" : "disposed";
+    for (const k of ks){
+      const hs = (state.history || []).map((x, i) => ({ x, i })).filter(o => o.x.k === k && o.x.crop === e.crop && (o.x.exitType === "harvested") === (want === "harvested") && !used.has(o.i));
+      if (!hs.length) return null;
+      const o = hs[hs.length - 1], x = o.x; used.add(o.i);
+      const q = parseKey(k); if (!q) return null;
+      const partial = /^partial/.test(x.note || "");
+      if (partial){ if (!T[k]) return null; } else if (T[k]) return null;
+      const tr = { date: x.date };
+      if (x.type === "old") tr.type = "old";
+      const tierCrop = cropAt(q.r, q.t); if (x.crop && x.crop !== tierCrop) tr.crop = x.crop;
+      const have = (partial ? plOf(T[k], x.crop) : 0) + (x.plants || 0);
+      setPl(tr, have, x.crop);
+      if (partial && T[k]){ ["pest"].forEach(f => { if (T[k][f]) tr[f] = T[k][f]; }); }
+      ub[k] = tr; ua[k] = cur(k); eb[k] = null; ea[k] = E[k] || null; hn.push(x);
+    }
+    return { ub, ua, eb, ea, hn };
+  }
+  if (e.a === "transplant"){
+    if (!ks.length) return null;
+    const d = String(e.t || "").slice(0, 10);
+    for (const k of ks){ if (!T[k] || (e.date && T[k].date !== e.date)) return null; ub[k] = null; ua[k] = cur(k); eb[k] = "clean|" + d; ea[k] = E[k] || null; }
+    return { ub, ua, eb, ea, hn };
+  }
+  if (e.a === "dirty" || e.a === "clean"){
+    if (!ks.length) return null;
+    for (const k of ks){ const em = empOf(E[k]); if (T[k] || !em || em.st !== e.a) return null; ub[k] = null; ua[k] = null; eb[k] = null; ea[k] = E[k]; }
+    return { ub, ua, eb, ea, hn };
+  }
+  if (e.a === "shift"){
+    const mv = e.mv || []; if (!mv.length) return null;
+    for (const m of mv){
+      if (!T[m.to]) return null;
+      if (m.swap){ if (!T[m.from]) return null; ub[m.from] = cur(m.to); ub[m.to] = cur(m.from); }
+      else { if (T[m.from]) return null; ub[m.from] = cur(m.to); ub[m.to] = null; }
+      ua[m.from] = cur(m.from); ua[m.to] = cur(m.to);
+      eb[m.from] = null; eb[m.to] = E[m.to] || null; ea[m.from] = E[m.from] || null; ea[m.to] = E[m.to] || null;
+    }
+    return { ub, ua, eb, ea, hn };
+  }
+  return null;
+}
+function undoData(e){
+  if (!e || e.a === "undo" || e.undone) return null;
+  if (e.ub) return { ub: e.ub, ua: e.ua, eb: e.eb || {}, ea: e.ea || {}, hn: e.hn || [] };
+  try { return legacyUndo(e); } catch (err){ return null; }
+}
 function canUndo(e){
-  return isAdmin && e && e.id && e.ub && !e.undone && e.a !== "undo" && e.by === whoName(auth.currentUser);
+  return isAdmin && e && !e.undone && e.a !== "undo" && e.by === whoName(auth.currentUser) && !!undoData(e);
 }
 async function undoEntry(id){
   if (!isAdmin || !loaded) return;
   const e = (state.log || []).find(x => x.id === id);
-  if (!canUndo(e)){ alert("Only the person who did this action can undo it, and only once."); return; }
-  const ks = Object.keys(e.ub);
-  const bad = ks.filter(k => !sameJ(state.trays[k], e.ua[k]) || !sameJ((state.empties || {})[k], e.ea[k]));
+  if (!e || e.undone || e.a === "undo" || e.by !== whoName(auth.currentUser)){ alert("Only the person who did this action can undo it, and only once."); return; }
+  const d = undoData(e);
+  if (!d){ alert("Can't undo this one: the trays have changed since, or there isn't enough saved to reverse it safely."); return; }
+  const ks = Object.keys(d.ub);
+  const bad = ks.filter(k => !sameJ(state.trays[k], d.ua[k]) || !sameJ((state.empties || {})[k], d.ea[k]));
   if (bad.length){ alert("Can't undo this one: " + (bad.length === 1 ? "tray " + lblK(bad[0]) : bad.length + " of its trays") + " changed after this action. Undo the later change first, or correct it by hand."); return; }
   const L = logLine(e);
   if (!confirm("Undo this action?\n\n" + L.head.replace(/<[^>]+>/g, "") + "\n\nIt stays in the history, and the undo is recorded too.")) return;
   const next = clone(state); next.empties = next.empties || {}; next.history = next.history || [];
-  ks.forEach(k => { if (e.ub[k]) next.trays[k] = clone(e.ub[k]); else delete next.trays[k]; if (e.eb[k]) next.empties[k] = e.eb[k]; else delete next.empties[k]; });
-  (e.hn || []).forEach(h => { const sj = JSON.stringify(h); for (let i = next.history.length - 1; i >= 0; i--) if (JSON.stringify(next.history[i]) === sj){ next.history.splice(i, 1); break; } });
+  ks.forEach(k => { if (d.ub[k]) next.trays[k] = clone(d.ub[k]); else delete next.trays[k]; if (d.eb[k]) next.empties[k] = d.eb[k]; else delete next.empties[k]; });
+  (d.hn || []).forEach(h => { const sj = JSON.stringify(h); for (let i = next.history.length - 1; i >= 0; i--) if (JSON.stringify(next.history[i]) === sj){ next.history.splice(i, 1); break; } });
   const now = new Date().toISOString(), me = whoName(auth.currentUser);
   const ent = next.log.find(x => x.id === id); if (ent) ent.undone = { by: me, t: now };
   const src = { a: e.a, crop: e.crop, plants: e.plants, keys: e.keys, mv: e.mv, ch: e.ch, partial: e.partial, ready: e.ready, date: e.date };
