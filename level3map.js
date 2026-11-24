@@ -126,10 +126,13 @@ const STYLE = `
 .l3m-cell .tp strong.pp{font-size:12px;font-weight:900;color:#1f9d3a;line-height:1}
 .l3m-cell .tp em{margin-left:auto;font-size:9.5px;font-style:normal;font-weight:800;color:#9a4a3a;line-height:1}
 .l3m-cell .ft{display:flex;flex-wrap:wrap;justify-content:center;align-content:flex-start;gap:2px;margin-top:auto;padding-top:2px;min-height:15px}
+.l3m-cell .ft>*{flex:0 0 auto}
+.l3m-cell .ft>s.cr{flex:0 0 100%}
 .l3m-cell s.cr{display:block;max-width:100%;text-decoration:none;font-size:8.5px;font-weight:800;line-height:1;color:#8a4b00;background:rgba(212,135,28,.22);border-radius:5px;padding:2px 3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;box-sizing:border-box}
 .l3m-cell.smp s.cr{color:#4a3a94;background:rgba(107,91,176,.2)}
 .l3m-cell var.ag{display:block;font-style:normal;font-size:9px;font-weight:800;line-height:1;color:#fff;background:#1a237e;border-radius:5px;padding:2px 4px}
 .l3m-cell var.nw{display:block;font-style:normal;font-size:8.5px;font-weight:900;letter-spacing:.03em;line-height:1;color:#fff;background:#2e7d32;border-radius:5px;padding:2px 4px}
+.l3m-cell var.dn{display:block;font-style:normal;font-size:9.5px;font-weight:700;line-height:1;color:#4a5a4f;padding:2px 4px}
 .l3m-cell var.md{display:block;font-style:normal;font-size:9px;font-weight:800;line-height:1;color:#5c4a00;background:#e6cf5c;border-radius:5px;padding:2px 4px}
 .l3m-cell.pre{border-left:6px solid #c62828;border-left-style:solid}
 .l3m-cell.pre i{color:#b71c1c;font-weight:800;opacity:1}
@@ -198,7 +201,7 @@ const STYLE = `
 .flt-num span{font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;opacity:.7}
 .flt-det{font-size:13.5px;line-height:1.5}
 .flt-note{font-size:12px;opacity:.65}
-.l3m-rack.filtering .l3m-cell.dim{opacity:.22;filter:grayscale(.6)}
+.l3m-rack.filtering .l3m-cell.dim{opacity:.22;filter:grayscale(.6);cursor:not-allowed !important}
 .l3m-rack.filtering .l3m-cell.hl{outline:3px solid #35473a;outline-offset:-1px;box-shadow:0 0 0 2px #fff inset}
 .l3-swipe{display:none}
 @media (max-width:640px){
@@ -358,7 +361,18 @@ function logDiff(prev, next, by){
   changed.filter(k => !usedC.has(k)).forEach(k => { const a = prev.trays[k], b = next.trays[k]; const sa = Object.assign({}, a), sb = Object.assign({}, b); ["ready", "readyDate"].forEach(f => { delete sa[f]; delete sb[f]; }); if (JSON.stringify(sa) === JSON.stringify(sb)) (b.ready ? rdy : nrd).push(k); else ed.push(k); });
   if (rdy.length) out.push(mk("ready", { keys: rdy, ready: true }));
   if (nrd.length) out.push(mk("ready", { keys: nrd, ready: false }));
-  if (ed.length) out.push(mk("edit", { keys: ed }));
+  if (ed.length){
+    const chg = (k) => {
+      const a = prev.trays[k], b = next.trays[k], ca = cropOfKey(k, prev.trays), cb = cropOfKey(k, next.trays), f = [];
+      if (a.date !== b.date) f.push("Date planted " + fmtShort(a.date) + " → " + fmtShort(b.date));
+      if (ca !== cb) f.push("Crop " + ca + " → " + cb);
+      if (plOf(a, ca) !== plOf(b, cb)) f.push("Plants " + plOf(a, ca) + " → " + plOf(b, cb));
+      if ((a.type === "old" ? "old" : "new") !== (b.type === "old" ? "old" : "new")) f.push("Type " + (a.type === "old" ? "old" : "new") + " → " + (b.type === "old" ? "old" : "new") + " crop");
+      if (!!a.pest !== !!b.pest) f.push(b.pest ? "P mark added" : "P mark removed");
+      return { k, c: f };
+    };
+    out.push(mk("edit", { keys: ed, ch: ed.map(chg) }));
+  }
   const pe = prev.empties || {}, ne = next.empties || {}, eg = { dirty: [], clean: [] };
   Object.keys(ne).forEach(k => { const n = empOf(ne[k]), p = empOf(pe[k]); if (n && !next.trays[k] && !exited.has(k) && (!p || p.st !== n.st)) eg[n.st].push(k); });
   if (eg.dirty.length) out.push(mk("dirty", { keys: eg.dirty }));
@@ -393,7 +407,12 @@ function logLine(e){
   if (e.a === "ready") return { head: (e.ready ? "Marked " : "Marked not ready: ") + tr + (e.ready ? " ready to harvest" : ""), sub: esc(keysSummary(e.keys)) };
   if (e.a === "dirty") return { head: "Marked " + tr + " as <b>dirty</b> — needs cleaning", sub: esc(keysSummary(e.keys)) };
   if (e.a === "clean") return { head: "Marked " + tr + " as <b>clean</b>", sub: esc(keysSummary(e.keys)) };
-  if (e.a === "edit") return { head: "Edited details of " + tr, sub: esc(keysSummary(e.keys)) };
+  if (e.a === "edit"){
+    const ch = (e.ch || []).filter(x => x.c && x.c.length);
+    if (!ch.length) return { head: "Edited details of " + tr, sub: esc(keysSummary(e.keys)) };
+    const one = (x) => "<b>" + esc(lblK(x.k)) + "</b> — " + x.c.map(esc).join(" · ");
+    return { head: "Edited " + tr, sub: ch.slice(0, 6).map(one).join("<br>") + (ch.length > 6 ? "<br>+" + (ch.length - 6) + " more" : "") };
+  }
   return { head: "Cleared " + tr + " without recording a harvest", sub: esc(keysSummary(e.keys)) + " · mistaken entry" };
 }
 function logTime(iso){
@@ -479,7 +498,7 @@ function cellHtml(r, t, p){
     title += " · " + (smp ? "SAMPLE: " + cropHere : off ? "HOLDS " + cropHere + " (wrong tier)" : cropHere) + (pre ? " · BEFORE 1 OCT — to be removed" : "") + (aged ? " · " + ageDays + " DAYS since transplant — harvest first" : "") + (fresh ? " · NEW — planted within 2 days" : "") + " · planted " + fmtFull(tr.date) + (age != null ? " (day " + age + ")" : "") + " · " + plOf(tr, cropHere) + " plants · " + (tr.type === "old" ? "old crop" : "new crop") + (isAdmin && tr.pest ? " · pest (P)" : "");
   } else title += " · empty" + (emp ? " (" + emp + (eo.d ? " since " + fmtFull(eo.d) : "") + ")" : "");
   const pl = tr && plOf(tr, cropHere) !== ppt(cropHere) ? plOf(tr, cropHere) : "";
-  const chips = ((off || smp) ? '<s class="cr">' + esc(SHORT[cropHere] || cropHere) + '</s>' : "") + (aged ? '<var class="ag">' + ageDays + 'd</var>' : "") + (mid ? '<var class="md">' + ageDays + 'd</var>' : "") + (fresh ? '<var class="nw">NEW</var>' : "");
+  const chips = ((off || smp) ? '<s class="cr">' + esc(SHORT[cropHere] || cropHere) + '</s>' : "") + (aged ? '<var class="ag">' + ageDays + 'd</var>' : "") + (mid ? '<var class="md">' + ageDays + 'd</var>' : "") + (ageDays != null && ageDays >= 0 && ageDays < MID_FROM ? '<var class="dn">' + ageDays + 'd</var>' : "") + (fresh ? '<var class="nw">NEW</var>' : "");
   return '<button type="button" class="' + cls + '" data-action="cell" data-k="' + k + '" title="' + esc(title) + '"><span class="tp">' + (tr && tr.pest ? '<strong class="pp">P</strong>' : "") + (pl !== "" ? '<em>' + pl + '</em>' : "") + '</span><b>' + p + '</b><i>' + (tr ? esc(fmtShort(tr.date)) : emp ? emp + (eo.d ? "<br>" + esc(fmtShort(eo.d)) : "") : "&nbsp;") + '</i><span class="ft">' + chips + '</span></button>';
 }
 
@@ -1038,7 +1057,7 @@ function onClick(e){
   const t = e.target.closest("[data-action]");
   if (!t) return;
   const a = t.dataset.action;
-  if (a === "cell"){ if (!isAdmin || Date.now() - suppressClick < 400) return; const k = t.dataset.k; if (multi){ sel.has(k) ? sel.delete(k) : sel.add(k); render(); } else openTray(k); }
+  if (a === "cell"){ if (!isAdmin || Date.now() - suppressClick < 400) return; const k = t.dataset.k; if (t.classList.contains("dim")) return; if (multi){ sel.has(k) ? sel.delete(k) : sel.add(k); render(); } else openTray(k); }
   else if (a === "multi"){ multi = !multi; if (!multi) sel.clear(); render(); }
   else if (a === "tier"){
     if (!isAdmin) return;
@@ -1090,7 +1109,7 @@ function dndClear(){
 }
 function dndStart(e){
   if (!isAdmin || multi || (e.pointerType === "mouse" && e.button !== 0)) return;
-  const cell = e.target.closest('.l3m-cell[data-k]'); if (!cell) return;
+  const cell = e.target.closest('.l3m-cell[data-k]'); if (!cell || cell.classList.contains('dim')) return;
   const k = cell.dataset.k; if (!state.trays[k]) return;
   dnd = { k, src: cell, x: e.clientX, y: e.clientY, active: false, over: null, ghost: null, timer: null };
   dnd.timer = setTimeout(() => {

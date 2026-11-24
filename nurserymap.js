@@ -86,7 +86,16 @@ function logDiff(prev, next, by){
   const rm = removed.filter(k => !usedR.has(k));
   if (rm.length) out.push(mk("remove", { keys: rm, plants: rm.reduce((a, k) => a + plOf(prev.trays[k]), 0) }));
   const ed = changed.filter(k => !usedC.has(k));
-  if (ed.length) out.push(mk("edit", { keys: ed }));
+  if (ed.length){
+    const chg = (k) => {
+      const a = prev.trays[k], b = next.trays[k], ca = cropOf(k, prev.trays), cb = cropOf(k, next.trays), f = [];
+      if (a.date !== b.date) f.push("Date seeded " + fmtShort(a.date) + " → " + fmtShort(b.date));
+      if (ca !== cb) f.push("Crop " + ca + " → " + cb);
+      if (plOf(a) !== plOf(b)) f.push("Plants " + plOf(a) + " → " + plOf(b));
+      return { k, c: f };
+    };
+    out.push(mk("edit", { keys: ed, ch: ed.map(chg) }));
+  }
   return out;
 }
 const ACT = {
@@ -104,7 +113,12 @@ function logLine(e){
     const mv = e.mv || [], one = (m) => m.swap ? "<b>" + esc(label(m.from)) + "</b> ⇄ <b>" + esc(label(m.to)) + "</b> (" + esc(m.crop) + " ⇄ " + esc(m.swap) + ")" : "<b>" + esc(label(m.from)) + "</b> → <b>" + esc(label(m.to)) + "</b> (" + esc(m.crop) + ")";
     return { head: mv.length === 1 ? (mv[0].swap ? "Swapped two trays" : "Shifted " + esc(mv[0].crop) + " to another tray") : "Shifted " + mv.length + " trays", sub: mv.slice(0, 6).map(one).join(" · ") };
   }
-  if (e.a === "edit") return { head: "Edited details of " + tr, sub: esc(summarize(e.keys)) };
+  if (e.a === "edit"){
+    const ch = (e.ch || []).filter(x => x.c && x.c.length);
+    if (!ch.length) return { head: "Edited details of " + tr, sub: esc(summarize(e.keys)) };
+    const one = (x) => "<b>" + esc(label(x.k)) + "</b> — " + x.c.map(esc).join(" · ");
+    return { head: "Edited " + tr, sub: ch.slice(0, 6).map(one).join("<br>") + (ch.length > 6 ? "<br>+" + (ch.length - 6) + " more" : "") };
+  }
   return { head: "Cleared " + tr + " (mistaken entry)", sub: esc(summarize(e.keys)) };
 }
 function logTime(iso){
@@ -271,7 +285,7 @@ function onClick(e){
   if (e.target === ov) return closeModal();
   const t = e.target.closest("[data-action]"); if (!t) return;
   const a = t.dataset.action;
-  if (a === "cell"){ if (!isAdmin || Date.now() - suppressClick < 400) return; openTray(t.dataset.k); }
+  if (a === "cell"){ if (!isAdmin || Date.now() - suppressClick < 400 || t.classList.contains("dim")) return; openTray(t.dataset.k); }
   else if (a === "seedTier" && isAdmin) openSeedTier(+t.dataset.t);
   else if (a === "fltCrop"){ const c = t.dataset.c; if (fltCrops.has(c)) fltCrops.delete(c); else fltCrops.add(c); render(); }
   else if (a === "fltCropClear"){ fltCrops.clear(); render(); }
@@ -288,7 +302,7 @@ const cellAt = (x, y) => { const el = document.elementFromPoint(x, y); return el
 function dndClear(){ if (!dnd) return; clearTimeout(dnd.timer); if (dnd.ghost) dnd.ghost.remove(); if (dnd.src) dnd.src.classList.remove("lp"); if (dnd.over) dnd.over.classList.remove("drop"); dnd = null; }
 function dndStart(e){
   if (!isAdmin || (e.pointerType === "mouse" && e.button !== 0)) return;
-  const cell = e.target.closest('.l3m-cell[data-k]'); if (!cell || !mapEl.contains(cell)) return;
+  const cell = e.target.closest('.l3m-cell[data-k]'); if (!cell || !mapEl.contains(cell) || cell.classList.contains('dim')) return;
   const k = cell.dataset.k; if (!state.trays[k]) return;
   dnd = { k, src: cell, x: e.clientX, y: e.clientY, active: false, over: null, ghost: null };
   dnd.timer = setTimeout(() => {
