@@ -725,6 +725,32 @@ function historySection(){
   return h + '</tbody></table></div>';
 }
 
+function harvestStats(){
+  const by = {};
+  (state.history || []).forEach(x => {
+    if (x.exitType !== "harvested") return;
+    const d = daysBetween(x.date, x.exitDate); if (d == null || d < 0) return;
+    (by[x.crop || "Unknown"] = by[x.crop || "Unknown"] || []).push({ d, out: x.exitDate, k: x.k, plants: x.plants });
+  });
+  return by;
+}
+function harvestDays(){
+  const by = harvestStats();
+  const names = [...CROP_ORDER, ...Object.keys(by)].filter((v, i, a) => a.indexOf(v) === i && by[v]);
+  if (!names.length) return '<p class="hint">No harvests recorded yet. Each time you harvest a tray, the days from transplant to harvest are kept here, with the average per crop.</p>';
+  const all = [].concat(...names.map(n => by[n]));
+  const avg = (a) => a.reduce((s, x) => s + x.d, 0) / a.length;
+  const f1 = (n) => (Math.round(n * 10) / 10).toString();
+  let h = '<p class="hint">Days from transplant to harvest. Average = total days of all harvests ÷ number of harvests (e.g. day 20 and day 30 → 25 days). A partial harvest counts as one harvest.</p>';
+  h += '<div style="overflow-x:auto;"><table class="nl-table"><thead><tr><th>Crop</th><th>Harvests</th><th>Average</th><th>Fastest – slowest</th><th>Last harvests (days · date)</th></tr></thead><tbody>';
+  names.forEach(n => {
+    const a = by[n], ds = a.map(x => x.d), last = a.slice().sort((p, q) => (q.out || "").localeCompare(p.out || "")).slice(0, 5);
+    h += '<tr><td><b>' + esc(n) + '</b></td><td>' + a.length + '</td><td><b>' + f1(avg(a)) + ' days</b></td><td>' + Math.min(...ds) + ' – ' + Math.max(...ds) + ' days</td><td>' + last.map(x => '<span style="display:inline-block;margin:1px 6px 1px 0;white-space:nowrap;"><b>' + x.d + 'd</b> · ' + esc(fmtShort(x.out)) + '</span>').join("") + '</td></tr>';
+  });
+  h += '<tr><td><b>All crops</b></td><td>' + all.length + '</td><td><b>' + f1(avg(all)) + ' days</b></td><td>' + Math.min(...all.map(x => x.d)) + ' – ' + Math.max(...all.map(x => x.d)) + ' days</td><td></td></tr>';
+  return h + '</tbody></table></div>';
+}
+
 function render(){
   if (!root) return;
   const list = occ();
@@ -747,7 +773,9 @@ function render(){
   h += cblk("dates", "05", "Dates by crop", () => datesTable(list), plural(list.length, "tray"));
   h += cblk("cons", "06", "Consolidation — before 1 Oct vs from 1 Oct", () => consolidation(list));
   h += cblk("var", "07", "By variety", () => varietyTable(list));
-  h += cblk("hist", "08", "History", () => historySection());
+  { const hs = harvestStats(), n = Object.values(hs).reduce((s, a) => s + a.length, 0);
+    h += cblk("hdays", "08", "Harvest days by crop", () => harvestDays(), n ? plural(n, "harvest") : ""); }
+  h += cblk("hist", "09", "History", () => historySection());
   h += '</div>';
   root.innerHTML = h;
   if (rec) renderRec();
