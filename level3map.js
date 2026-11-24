@@ -172,6 +172,11 @@ const STYLE = `
 .al-top{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 .al-by{font-weight:800;font-size:14px;color:#2c3a30}
 .al-bd{font-size:10.5px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;border-radius:999px;padding:2px 8px}
+.al-bd.un{background:#dfe3ea;color:#3a4558}
+.al-row.undone .al-hd,.al-row.undone .al-sub{text-decoration:line-through;opacity:.55}
+.al-und{margin-top:4px;font-size:11px;font-weight:700;color:#3a4558}
+.al-undo{margin-top:6px;font:inherit;font-size:12px;font-weight:700;padding:4px 10px;border-radius:999px;border:1.5px solid #35473a;background:transparent;color:#35473a;cursor:pointer}
+.al-undo:hover{background:#35473a;color:#fff}
 .al-bd.hv{background:#d3e6d0;color:#1f5d2a}.al-bd.dp{background:#f6d4d0;color:#9a2a22}.al-bd.tp{background:#d6e6f2;color:#1e5b86}
 .al-bd.sh{background:#e3dcf4;color:#4a3a94}.al-bd.rd{background:#f7e6b8;color:#7a5600}.al-bd.ed{background:#e8e4de;color:#5b564e}.al-bd.rm{background:#ead9d9;color:#7a3a3a}
 .al-hd{font-size:14px;margin-top:3px;color:#2c3a30;overflow-wrap:anywhere}
@@ -263,7 +268,7 @@ async function mutate(fn){
   fn(next);
   next.empties = next.empties || {};
   Object.keys(next.empties).forEach(k => { if (next.trays[k]) delete next.empties[k]; });
-  try { const ents = logDiff(state, next, whoName(auth.currentUser)); if (ents.length) next.log = ents.concat(Array.isArray(next.log) ? next.log : []).slice(0, 600); } catch (err){ console.warn("log", err); }
+  try { const ents = logDiff(state, next, whoName(auth.currentUser)); if (ents.length) next.log = ents.concat(Array.isArray(next.log) ? next.log : []).slice(0, 600); next.log.forEach((x, i) => { if (i >= 40){ delete x.ub; delete x.ua; delete x.eb; delete x.ea; delete x.hn; } }); } catch (err){ console.warn("log", err); }
   state = next;
   render();
   try { await setDoc(REF, next); return true; }
@@ -377,7 +382,40 @@ function logDiff(prev, next, by){
   Object.keys(ne).forEach(k => { const n = empOf(ne[k]), p = empOf(pe[k]); if (n && !next.trays[k] && !exited.has(k) && (!p || p.st !== n.st)) eg[n.st].push(k); });
   if (eg.dirty.length) out.push(mk("dirty", { keys: eg.dirty }));
   if (eg.clean.length) out.push(mk("clean", { keys: eg.clean }));
+  // undo data: the affected trays before and after, so the person who did it can reverse it later
+  out.forEach((e, i) => {
+    const s = new Set(e.keys || []); (e.mv || []).forEach(m => { s.add(m.from); s.add(m.to); });
+    e.id = now + "-" + i + "-" + Math.random().toString(36).slice(2, 6);
+    e.ub = {}; e.ua = {}; e.eb = {}; e.ea = {};
+    s.forEach(k => { e.ub[k] = (prev.trays || {})[k] || null; e.ua[k] = (next.trays || {})[k] || null; e.eb[k] = pe[k] || null; e.ea[k] = ne[k] || null; });
+    if (e.a === "harvest" || e.a === "dispose") e.hn = newHist.filter(x => s.has(x.k) && x.crop === e.crop && (x.exitType === "harvested") === (e.a === "harvest"));
+  });
   return out;
+}
+const sameJ = (a, b) => JSON.stringify(a == null ? null : a) === JSON.stringify(b == null ? null : b);
+function canUndo(e){
+  return isAdmin && e && e.id && e.ub && !e.undone && e.a !== "undo" && e.by === whoName(auth.currentUser);
+}
+async function undoEntry(id){
+  if (!isAdmin || !loaded) return;
+  const e = (state.log || []).find(x => x.id === id);
+  if (!canUndo(e)){ alert("Only the person who did this action can undo it, and only once."); return; }
+  const ks = Object.keys(e.ub);
+  const bad = ks.filter(k => !sameJ(state.trays[k], e.ua[k]) || !sameJ((state.empties || {})[k], e.ea[k]));
+  if (bad.length){ alert("Can't undo this one: " + (bad.length === 1 ? "tray " + lblK(bad[0]) : bad.length + " of its trays") + " changed after this action. Undo the later change first, or correct it by hand."); return; }
+  const L = logLine(e);
+  if (!confirm("Undo this action?\n\n" + L.head.replace(/<[^>]+>/g, "") + "\n\nIt stays in the history, and the undo is recorded too.")) return;
+  const next = clone(state); next.empties = next.empties || {}; next.history = next.history || [];
+  ks.forEach(k => { if (e.ub[k]) next.trays[k] = clone(e.ub[k]); else delete next.trays[k]; if (e.eb[k]) next.empties[k] = e.eb[k]; else delete next.empties[k]; });
+  (e.hn || []).forEach(h => { const sj = JSON.stringify(h); for (let i = next.history.length - 1; i >= 0; i--) if (JSON.stringify(next.history[i]) === sj){ next.history.splice(i, 1); break; } });
+  const now = new Date().toISOString(), me = whoName(auth.currentUser);
+  const ent = next.log.find(x => x.id === id); if (ent) ent.undone = { by: me, t: now };
+  const src = { a: e.a, crop: e.crop, plants: e.plants, keys: e.keys, mv: e.mv, ch: e.ch, partial: e.partial, ready: e.ready, date: e.date };
+  Object.keys(src).forEach(k => { if (src[k] === undefined) delete src[k]; });
+  next.log.unshift({ t: now, by: me, a: "undo", of: id, src });
+  next.log.forEach((x, i) => { if (i >= 40){ delete x.ub; delete x.ua; delete x.eb; delete x.ea; delete x.hn; } });
+  last = null; state = next; sel.clear(); render();
+  try { await setDoc(REF, next); } catch (err){ alert("Couldn't save: " + err.message); }
 }
 const ACT = {
   harvest:   { word: "Harvested",   cls: "hv", icon: "✂" },
@@ -388,12 +426,14 @@ const ACT = {
   edit:      { word: "Edited",      cls: "ed", icon: "✎" },
   remove:    { word: "Cleared",     cls: "rm", icon: "−" },
   dirty:     { word: "Dirty",       cls: "dp", icon: "!" },
-  clean:     { word: "Clean",       cls: "hv", icon: "✓" }
+  clean:     { word: "Clean",       cls: "hv", icon: "✓" },
+  undo:      { word: "Undo",        cls: "un", icon: "↶" }
 };
 const AV = { YS: "#35473a", Hasan: "#2f7f86", Meraj: "#8a5a2b" };
 const avCol = (n) => AV[n] || "#6b5bb0";
 function lblK(k){ const q = parseKey(k); return q ? label(q.r, q.t, q.p) : k; }
 function logLine(e){
+  if (e.a === "undo" && e.src){ const L = logLine(e.src); return { head: "Undid: " + L.head, sub: L.sub }; }
   const n = (e.keys || []).length, tr = n === 1 ? "1 tray" : n + " trays";
   const crop = e.crop ? '<b>' + esc(e.crop) + '</b>' : "";
   if (e.a === "harvest") return { head: "Harvested " + (e.plants != null ? '<b>' + e.plants + '</b> ' : "") + 'plants' + (e.crop ? " of " + crop : ""), sub: esc(keysSummary(e.keys)) + (e.partial ? " · partial, balance stays in tray" : " · " + tr) };
@@ -444,9 +484,11 @@ function actionHistory(){
   shown.forEach(e => {
     const L = logLine(e), T = logTime(e.t), A = ACT[e.a] || ACT.edit;
     if (T.day !== lastDay){ h += '<div class="al-day">' + esc(T.day) + '</div>'; lastDay = T.day; }
-    h += '<div class="al-row"><span class="al-av" style="background:' + avCol(e.by) + '">' + esc(String(e.by || "?").charAt(0)) + '</span>' +
+    const ud = e.undone ? '<div class="al-und">Undone by ' + esc(e.undone.by) + ' · ' + esc(logTime(e.undone.t).day) + ' ' + logTime(e.undone.t).clock + '</div>' : "";
+    const ub = canUndo(e) ? '<button class="al-undo" data-action="undoEntry" data-id="' + esc(e.id) + '">↶ Undo</button>' : "";
+    h += '<div class="al-row' + (e.undone ? " undone" : "") + '"><span class="al-av" style="background:' + avCol(e.by) + '">' + esc(String(e.by || "?").charAt(0)) + '</span>' +
       '<div class="al-mid"><div class="al-top"><span class="al-by">' + esc(e.by || "Unknown") + '</span><span class="al-bd ' + A.cls + '">' + A.icon + ' ' + A.word + '</span></div>' +
-      '<div class="al-hd">' + L.head + '</div><div class="al-sub">' + L.sub + '</div></div>' +
+      '<div class="al-hd">' + L.head + '</div><div class="al-sub">' + L.sub + '</div>' + ud + ub + '</div>' +
       '<div class="al-tm"><b>' + T.clock + '</b><span>' + T.rel + '</span></div></div>';
   });
   h += '</div>';
@@ -1092,6 +1134,7 @@ function onClick(e){
   else if (a === "tg"){ const id = t.dataset.id; if (openSec.has(id)) openSec.delete(id); else openSec.add(id); render(); }
   else if (a === "history"){ showHistory = !showHistory; render(); }
   else if (a === "logMore"){ logN += 20; render(); }
+  else if (a === "undoEntry") undoEntry(t.dataset.id);
   else if (a === "logWho"){ logWho = t.dataset.who || "all"; logN = 20; render(); }
 }
 

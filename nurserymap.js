@@ -96,13 +96,43 @@ function logDiff(prev, next, by){
     };
     out.push(mk("edit", { keys: ed, ch: ed.map(chg) }));
   }
+  out.forEach((e, i) => {
+    const s = new Set(e.keys || []); (e.mv || []).forEach(m => { s.add(m.from); s.add(m.to); });
+    e.id = now + "-" + i + "-" + Math.random().toString(36).slice(2, 6);
+    e.ub = {}; e.ua = {};
+    s.forEach(k => { e.ub[k] = prev.trays[k] || null; e.ua[k] = next.trays[k] || null; });
+    if (["level1", "level3", "disposed"].includes(e.a)) e.hn = newHist.filter(x => s.has(x.k) && x.crop === e.crop && x.exitType === e.a);
+  });
   return out;
+}
+const sameJ = (a, b) => JSON.stringify(a == null ? null : a) === JSON.stringify(b == null ? null : b);
+const canUndo = (e) => isAdmin && e && e.id && e.ub && !e.undone && e.a !== "undo" && e.by === whoName(auth.currentUser);
+async function undoEntry(id){
+  if (!isAdmin || !loaded) return;
+  const e = (state.log || []).find(x => x.id === id);
+  if (!canUndo(e)){ alert("Only the person who did this action can undo it, and only once."); return; }
+  const ks = Object.keys(e.ub);
+  const bad = ks.filter(k => !sameJ(state.trays[k], e.ua[k]));
+  if (bad.length){ alert("Can't undo this one: " + (bad.length === 1 ? "tray " + label(bad[0]) : bad.length + " of its trays") + " changed after this action. Undo the later change first, or correct it by hand."); return; }
+  if (!confirm("Undo this action?\n\n" + logLine(e).head.replace(/<[^>]+>/g, "") + "\n\nIt stays in the history, and the undo is recorded too.")) return;
+  const next = clone(state); next.history = next.history || [];
+  ks.forEach(k => { if (e.ub[k]) next.trays[k] = clone(e.ub[k]); else delete next.trays[k]; });
+  (e.hn || []).forEach(h => { const sj = JSON.stringify(h); for (let i = next.history.length - 1; i >= 0; i--) if (JSON.stringify(next.history[i]) === sj){ next.history.splice(i, 1); break; } });
+  const now = new Date().toISOString(), me = whoName(auth.currentUser);
+  const ent = next.log.find(x => x.id === id); if (ent) ent.undone = { by: me, t: now };
+  const src = { a: e.a, crop: e.crop, plants: e.plants, keys: e.keys, mv: e.mv, ch: e.ch, partial: e.partial, date: e.date };
+  Object.keys(src).forEach(k => { if (src[k] === undefined) delete src[k]; });
+  next.log.unshift({ t: now, by: me, a: "undo", of: id, src });
+  next.log.forEach((x, i) => { if (i >= 40){ delete x.ub; delete x.ua; delete x.hn; } });
+  last = null; state = next; publish(); render();
+  try { await setDoc(REF, next); } catch (err){ alert("Couldn't save: " + err.message); }
 }
 const ACT = {
   seed: { word: "Seeded", cls: "tp", icon: "＋" }, level1: { word: "To Level 1", cls: "tp", icon: "→" }, level3: { word: "To Level 3", cls: "hv", icon: "→" },
-  disposed: { word: "Disposed", cls: "dp", icon: "✕" }, shift: { word: "Shifted", cls: "sh", icon: "⇄" }, edit: { word: "Edited", cls: "ed", icon: "✎" }, remove: { word: "Cleared", cls: "rm", icon: "−" }
+  disposed: { word: "Disposed", cls: "dp", icon: "✕" }, shift: { word: "Shifted", cls: "sh", icon: "⇄" }, edit: { word: "Edited", cls: "ed", icon: "✎" }, remove: { word: "Cleared", cls: "rm", icon: "−" }, undo: { word: "Undo", cls: "un", icon: "↶" }
 };
 function logLine(e){
+  if (e.a === "undo" && e.src){ const L = logLine(e.src); return { head: "Undid: " + L.head, sub: L.sub }; }
   const n = (e.keys || []).length, tr = n === 1 ? "1 tray" : n + " trays", crop = e.crop ? "<b>" + esc(e.crop) + "</b>" : "";
   if (e.a === "seed") return { head: "Seeded " + tr + (e.crop ? " of " + crop : ""), sub: esc(summarize(e.keys)) + " · " + (e.plants || 0) + " plants · seeded " + esc(fmtFull(e.date)) };
   if (e.a === "level1" || e.a === "level3" || e.a === "disposed"){
@@ -139,7 +169,9 @@ function logHtml(){
   shown.forEach(e => {
     const L = logLine(e), T = logTime(e.t), A = ACT[e.a] || ACT.edit;
     if (T.day !== lastDay){ h += '<div class="al-day">' + esc(T.day) + '</div>'; lastDay = T.day; }
-    h += '<div class="al-row"><span class="al-av" style="background:' + avCol(e.by) + '">' + esc(String(e.by || "?").charAt(0)) + '</span><div class="al-mid"><div class="al-top"><span class="al-by">' + esc(e.by || "Unknown") + '</span><span class="al-bd ' + A.cls + '">' + A.icon + ' ' + A.word + '</span></div><div class="al-hd">' + L.head + '</div><div class="al-sub">' + L.sub + '</div></div><div class="al-tm"><b>' + T.clock + '</b><span>' + T.rel + '</span></div></div>';
+    const ud = e.undone ? '<div class="al-und">Undone by ' + esc(e.undone.by) + ' · ' + esc(logTime(e.undone.t).day) + ' ' + logTime(e.undone.t).clock + '</div>' : "";
+    const ubn = canUndo(e) ? '<button class="al-undo" data-action="undoEntry" data-id="' + esc(e.id) + '">↶ Undo</button>' : "";
+    h += '<div class="al-row' + (e.undone ? " undone" : "") + '"><span class="al-av" style="background:' + avCol(e.by) + '">' + esc(String(e.by || "?").charAt(0)) + '</span><div class="al-mid"><div class="al-top"><span class="al-by">' + esc(e.by || "Unknown") + '</span><span class="al-bd ' + A.cls + '">' + A.icon + ' ' + A.word + '</span></div><div class="al-hd">' + L.head + '</div><div class="al-sub">' + L.sub + '</div>' + ud + ubn + '</div><div class="al-tm"><b>' + T.clock + '</b><span>' + T.rel + '</span></div></div>';
   });
   return h + '</div><div class="al-foot">Showing ' + shown.length + ' of ' + list.length + ' actions' + (list.length > shown.length ? '<button class="btn" data-action="more">Show more actions</button>' : '') + '</div>';
 }
@@ -151,7 +183,7 @@ async function mutate(fn){
   last = clone(state);
   const next = clone(state);
   fn(next);
-  try { const ents = logDiff(state, next, whoName(auth.currentUser)); if (ents.length) next.log = ents.concat(next.log || []).slice(0, 600); } catch (err){ console.warn("log", err); }
+  try { const ents = logDiff(state, next, whoName(auth.currentUser)); if (ents.length) next.log = ents.concat(next.log || []).slice(0, 600); next.log.forEach((x, i) => { if (i >= 40){ delete x.ub; delete x.ua; delete x.hn; } }); } catch (err){ console.warn("log", err); }
   state = next; publish(); render();
   try { await setDoc(REF, next); return true; }
   catch (e){ alert("Couldn't save: " + e.message); return false; }
@@ -292,6 +324,7 @@ function onClick(e){
   else if (a === "undo") undo();
   else if (a === "log"){ showLog = !showLog; render(); }
   else if (a === "more"){ logN += 20; render(); }
+  else if (a === "undoEntry") undoEntry(t.dataset.id);
   else if (a === "who"){ logWho = t.dataset.who || "all"; logN = 20; render(); }
 }
 
